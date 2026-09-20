@@ -16,7 +16,8 @@ public static class RankCommand
 
         using OdonomicsDbContext db = LedgerFactory.Open();
 
-        RunEntity? latestRun = await db.Runs.OrderByDescending(r => r.Id).FirstOrDefaultAsync(cancellationToken);
+        List<RunEntity> runs = await db.Runs.ToListAsync(cancellationToken);
+        Dictionary<string, DateTimeOffset> latestCoverageBySource = RunSources.LatestCoverageBySource(runs);
 
         List<VehicleEntity> vehicles = await db.Vehicles
             .Include(v => v.Postings).ThenInclude(p => p.PriceObservations)
@@ -25,7 +26,7 @@ public static class RankCommand
         var scores = new List<Score>();
         foreach (VehicleEntity vehicle in vehicles)
         {
-            decimal? lowestCurrentPrice = LowestCurrentPrice(vehicle, latestRun);
+            decimal? lowestCurrentPrice = LowestCurrentPrice(vehicle, latestCoverageBySource);
             var forScoring = new VehicleForScoring
             {
                 Vin = vehicle.Vin,
@@ -42,15 +43,15 @@ public static class RankCommand
         return 0;
     }
 
-    /// <summary>The lowest latest price among this vehicle's postings that were still active as
-    /// of the most recent run (LastSeen equals that run's own timestamp; see
-    /// LedgerUpsertService). With no runs yet every posting counts, since there is nothing to
-    /// compare against.</summary>
-    private static decimal? LowestCurrentPrice(VehicleEntity vehicle, RunEntity? latestRun)
+    /// <summary>The lowest latest price among this vehicle's postings that were still active as of
+    /// the most recent run that covered that posting's own source (LastSeen equals that run's own
+    /// timestamp; see LedgerUpsertService). A posting whose source no run has ever covered, or
+    /// whose most recent covering run was also the one that saw it, still counts; only a posting
+    /// whose source was checked more recently without seeing it again drops out.</summary>
+    private static decimal? LowestCurrentPrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
     {
-        IEnumerable<PostingEntity> activePostings = latestRun is null
-            ? vehicle.Postings
-            : vehicle.Postings.Where(p => p.LastSeen == latestRun.StartedAt);
+        IEnumerable<PostingEntity> activePostings = vehicle.Postings.Where(p =>
+            !latestCoverageBySource.TryGetValue(p.Source, out DateTimeOffset latestCoverage) || p.LastSeen == latestCoverage);
 
         decimal?[] latestPrices =
         [

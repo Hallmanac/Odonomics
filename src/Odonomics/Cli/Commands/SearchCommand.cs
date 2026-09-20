@@ -17,8 +17,7 @@ public static class SearchCommand
 
         using OdonomicsDbContext db = LedgerFactory.Open();
 
-        RunEntity? previousRun = await db.Runs.OrderByDescending(r => r.Id).FirstOrDefaultAsync(cancellationToken);
-        var currentRun = new RunEntity { Command = "search", StartedAt = DateTimeOffset.UtcNow };
+        var currentRun = new RunEntity { Command = "search", Sources = "", StartedAt = DateTimeOffset.UtcNow };
         db.Runs.Add(currentRun);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -31,6 +30,7 @@ public static class SearchCommand
         ];
 
         var upsertService = new LedgerUpsertService(db);
+        var sourcesCovered = new List<string>();
         int upserted = 0;
         foreach (IListingSource source in sources)
         {
@@ -41,6 +41,7 @@ public static class SearchCommand
                 continue;
             }
 
+            sourcesCovered.Add(source.Name);
             AnsiConsole.MarkupLineInterpolated($"{source.Name}: {result.Candidates.Count} candidates, {result.Rejections.Count} rejected");
             foreach (ListingCandidate candidate in result.Candidates)
             {
@@ -49,13 +50,14 @@ public static class SearchCommand
             }
         }
 
+        currentRun.Sources = RunSources.Join(sourcesCovered);
         currentRun.CompletedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
         AnsiConsole.MarkupLineInterpolated($"upserted {upserted} candidate sighting(s) from this run");
 
         var diffService = new LedgerDiffService(db);
-        SearchDiff diff = await diffService.ComputeAsync(currentRun, previousRun, cancellationToken);
+        SearchDiff diff = await diffService.ComputeAsync(currentRun, cancellationToken);
         DiffRenderer.Render(diff);
 
         return 0;
