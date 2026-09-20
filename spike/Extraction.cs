@@ -26,7 +26,7 @@ public sealed record ExtractionOutcome(ExtractionResult? Result, decimal CostUsd
 /// The page text handed to this method is untrusted: it comes from a listing a third party wrote,
 /// and a hostile seller could write a prompt-injection attempt straight into a description field.
 /// Four defenses: the page text is substituted into the prompt between explicit delimiters with an
-/// instruction to treat it as inert data, the subprocess runs with `--allowedTools ""` so it has no
+/// instruction to treat it as inert data, the subprocess runs with `--tools ""` so it has no
 /// tool access at all regardless of what it is told, every VIN that comes back is checked against
 /// the standard VIN character set before being trusted, and every make/model/price/mileage that
 /// comes back is checked for actually appearing in the source page text before being trusted -
@@ -74,7 +74,9 @@ public sealed class ExtractionClient
         psi.ArgumentList.Add("json");
         // No tool access: this call only ever needs to read the prompt and produce JSON, and page
         // text is untrusted third-party content that must not be able to steer a tool call.
-        psi.ArgumentList.Add("--allowedTools");
+        // --allowedTools is a pre-approval allowlist, not a restriction on what is available; only
+        // --tools "" actually removes tool availability from the subprocess.
+        psi.ArgumentList.Add("--tools");
         psi.ArgumentList.Add("");
 
         Process process;
@@ -148,10 +150,16 @@ public sealed class ExtractionClient
             try
             {
                 ExtractionResult? extracted = JsonSerializer.Deserialize<ExtractionResult>(jsonText, JsonOptions);
-                if (extracted is not null)
+                if (extracted is null)
                 {
-                    extracted = GroundInPageText(extracted, truncated);
+                    // The model can reply with the bare JSON literal "null" (e.g. for a removed
+                    // listing) and deserialize cleanly to a null result. Callers rely on a null
+                    // Error implying a non-null Result, so that has to be an error, not a silent
+                    // null-for-null outcome.
+                    return new ExtractionOutcome(null, costUsd, $"extraction returned null: {jsonText}");
                 }
+
+                extracted = GroundInPageText(extracted, truncated);
                 return new ExtractionOutcome(extracted, costUsd, null);
             }
             catch (JsonException ex)
@@ -222,13 +230,17 @@ public sealed class ExtractionClient
     /// </summary>
     private static bool ContainsNumber(string haystack, decimal value)
     {
-        long needle = (long)value;
+        // Truncated decimal-to-decimal comparison, not a cast to long: a fabricated value from a
+        // prompt injection can carry more digits than long can hold, and a decimal-to-integral cast
+        // throws OverflowException in that case regardless of checked/unchecked context - exactly
+        // the kind of value this check exists to reject, not crash on.
+        decimal needle = Math.Truncate(value);
         string masked = ConnectedNumberBlock.Replace(haystack, match => new string(' ', match.Value.Length));
         foreach (Match match in NumberToken.Matches(masked))
         {
             string cleaned = match.Value.Replace(",", string.Empty);
             if (decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal parsed)
-                && (long)parsed == needle)
+                && Math.Truncate(parsed) == needle)
             {
                 return true;
             }
