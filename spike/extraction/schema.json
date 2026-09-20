@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VehicleExtraction",
+  "type": "object",
+  "properties": {
+    "vin": {
+      "type": ["string", "null"],
+      "description": "The 17-character VIN exactly as printed on the page. Null if no VIN appears anywhere in the text. Never construct, guess, or infer a VIN from partial characters."
+    },
+    "year": {
+      "type": ["integer", "null"],
+      "description": "Model year of the vehicle."
+    },
+    "make": {
+      "type": ["string", "null"],
+      "description": "Vehicle make, e.g. Honda, Toyota."
+    },
+    "model": {
+      "type": ["string", "null"],
+      "description": "Vehicle model, e.g. Insight, Corolla Hybrid, Camry Hybrid, Prius."
+    },
+    "trim": {
+      "type": ["string", "null"],
+      "description": "Trim level if stated, else null."
+    },
+    "price": {
+      "type": ["number", "null"],
+      "description": "Asking price in US dollars as a plain number, no currency symbol or thousands separators. Null if no price is stated."
+    },
+    "mileage": {
+      "type": ["integer", "null"],
+      "description": "Odometer mileage in miles as a plain integer. Null if no mileage is stated."
+    }
+  },
+  "required": ["vin", "year", "make", "model", "trim", "price", "mileage"],
+  "additionalProperties": false
+}
