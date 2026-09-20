@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
@@ -10,13 +11,19 @@ public sealed record PageWalkResult(
     string Title,
     string Html,
     string BodyText,
-    IReadOnlyList<string> DetailLinks);
+    IReadOnlyList<string> DetailLinks,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DetailLinkAttributes,
+    IReadOnlyList<string> JsonLdBlocks);
 
 /// <summary>
 /// Shared plumbing for a headed-Chrome page walk. Deliberately holds no per-site content
-/// parsing: it only navigates, detects the common bot-defense challenge pages, and harvests
-/// hyperlinks by URL shape. Turning page text into vehicle data is always the model extraction
-/// step (see ExtractionClient), never a selector written against one site's markup.
+/// parsing: it only navigates, detects the common bot-defense challenge pages, harvests
+/// hyperlinks by URL shape, and harvests two generic, site-agnostic data carriers that happen to
+/// appear on a search page: each link's own <c>data-*</c> attributes, and the page's JSON-LD
+/// script blocks. Whether either of those carries a usable VIN (letting a page-walk source skip a
+/// detail-page fetch entirely) is a per-site judgment made by the caller in PageWalkSources, not
+/// here. Turning page text into vehicle data from a detail page is still always the model
+/// extraction step (see ExtractionClient), never a selector written against one site's markup.
 ///
 /// Day one found that Cars.com's and Carvana's Cloudflare defenses let the *first* page load in
 /// a persistent profile through cleanly, then challenge every subsequent load in that same
@@ -43,20 +50,20 @@ public static class PageWalkEngine
         // is a full Chromium profile directory: left uncommitted-but-on-disk across a whole run
         // (dozens of pages) that adds up to gigabytes. It is deleted in the finally block below
         // once its one page load is done; nothing after this method needs it again.
-        var profileDir = Path.Combine(profileRoot, Guid.NewGuid().ToString("N"));
+        string profileDir = Path.Combine(profileRoot, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(profileDir);
 
         try
         {
-            using var playwright = await Playwright.CreateAsync();
-            await using var context = await playwright.Chromium.LaunchPersistentContextAsync(profileDir, new BrowserTypeLaunchPersistentContextOptions
+            using IPlaywright playwright = await Playwright.CreateAsync();
+            await using IBrowserContext context = await playwright.Chromium.LaunchPersistentContextAsync(profileDir, new BrowserTypeLaunchPersistentContextOptions
             {
                 Headless = false,
                 ViewportSize = new ViewportSize { Width = 1280, Height = 900 },
                 Timeout = 20_000,
             });
 
-            var page = await context.NewPageAsync();
+            IPage page = await context.NewPageAsync();
 
             IResponse? response;
             try
@@ -72,32 +79,68 @@ public static class PageWalkEngine
 
             // A Cloudflare/bot-defense JS challenge often resolves itself within a few extra
             // seconds in a real Chrome tab; give it one more chance before calling it blocked.
-            var title = await page.TitleAsync();
+            string title = await page.TitleAsync();
             if (BlockTitleMarkers.Any(m => title.ToLowerInvariant().Contains(m)))
             {
                 await page.WaitForTimeoutAsync(8_000);
                 title = await page.TitleAsync();
             }
 
-            var html = await page.ContentAsync();
-            var bodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
-            var statusCode = response?.Status;
+            string html = await page.ContentAsync();
+            string bodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
+            int? statusCode = response?.Status;
 
-            var lowerTitle = title.ToLowerInvariant();
-            var blockMarker = BlockTitleMarkers.FirstOrDefault(m => lowerTitle.Contains(m));
-            var blocked = blockMarker is not null || statusCode is 403 or 429;
-            var reason = blocked
+            string lowerTitle = title.ToLowerInvariant();
+            string? blockMarker = BlockTitleMarkers.FirstOrDefault(m => lowerTitle.Contains(m));
+            bool blocked = blockMarker is not null || statusCode is 403 or 429;
+            string? reason = blocked
                 ? blockMarker is not null ? $"bot-defense challenge page (title contained \"{blockMarker}\")" : $"HTTP {statusCode}"
                 : null;
 
             var links = new List<string>();
+            var linkAttributes = new Dictionary<string, IReadOnlyDictionary<string, string>>();
+            var jsonLdBlocks = new List<string>();
             if (!blocked && detailUrlPattern is not null)
             {
-                var hrefs = await page.EvaluateAsync<string[]>("() => Array.from(document.querySelectorAll('a')).map(a => a.href)");
+                string[] hrefs = await page.EvaluateAsync<string[]>("() => Array.from(document.querySelectorAll('a')).map(a => a.href)");
                 links = hrefs.Where(h => detailUrlPattern.IsMatch(h)).Distinct().ToList();
+
+                // Generic, site-agnostic data carriers that happen to sit on a search page: an
+                // anchor's own data-* attributes, and the page's JSON-LD script blocks. Neither is
+                // specific to any one site; whether either one carries a usable VIN for a given
+                // link is decided by the caller (see PageWalkSources), not here.
+                //
+                // Returned as a JSON string and parsed on this side, not deserialized directly by
+                // EvaluateAsync<Dictionary<...>>: Playwright's own generic deserialization of a
+                // nested JS object into a Dictionary<string, Dictionary<string, string>> was found,
+                // by direct testing against these exact recorded fixtures, to silently come back
+                // empty even though the browser-side object was populated. A round-trip through
+                // System.Text.Json.JsonSerializer does not have that problem.
+                string linkAttributesJson = await page.EvaluateAsync<string>(
+                    """
+                    () => {
+                        const result = {};
+                        for (const a of document.querySelectorAll('a')) {
+                            if (result[a.href]) continue;
+                            const attrs = {};
+                            for (const attr of a.attributes) {
+                                if (attr.name.startsWith('data-')) attrs[attr.name] = attr.value;
+                            }
+                            result[a.href] = attrs;
+                        }
+                        return JSON.stringify(result);
+                    }
+                    """);
+                Dictionary<string, Dictionary<string, string>> rawLinkAttributes =
+                    JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(linkAttributesJson) ?? [];
+                linkAttributes = rawLinkAttributes.ToDictionary(kv => kv.Key, kv => (IReadOnlyDictionary<string, string>)kv.Value);
+
+                string[] jsonLd = await page.EvaluateAsync<string[]>(
+                    "() => Array.from(document.querySelectorAll('script[type=\"application/ld+json\"]')).map(s => s.textContent ?? '')");
+                jsonLdBlocks = jsonLd.Where(b => !string.IsNullOrWhiteSpace(b)).ToList();
             }
 
-            return new PageWalkResult(blocked, reason, statusCode, title, html, bodyText, links);
+            return new PageWalkResult(blocked, reason, statusCode, title, html, bodyText, links, linkAttributes, jsonLdBlocks);
         }
         finally
         {

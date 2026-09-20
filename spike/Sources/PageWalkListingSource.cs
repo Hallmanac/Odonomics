@@ -5,12 +5,14 @@ using Spike.Models;
 namespace Spike.Sources;
 
 /// <summary>
-/// Generic headed-Chrome page walk. Phase one visits one search page per query group and
-/// harvests detail links; phase two visits a capped number of those detail pages (the VIN is not
-/// visible on the search page on the sites this spike targets) through the model extraction
-/// step. Each navigation gets its own fresh browser profile (see PageWalkEngine for why). Shared
-/// by every Playwright-based source (Cars.com, Autotrader, Carvana); only the URL shapes and the
-/// detail-link pattern differ.
+/// Generic headed-Chrome page walk. Phase one visits one search page per query group and harvests
+/// detail links; for each link, <paramref name="resolveFromSearchPage"/> (when the site has one; see
+/// PageWalkSources) is checked first for a VIN already sitting on the search page. Phase two visits
+/// a capped number of only the remaining detail pages, i.e. those the search page didn't already
+/// resolve, through the model extraction step: "detail pages only where the VIN is not on the search
+/// page," per the brief. Each navigation gets its own fresh browser profile (see PageWalkEngine for
+/// why). Shared by every Playwright-based source (Cars.com, Autotrader, Carvana); only the URL
+/// shapes, the detail-link pattern, and the search-page resolver differ.
 /// </summary>
 public sealed class PageWalkListingSource(
     string name,
@@ -19,6 +21,7 @@ public sealed class PageWalkListingSource(
     Regex detailUrlPattern,
     RecordedResponses recorded,
     ExtractionClient extraction,
+    Func<PageWalkResult, IReadOnlyDictionary<string, SearchPageCandidate>>? resolveFromSearchPage = null,
     int detailPageCapPerGroup = 6) : IListingSource
 {
     public string Name => name;
@@ -26,16 +29,18 @@ public sealed class PageWalkListingSource(
     public async Task<SourceRunResult> RunAsync(CancellationToken cancellationToken)
     {
         var result = new SourceRunResult { Source = Name };
-        var stopwatch = Stopwatch.StartNew();
+        Stopwatch stopwatch = Stopwatch.StartNew();
 
-        // Phase 1: one search page per query group.
+        // Phase 1: one search page per query group. Any link the search page's own resolver
+        // already ties to a VIN becomes a candidate immediately, at zero extraction cost; only the
+        // rest are queued for a detail-page fetch.
         var pendingDetailUrls = new List<(QueryGroup Group, string Url)>();
-        var searchBlocked = false;
-        var totalCandidatesSeen = 0;
+        bool searchBlocked = false;
+        int totalCandidatesSeen = 0;
 
-        foreach (var group in QueryGroup.All)
+        foreach (QueryGroup group in QueryGroup.All)
         {
-            var fileBase = $"{group.Make}-{group.Model}".Replace(" ", "_");
+            string fileBase = $"{group.Make}-{group.Model}".Replace(" ", "_");
 
             if (searchBlocked)
             {
@@ -54,7 +59,7 @@ public sealed class PageWalkListingSource(
                 continue;
             }
 
-            await recorded.WriteAsync(Name, $"{fileBase}-search.html", search.Html, cancellationToken);
+            string searchRawPath = await recorded.WriteAsync(Name, $"{fileBase}-search.html", search.Html, cancellationToken);
 
             if (search.Blocked)
             {
@@ -70,7 +75,44 @@ public sealed class PageWalkListingSource(
             }
 
             totalCandidatesSeen += search.DetailLinks.Count;
-            foreach (var url in search.DetailLinks.Take(detailPageCapPerGroup))
+
+            IReadOnlyDictionary<string, SearchPageCandidate> knownFromSearch =
+                resolveFromSearchPage?.Invoke(search) ?? new Dictionary<string, SearchPageCandidate>();
+
+            var needsDetailFetch = new List<string>();
+            foreach (string url in search.DetailLinks)
+            {
+                if (!knownFromSearch.TryGetValue(url, out SearchPageCandidate? known) || string.IsNullOrWhiteSpace(known.Vin))
+                {
+                    needsDetailFetch.Add(url);
+                    continue;
+                }
+
+                bool matchesQuery = group.MatchesExtractedVehicle(known.Make, known.Model, known.Trim, known.Year, known.Mileage);
+                if (!matchesQuery)
+                {
+                    result.Failures.Add(
+                        $"{group.Make} {group.Model}: search page listing ({known.Year} {known.Make} {known.Model} {known.Trim}) did not match the query, excluded from counts but kept for the extraction hand-check");
+                }
+
+                result.Candidates.Add(new Candidate
+                {
+                    Source = Name,
+                    Vin = known.Vin,
+                    Year = known.Year,
+                    Make = known.Make ?? group.Make,
+                    Model = known.Model ?? group.Model,
+                    Trim = known.Trim,
+                    Price = known.Price,
+                    Mileage = known.Mileage,
+                    Url = url,
+                    RawRecordPath = searchRawPath,
+                    WasExtracted = false,
+                    MatchesQuery = matchesQuery,
+                });
+            }
+
+            foreach (string url in needsDetailFetch.Take(detailPageCapPerGroup))
             {
                 pendingDetailUrls.Add((group, url));
             }
@@ -80,14 +122,15 @@ public sealed class PageWalkListingSource(
 
         result.SearchOnlyCandidatesFound = totalCandidatesSeen;
 
-        // Phase 2: detail pages, up to the cap. Each gets its own fresh profile (see
-        // PageWalkEngine), so one blocked detail page does not doom the rest.
-        var index = 0;
-        var anyDetailBlocked = false;
-        foreach (var (group, detailUrl) in pendingDetailUrls)
+        // Phase 2: detail pages, up to the cap, only for links the search page didn't already
+        // resolve. Each gets its own fresh profile (see PageWalkEngine), so one blocked detail page
+        // does not doom the rest.
+        int index = 0;
+        bool anyDetailBlocked = false;
+        foreach ((QueryGroup group, string detailUrl) in pendingDetailUrls)
         {
             index++;
-            var fileBase = $"{group.Make}-{group.Model}".Replace(" ", "_");
+            string fileBase = $"{group.Make}-{group.Model}".Replace(" ", "_");
 
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
 
@@ -102,7 +145,7 @@ public sealed class PageWalkListingSource(
                 continue;
             }
 
-            var rawPath = await recorded.WriteAsync(Name, $"{fileBase}-detail-{index}.html", detail.Html, cancellationToken);
+            string rawPath = await recorded.WriteAsync(Name, $"{fileBase}-detail-{index}.html", detail.Html, cancellationToken);
 
             if (detail.Blocked)
             {
@@ -111,7 +154,7 @@ public sealed class PageWalkListingSource(
                 continue;
             }
 
-            var outcome = await extraction.ExtractAsync(detail.BodyText, cancellationToken);
+            ExtractionOutcome outcome = await extraction.ExtractAsync(detail.BodyText, cancellationToken);
             result.DollarsSpent += outcome.CostUsd;
 
             if (outcome.Error is not null)
@@ -120,8 +163,8 @@ public sealed class PageWalkListingSource(
                 continue;
             }
 
-            var extracted = outcome.Result!;
-            var matchesQuery = group.MatchesExtractedVehicle(extracted.Make, extracted.Model, extracted.Trim, extracted.Year, extracted.Mileage);
+            ExtractionResult extracted = outcome.Result!;
+            bool matchesQuery = group.MatchesExtractedVehicle(extracted.Make, extracted.Model, extracted.Trim, extracted.Year, extracted.Mileage);
             if (!matchesQuery)
             {
                 result.Failures.Add(
