@@ -8,11 +8,20 @@ namespace Spike;
 /// </summary>
 public static class SecretRedactor
 {
-    private static readonly List<string> Secrets = [];
+    /// <summary>
+    /// Cars.com's own browser-side GraphQL API key, served to every visitor in a
+    /// <c>graphql-config</c> script block on every search and detail page. Not a secret of this
+    /// project, but a live-looking credential that a secret scanner flags regardless, so it is
+    /// redacted the same as this project's own keys rather than left for every page-walk fixture
+    /// to carry it.
+    /// </summary>
+    private const string CarsComPublicGraphQlKey = "5rrmnWVl1MDzPcEnDvEp3Pu101IGXEGo";
+
+    private static readonly List<string> Secrets = [CarsComPublicGraphQlKey];
 
     public static void Register(params string?[] secrets)
     {
-        foreach (var secret in secrets)
+        foreach (string? secret in secrets)
         {
             if (!string.IsNullOrWhiteSpace(secret))
             {
@@ -38,15 +47,15 @@ public sealed class RecordedResponses(string repoRoot, string runName)
 
     public string DirectoryFor(string source)
     {
-        var dir = Path.Combine(repoRoot, "spike", "recorded", Slug(source), RunName);
+        string dir = Path.Combine(repoRoot, "spike", "recorded", Slug(source), RunName);
         Directory.CreateDirectory(dir);
         return dir;
     }
 
     public async Task<string> WriteAsync(string source, string fileName, string content, CancellationToken cancellationToken)
     {
-        var dir = DirectoryFor(source);
-        var path = Path.Combine(dir, fileName);
+        string dir = DirectoryFor(source);
+        string path = Path.Combine(dir, fileName);
         await File.WriteAllTextAsync(path, SecretRedactor.Redact(content), cancellationToken);
         return Path.GetRelativePath(repoRoot, path);
     }
@@ -56,23 +65,36 @@ public sealed class RecordedResponses(string repoRoot, string runName)
 
 /// <summary>
 /// Tracks which day (1, 2, or 3) this invocation is, purely by counting prior run folders. No
-/// arguments needed: `dotnet run --project spike` always runs "the next day".
+/// arguments needed: `dotnet run --project spike` always runs "the next day". Reading the next day
+/// number (<see cref="Peek"/>) is separate from persisting it (<see cref="Commit"/>): a run that
+/// crashes, is cancelled, or is Ctrl-C'd before it finishes must not have consumed a day, or the
+/// next invocation silently skips the day that never actually completed.
 /// </summary>
 public static class RunState
 {
-    public static (int Day, string RunName) NextRun(string repoRoot)
-    {
-        var recordedDir = Path.Combine(repoRoot, "spike", "recorded");
-        var stateFile = Path.Combine(recordedDir, "run-state.txt");
-        Directory.CreateDirectory(recordedDir);
+    private static string StateFile(string repoRoot) => Path.Combine(repoRoot, "spike", "recorded", "run-state.txt");
 
-        var day = 1;
-        if (File.Exists(stateFile) && int.TryParse(File.ReadAllText(stateFile).Trim(), out var lastDay))
+    public static (int Day, string RunName) Peek(string repoRoot)
+    {
+        string stateFile = StateFile(repoRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(stateFile)!);
+
+        int day = 1;
+        if (File.Exists(stateFile) && int.TryParse(File.ReadAllText(stateFile).Trim(), out int lastDay))
         {
             day = lastDay + 1;
         }
 
-        File.WriteAllText(stateFile, day.ToString());
         return (day, $"day{day}");
+    }
+
+    /// <summary>Persists <paramref name="day"/> as complete. Call only once the run's results have
+    /// actually been written out (findings row appended, candidate dump written); otherwise a day
+    /// number is spent on a run that produced nothing.</summary>
+    public static void Commit(string repoRoot, int day)
+    {
+        string stateFile = StateFile(repoRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(stateFile)!);
+        File.WriteAllText(stateFile, day.ToString());
     }
 }

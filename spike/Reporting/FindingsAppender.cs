@@ -14,11 +14,11 @@ public static class FindingsAppender
 
     public static async Task AppendDayResultsAsync(string findingsPath, int day, IReadOnlyList<SourceRunResult> results, CancellationToken cancellationToken)
     {
-        var newRows = results.Select(r => FormatRow(day, r)).ToList();
+        List<string> newRows = results.Select(r => FormatRow(day, r)).ToList();
 
         if (!File.Exists(findingsPath))
         {
-            var scaffold = $"""
+            string scaffold = $"""
                 # Spike findings
 
                 <!-- This section is appended to by `dotnet run --project spike`. Everything else in this file is written by hand. -->
@@ -31,28 +31,28 @@ public static class FindingsAppender
             await File.WriteAllTextAsync(findingsPath, scaffold + Environment.NewLine, cancellationToken);
         }
 
-        var content = await File.ReadAllTextAsync(findingsPath, cancellationToken);
-        var beginIndex = content.IndexOf(BeginMarker, StringComparison.Ordinal);
-        var endIndex = content.IndexOf(EndMarker, StringComparison.Ordinal);
+        string content = await File.ReadAllTextAsync(findingsPath, cancellationToken);
+        int beginIndex = content.IndexOf(BeginMarker, StringComparison.Ordinal);
+        int endIndex = content.IndexOf(EndMarker, StringComparison.Ordinal);
         if (beginIndex < 0 || endIndex < 0 || endIndex < beginIndex)
         {
             throw new InvalidOperationException($"{findingsPath} is missing the {BeginMarker}/{EndMarker} table markers");
         }
 
-        var before = content[..endIndex];
-        var after = content[endIndex..];
-        var updated = before.TrimEnd('\n', '\r') + "\n" + string.Join('\n', newRows) + "\n" + after;
+        string before = content[..endIndex];
+        string after = content[endIndex..];
+        string updated = before.TrimEnd('\n', '\r') + "\n" + string.Join('\n', newRows) + "\n" + after;
 
         await File.WriteAllTextAsync(findingsPath, updated, cancellationToken);
     }
 
     private static string FormatRow(int day, SourceRunResult r)
     {
-        var found = r.CouldNotRun ? "-" : r.CandidatesFound.ToString(CultureInfo.InvariantCulture);
-        var withVin = r.CouldNotRun ? "-" : r.CandidatesWithVin.ToString(CultureInfo.InvariantCulture);
-        var unique = r.CouldNotRun ? "-" : r.VinsUniqueToSource.ToString(CultureInfo.InvariantCulture);
-        var wallTime = r.CouldNotRun ? "-" : $"{r.WallTime.TotalMinutes:0.0} min";
-        var dollars = r.CouldNotRun ? "-" : $"${r.DollarsSpent:0.00}";
+        string found = r.CouldNotRun ? "-" : r.CandidatesFound.ToString(CultureInfo.InvariantCulture);
+        string withVin = r.CouldNotRun ? "-" : r.CandidatesWithVin.ToString(CultureInfo.InvariantCulture);
+        string unique = r.CouldNotRun ? "-" : r.VinsUniqueToSource.ToString(CultureInfo.InvariantCulture);
+        string wallTime = r.CouldNotRun ? "-" : $"{r.WallTime.TotalMinutes:0.0} min";
+        string dollars = r.CouldNotRun ? "-" : $"${r.DollarsSpent:0.00}";
         var failures = new StringBuilder();
         if (r.CouldNotRun)
         {
@@ -68,7 +68,14 @@ public static class FindingsAppender
             failures.Append("none");
         }
 
-        var failureText = failures.ToString().Replace("|", "\\|");
+        // Failure text can carry raw stderr or a model's raw (possibly pretty-printed, multi-line)
+        // output; both must collapse to one physical line or they split this Markdown table apart
+        // partway through the file, corrupting everything after it.
+        string failureText = failures.ToString()
+            .Replace("\r\n", " ")
+            .Replace('\n', ' ')
+            .Replace('\r', ' ')
+            .Replace("|", "\\|");
         return $"| {day} | {r.Source} | {found} | {withVin} | {unique} | {wallTime} | {dollars} | {failureText} |";
     }
 }
