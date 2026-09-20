@@ -199,6 +199,14 @@ public sealed class ExtractionClient
     private static readonly Regex NumberToken = new(@"\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
 
     /// <summary>
+    /// A run of two or more digit groups joined by spaces or hyphens, and optionally wrapped in
+    /// parentheses - the shape of a phone number ("(555) 123-4567") or a dashed stock/zip+4 number
+    /// ("90210-1234"). Each such run is one unrelated number, not several standalone ones, so it is
+    /// masked out before <see cref="ContainsNumber"/> tokenizes the page for legitimate matches.
+    /// </summary>
+    private static readonly Regex ConnectedNumberBlock = new(@"\(?\d+\)?(?:[ \t-]+\(?\d+\)?)+", RegexOptions.Compiled);
+
+    /// <summary>
     /// Whether <paramref name="needle"/> occurs as a whole word in <paramref name="haystack"/>, not
     /// merely as a substring - so a fabricated make of "Ford" does not ground against unrelated page
     /// copy like "affordable".
@@ -210,12 +218,13 @@ public sealed class ExtractionClient
     /// Whether <paramref name="value"/> occurs as one of the page's own number tokens - tolerant of
     /// "$12,345", "12345.00", or "12,345 miles" all representing the same number the page actually
     /// shows, but not a number stitched together from the digits of unrelated numbers (a VIN, a zip
-    /// code, a stock number) that happen to sit next to each other on the page.
+    /// code, a stock number, a phone number) that happen to sit next to each other on the page.
     /// </summary>
     private static bool ContainsNumber(string haystack, decimal value)
     {
         long needle = (long)value;
-        foreach (Match match in NumberToken.Matches(haystack))
+        string masked = ConnectedNumberBlock.Replace(haystack, match => new string(' ', match.Value.Length));
+        foreach (Match match in NumberToken.Matches(masked))
         {
             string cleaned = match.Value.Replace(",", string.Empty);
             if (decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal parsed)
