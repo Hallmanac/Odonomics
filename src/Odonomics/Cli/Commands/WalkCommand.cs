@@ -47,8 +47,7 @@ public static class WalkCommand
         ExtractionClient extraction = ExtractionClient.FromAppDirectory(secrets.AnthropicApiKey, http);
 
         using OdonomicsDbContext db = LedgerFactory.Open();
-        RunEntity? previousRun = await db.Runs.OrderByDescending(r => r.Id).FirstOrDefaultAsync(cancellationToken);
-        var currentRun = new RunEntity { Command = $"walk {site.Name}", StartedAt = DateTimeOffset.UtcNow };
+        var currentRun = new RunEntity { Command = $"walk {site.Name}", Sources = site.Name, StartedAt = DateTimeOffset.UtcNow };
         db.Runs.Add(currentRun);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -135,6 +134,10 @@ public static class WalkCommand
                 await upsertService.UpsertAsync(candidate, currentRun, cancellationToken);
                 upserted++;
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: failed to load ({ex.Message})[/]");
+            }
             finally
             {
                 await detailPage.CloseAsync();
@@ -147,7 +150,7 @@ public static class WalkCommand
         AnsiConsole.MarkupLineInterpolated($"upserted {upserted} vehicle(s), dropped {droppedNoVin} candidate(s) with no VIN");
 
         var diffService = new LedgerDiffService(db);
-        SearchDiff diff = await diffService.ComputeAsync(currentRun, previousRun, cancellationToken);
+        SearchDiff diff = await diffService.ComputeAsync(currentRun, cancellationToken);
         DiffRenderer.Render(diff);
 
         return 0;
