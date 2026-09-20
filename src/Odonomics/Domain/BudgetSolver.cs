@@ -20,7 +20,7 @@ public static class BudgetSolver
     {
         decimal DuringLoanAt(decimal price)
         {
-            decimal tax = FinanceMath.FloridaSalesTax(price, scenario.CountySurtaxRate);
+            decimal tax = FinanceMath.FloridaSalesTax(price, scenario.SalesTaxStateRate, scenario.CountySurtaxRate);
             decimal purchaseCost = price + tax + scenario.Fees.Expected;
             decimal principal = Math.Max(0m, purchaseCost - scenario.DownPayment.Expected);
             decimal payment = FinanceMath.AmortizedPayment(principal, scenario.Apr.Expected, scenario.TermMonths);

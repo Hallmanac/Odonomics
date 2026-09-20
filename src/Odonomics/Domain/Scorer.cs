@@ -147,7 +147,7 @@ public static class Scorer
         decimal reserve = values[6];
         decimal residualFraction = values[7];
 
-        decimal salesTax = FinanceMath.FloridaSalesTax(price, scenario.CountySurtaxRate);
+        decimal salesTax = FinanceMath.FloridaSalesTax(price, scenario.SalesTaxStateRate, scenario.CountySurtaxRate);
         decimal purchaseCost = price + salesTax + fees;
         decimal principal = Math.Max(0m, purchaseCost - downPayment);
         decimal payment = FinanceMath.AmortizedPayment(principal, apr, scenario.TermMonths);

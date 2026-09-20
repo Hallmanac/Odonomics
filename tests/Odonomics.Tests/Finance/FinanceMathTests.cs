@@ -48,7 +48,7 @@ public class FinanceMathTests
     [Fact]
     public void FloridaSalesTax_PriceAboveSurtaxCap_TaxesOnlyFirstFiveThousandForSurtax()
     {
-        decimal tax = FinanceMath.FloridaSalesTax(20000m, 0.005m);
+        decimal tax = FinanceMath.FloridaSalesTax(20000m, 0.06m, 0.005m);
 
         Assert.Equal(1225m, tax);
     }
@@ -60,7 +60,7 @@ public class FinanceMathTests
     [Fact]
     public void FloridaSalesTax_PriceBelowSurtaxCap_TaxesWholePriceForSurtax()
     {
-        decimal tax = FinanceMath.FloridaSalesTax(3000m, 0.005m);
+        decimal tax = FinanceMath.FloridaSalesTax(3000m, 0.06m, 0.005m);
 
         Assert.Equal(195m, tax);
     }

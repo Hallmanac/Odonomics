@@ -32,11 +32,10 @@ public static class FinanceMath
     public static decimal TotalInterest(decimal principal, decimal payment, int termMonths) =>
         payment * termMonths - principal;
 
-    /// <summary>Florida sales tax: the 6% state rate on the full price, plus the county
+    /// <summary>Florida sales tax: the state rate on the full price, plus the county
     /// discretionary surtax on the first $5,000 of price only (Fla. Stat. 212.055).</summary>
-    public static decimal FloridaSalesTax(decimal price, decimal countySurtaxRate)
+    public static decimal FloridaSalesTax(decimal price, decimal stateRate, decimal countySurtaxRate)
     {
-        const decimal stateRate = 0.06m;
         const decimal surtaxCap = 5000m;
         decimal surtaxableAmount = Math.Min(price, surtaxCap);
         return price * stateRate + surtaxableAmount * countySurtaxRate;
