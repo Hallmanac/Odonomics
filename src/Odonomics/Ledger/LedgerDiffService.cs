@@ -14,17 +14,19 @@ public sealed record SearchDiff(
     IReadOnlyList<GonePostingEntry> Gone);
 
 /// <summary>
-/// Diffs one run against the run before it. A posting counts as "new" when this run created it
-/// (its FirstSeen matches the run's own timestamp), "price-dropped" when this run appended a
-/// lower price than the one before it, and "gone" when the previous run had it active but this
-/// run never touched it (its LastSeen still points at the previous run's timestamp). See
-/// LedgerUpsertService: every posting touched by a run is stamped with that run's own
-/// StartedAt, not wall-clock time, which is what makes this an exact equality comparison rather
-/// than an elapsed-time heuristic.
+/// Diffs one run against whatever ran before it, per source. A posting counts as "new" when this
+/// run created it (its FirstSeen matches the run's own timestamp), "price-dropped" when this run
+/// itself appended a lower price than the one before it, and "gone" when the last run to cover
+/// that posting's own source before this one had it active but this run never touched it. See
+/// LedgerUpsertService: every posting touched by a run is stamped with that run's own StartedAt,
+/// not wall-clock time, which is what makes this an exact equality comparison rather than an
+/// elapsed-time heuristic. Scoping "gone" to each posting's own source (via <see cref="RunEntity.Sources"/>)
+/// keeps a search from reporting a walk's postings gone and vice versa, since neither command's run
+/// ever touches the other's sources.
 /// </summary>
 public sealed class LedgerDiffService(OdonomicsDbContext db)
 {
-    public async Task<SearchDiff> ComputeAsync(RunEntity currentRun, RunEntity? previousRun, CancellationToken cancellationToken)
+    public async Task<SearchDiff> ComputeAsync(RunEntity currentRun, CancellationToken cancellationToken)
     {
         List<PostingEntity> touchedThisRun = await db.Postings
             .Include(p => p.Vehicle)
@@ -47,7 +49,11 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                 continue;
             }
 
-            if (observations.Count >= 2 && observations[^2].Price > currentPrice)
+            // A dropped price only belongs to this run when this run is the one that appended the
+            // newer of the two observations; otherwise the price was already reported dropped on
+            // whichever earlier run actually saw it change, and repeating it here would be stale
+            // news every run after until the price moves again.
+            if (observations.Count >= 2 && observations[^1].ObservedAt == currentRun.StartedAt && observations[^2].Price > currentPrice)
             {
                 priceDrops.Add(new PriceDropEntry(
                     vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url,
@@ -55,16 +61,26 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             }
         }
 
+        string[] sources = RunSources.Split(currentRun);
+        List<RunEntity> allRuns = await db.Runs.ToListAsync(cancellationToken);
+        List<RunEntity> priorRuns = [.. allRuns.Where(r => r.Id != currentRun.Id && r.StartedAt < currentRun.StartedAt)];
+        Dictionary<string, DateTimeOffset> previousCoverageBySource = RunSources.LatestCoverageBySource(priorRuns);
+
         var gone = new List<GonePostingEntry>();
-        if (previousRun is not null)
+        foreach (string source in sources)
         {
-            List<PostingEntity> stillMarkedFromPreviousRun = await db.Postings
+            if (!previousCoverageBySource.TryGetValue(source, out DateTimeOffset previousCoverage))
+            {
+                continue; // this run is the first to ever cover this source; nothing to compare against
+            }
+
+            List<PostingEntity> stillMarkedFromPreviousCoverage = await db.Postings
                 .Include(p => p.Vehicle)
                 .Include(p => p.PriceObservations)
-                .Where(p => p.LastSeen == previousRun.StartedAt)
+                .Where(p => p.Source == source && p.LastSeen == previousCoverage)
                 .ToListAsync(cancellationToken);
 
-            foreach (PostingEntity posting in stillMarkedFromPreviousRun)
+            foreach (PostingEntity posting in stillMarkedFromPreviousCoverage)
             {
                 VehicleEntity vehicle = posting.Vehicle ?? throw new InvalidOperationException($"posting {posting.Id} has no vehicle");
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;

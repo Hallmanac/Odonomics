@@ -20,6 +20,7 @@ public class LedgerUpsertServiceTests
     private static RunEntity Run(DateTimeOffset startedAt, string command = "search") => new()
     {
         Command = command,
+        Sources = "auto.dev",
         StartedAt = startedAt,
     };
 

@@ -55,6 +55,12 @@ public sealed class RunEntity
     public required string Command { get; set; }
     public required DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+
+    /// <summary>Comma-separated posting sources this run actually queried or walked (e.g.
+    /// "auto.dev,marketcheck" or "cars.com"). A source a run could not reach (a missing API key,
+    /// an unwalked site) is never listed here, so "still active"/"gone" comparisons only ever
+    /// judge a posting against a run that could actually have seen it.</summary>
+    public required string Sources { get; set; }
 }
 
 /// <summary>The NHTSA vPIC decode and safety lookups for one VIN, refreshed by `odo show` (v0
@@ -82,4 +88,33 @@ public sealed class NoteEntity
     public required DateTimeOffset CreatedAt { get; set; }
 
     public VehicleEntity? Vehicle { get; set; }
+}
+
+/// <summary>Reads and writes <see cref="RunEntity.Sources"/>'s comma-separated list, and answers
+/// "as of which run did this source last get checked", the question both the rank view and the
+/// search/walk diff need answered per-source rather than against whichever run happened last.</summary>
+public static class RunSources
+{
+    public static string Join(IEnumerable<string> sources) => string.Join(',', sources);
+
+    public static string[] Split(RunEntity run) => run.Sources.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>For every source covered by any run in <paramref name="runs"/>, the StartedAt of
+    /// the most recent one that covered it.</summary>
+    public static Dictionary<string, DateTimeOffset> LatestCoverageBySource(IEnumerable<RunEntity> runs)
+    {
+        var latest = new Dictionary<string, DateTimeOffset>();
+        foreach (RunEntity run in runs)
+        {
+            foreach (string source in Split(run))
+            {
+                if (!latest.TryGetValue(source, out DateTimeOffset existing) || run.StartedAt > existing)
+                {
+                    latest[source] = run.StartedAt;
+                }
+            }
+        }
+
+        return latest;
+    }
 }
