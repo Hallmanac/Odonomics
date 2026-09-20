@@ -1,0 +1,44 @@
+{
+  "name": "daughter",
+  "zip": "32114",
+  "radiusMiles": 50,
+  "annualMiles": 12000,
+  "gasPricePerGallon": { "min": 3.00, "max": 3.60 },
+  "holdYears": 10,
+  "downPayment": 3000,
+  "apr": { "min": 0.065, "max": 0.095 },
+  "termMonths": 60,
+  "maintenancePerMile": 0.07,
+  "emergencyReservePerMonth": 50,
+  "salesTaxStateRate": 0.06,
+  "countySurtaxRate": 0.005,
+  "countySurtaxSource": "Volusia County discretionary sales surtax, 0.5%, effective through 2031-12-31. Florida Dept. of Revenue, Discretionary Sales Surtax Rate Table (floridarevenue.com), checked 2026-09-20.",
+  "fees": 500,
+  "residualFraction": 0.35,
+  "insuranceMonthlyByModel": {
+    "Honda Insight": null,
+    "Toyota Corolla Hybrid": 95,
+    "Toyota Camry Hybrid": 100,
+    "Toyota Prius": 90
+  },
+  "mpgByModel": {
+    "Honda Insight": 52,
+    "Toyota Corolla Hybrid": 52,
+    "Toyota Camry Hybrid": 52,
+    "Toyota Prius": 52
+  },
+  "filters": {
+    "minModelYear": 2019,
+    "minModelYearOverrides": {
+      "Toyota Camry Hybrid": 2018
+    },
+    "maxMileage": 100000,
+    "allowedModels": [
+      "Honda Insight",
+      "Toyota Corolla Hybrid",
+      "Toyota Camry Hybrid",
+      "Toyota Prius"
+    ]
+  },
+  "targetMonthlyBudgets": [300, 350, 400]
+}
