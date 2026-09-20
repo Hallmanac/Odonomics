@@ -43,22 +43,21 @@ public static class RankRenderer
         int ByTenYearAverage(Score a, Score b) => a.Cost!.TenYearAverageMonthly.Expected.CompareTo(b.Cost!.TenYearAverageMonthly.Expected);
         ranked.Sort(ByTenYearAverage);
 
-        RenderRanked(ranked);
+        RenderRanked($"Ranked ({ranked.Count})", ranked);
 
         if (budget is decimal budgetValue && overBudget.Count > 0)
         {
             overBudget.Sort(ByTenYearAverage);
-            AnsiConsole.MarkupLine($"[bold]Over the ${budgetValue:N0} budget ({overBudget.Count})[/]");
-            RenderRanked(overBudget);
+            RenderRanked($"Over the ${budgetValue:N0} budget ({overBudget.Count})", overBudget);
         }
 
         RenderInsuranceUnknown(insuranceUnknown);
         RenderExcluded(excluded);
     }
 
-    private static void RenderRanked(IReadOnlyList<Score> scores)
+    private static void RenderRanked(string heading, IReadOnlyList<Score> scores)
     {
-        AnsiConsole.MarkupLine($"[bold]Ranked ({scores.Count})[/]");
+        AnsiConsole.MarkupLine($"[bold]{heading}[/]");
         if (scores.Count == 0)
         {
             AnsiConsole.MarkupLine("  none");
