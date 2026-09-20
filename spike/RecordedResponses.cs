@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Spike;
 
 /// <summary>
@@ -10,14 +12,17 @@ public static class SecretRedactor
 {
     /// <summary>
     /// Cars.com's own browser-side GraphQL API key, served to every visitor in a
-    /// <c>graphql-config</c> script block on every search and detail page. Not a secret of this
-    /// project, but a live-looking credential that a secret scanner flags regardless, so it is
-    /// redacted the same as this project's own keys rather than left for every page-walk fixture
-    /// to carry it.
+    /// <c>graphql-config</c> script block's <c>"apiKey"</c> field on every search and detail page.
+    /// Not a secret of this project, but a live-looking credential that a secret scanner flags
+    /// regardless, so it is redacted the same as this project's own keys rather than left for
+    /// every page-walk fixture to carry it. Matched by the surrounding JSON shape, not the literal
+    /// value, so the key itself never has to be committed to this file to be redacted.
     /// </summary>
-    private const string CarsComPublicGraphQlKey = "5rrmnWVl1MDzPcEnDvEp3Pu101IGXEGo";
+    private static readonly Regex CarsComGraphQlApiKey = new(
+        @"(""apiKey""\s*:\s*"")[^""]+("")",
+        RegexOptions.Compiled);
 
-    private static readonly List<string> Secrets = [CarsComPublicGraphQlKey];
+    private static readonly List<string> Secrets = [];
 
     public static void Register(params string?[] secrets)
     {
@@ -32,6 +37,7 @@ public static class SecretRedactor
 
     public static string Redact(string content)
     {
+        content = CarsComGraphQlApiKey.Replace(content, "${1}REDACTED${2}");
         foreach (var secret in Secrets)
         {
             content = content.Replace(secret, "REDACTED");
@@ -64,11 +70,12 @@ public sealed class RecordedResponses(string repoRoot, string runName)
 }
 
 /// <summary>
-/// Tracks which day (1, 2, or 3) this invocation is, purely by counting prior run folders. No
-/// arguments needed: `dotnet run --project spike` always runs "the next day". Reading the next day
-/// number (<see cref="Peek"/>) is separate from persisting it (<see cref="Commit"/>): a run that
-/// crashes, is cancelled, or is Ctrl-C'd before it finishes must not have consumed a day, or the
-/// next invocation silently skips the day that never actually completed.
+/// Tracks which day (1, 2, or 3) this invocation is, by reading and writing the last completed day
+/// number to <c>spike/recorded/run-state.txt</c>. No arguments needed: `dotnet run --project spike`
+/// always runs "the next day". Reading the next day number (<see cref="Peek"/>) is separate from
+/// persisting it (<see cref="Commit"/>): a run that crashes, is cancelled, or is Ctrl-C'd before it
+/// finishes must not have consumed a day, or the next invocation silently skips the day that never
+/// actually completed.
 /// </summary>
 public static class RunState
 {
