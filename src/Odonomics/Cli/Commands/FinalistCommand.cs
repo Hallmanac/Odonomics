@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Odonomics.Ledger;
 using Spectre.Console;
@@ -9,6 +10,9 @@ namespace Odonomics.Cli.Commands;
 /// per the decision gate in the brief.</summary>
 public static class FinalistCommand
 {
+    private static readonly Regex PpiWord = new(@"\bPPI\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex HistoryReportWord = new(@"\b(Carfax|AutoCheck)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     public static async Task<int> RunAsync(string vin, CancellationToken cancellationToken)
     {
         using OdonomicsDbContext db = LedgerFactory.Open();
@@ -23,9 +27,8 @@ public static class FinalistCommand
             return 1;
         }
 
-        bool hasPpiNote = vehicle.Notes.Any(n => n.Text.Contains("PPI", StringComparison.OrdinalIgnoreCase));
-        bool hasHistoryReportNote = vehicle.Notes.Any(n =>
-            n.Text.Contains("Carfax", StringComparison.OrdinalIgnoreCase) || n.Text.Contains("AutoCheck", StringComparison.OrdinalIgnoreCase));
+        bool hasPpiNote = vehicle.Notes.Any(n => PpiWord.IsMatch(n.Text));
+        bool hasHistoryReportNote = vehicle.Notes.Any(n => HistoryReportWord.IsMatch(n.Text));
 
         if (!hasPpiNote || !hasHistoryReportNote)
         {
