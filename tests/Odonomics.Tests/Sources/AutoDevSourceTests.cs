@@ -1,0 +1,65 @@
+using Odonomics.Sources;
+using Odonomics.Tests.TestSupport;
+
+namespace Odonomics.Tests.Sources;
+
+/// <summary>Contract test against a real auto.dev response recorded by the spike
+/// (tests/Odonomics.Tests/fixtures/sources/auto.dev/), so the parser is proven against the
+/// API's actual shape rather than a hand-written stub.</summary>
+public class AutoDevSourceTests
+{
+    private static string FixturePath => Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "sources", "auto.dev", "honda-insight.json");
+
+    [Fact]
+    public async Task RunAsync_NoApiKey_ReportsCouldNotRun()
+    {
+        var source = new AutoDevSource(apiKey: null, new HttpClient());
+
+        SourceResult result = await source.RunAsync([new ListingQuery("Honda", "Insight", 2019, "32114", 50, 100000)], CancellationToken.None);
+
+        Assert.True(result.CouldNotRun);
+        Assert.Contains("AutoDev:ApiKey", result.CouldNotRunReason);
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordedFixture_ParsesEveryInRangeCandidateWithAVin()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            [url] = await File.ReadAllTextAsync(FixturePath),
+        });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.False(result.CouldNotRun);
+        Assert.Equal(3, result.Candidates.Count);
+        Assert.Contains(result.Candidates, c => c.Vin == "19XZE4F52ME000999" && c.Price == 19393m && c.Mileage == 69599);
+        Assert.All(result.Candidates, c => Assert.False(string.IsNullOrWhiteSpace(c.Url)));
+        Assert.All(result.Candidates, c => Assert.Equal("auto.dev", c.Source));
+    }
+
+    [Fact]
+    public async Task RunAsync_CandidateOutsideMileageRange_IsRejectedNotUpserted()
+    {
+        // The fixture's third record is a 2022 with 84,595 miles; a max-mileage query of 50,000
+        // must reject it while keeping the ones that do fit.
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 50000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            [url] = await File.ReadAllTextAsync(FixturePath),
+        });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.DoesNotContain(result.Candidates, c => c.Vin == "19XZE4F52ME000999"); // 69,599 miles
+        Assert.Contains(result.Candidates, c => c.Vin == "19XZE4F95ME001552"); // 32,500 miles
+        Assert.NotEmpty(result.Rejections);
+    }
+}
