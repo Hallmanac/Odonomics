@@ -80,11 +80,21 @@ public sealed class PageWalkListingSource(
                 resolveFromSearchPage?.Invoke(search) ?? new Dictionary<string, SearchPageCandidate>();
 
             var needsDetailFetch = new List<string>();
+            // A site can serve the same vehicle under two distinct hrefs on one search page - e.g.
+            // Cars.com's sponsored and organic placements of the same listing - and DetailLinks is
+            // deduped by full href, not by VIN, so both survive to this loop. Dedupe by VIN here so
+            // one vehicle contributes one candidate, not two.
+            var seenVins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string url in search.DetailLinks)
             {
                 if (!knownFromSearch.TryGetValue(url, out SearchPageCandidate? known) || string.IsNullOrWhiteSpace(known.Vin))
                 {
                     needsDetailFetch.Add(url);
+                    continue;
+                }
+
+                if (!seenVins.Add(known.Vin))
+                {
                     continue;
                 }
 
