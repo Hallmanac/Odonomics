@@ -20,23 +20,23 @@ public sealed class AutoDevSource(string? apiKey, RecordedResponses recorded) : 
             return result;
         }
 
-        var stopwatch = Stopwatch.StartNew();
+        Stopwatch stopwatch = Stopwatch.StartNew();
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
-        foreach (var group in QueryGroup.All)
+        foreach (QueryGroup group in QueryGroup.All)
         {
             try
             {
-                var yearMax = group.YearMax.HasValue ? $"&year_max={group.YearMax}" : "";
-                var model = Uri.EscapeDataString(group.Model);
-                var url = $"https://auto.dev/api/listings?apikey={apiKey}&zip={group.Zip}&radius={group.RadiusMiles}" +
+                string yearMax = group.YearMax.HasValue ? $"&year_max={group.YearMax}" : "";
+                string model = Uri.EscapeDataString(group.Model);
+                string url = $"https://auto.dev/api/listings?apikey={apiKey}&zip={group.Zip}&radius={group.RadiusMiles}" +
                            $"&make={group.Make}&model={model}&year_min={group.YearMin}{yearMax}&mileage_max={group.MaxMileage}";
 
-                var response = await http.GetAsync(url, cancellationToken);
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
+                string body = await response.Content.ReadAsStringAsync(cancellationToken);
 
-                var fileName = $"{group.Make}-{group.Model}".Replace(" ", "_") + ".json";
-                var rawPath = await recorded.WriteAsync(Name, fileName, body, cancellationToken);
+                string fileName = $"{group.Make}-{group.Model}".Replace(" ", "_") + ".json";
+                string rawPath = await recorded.WriteAsync(Name, fileName, body, cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -44,17 +44,17 @@ public sealed class AutoDevSource(string? apiKey, RecordedResponses recorded) : 
                     continue;
                 }
 
-                using var doc = JsonDocument.Parse(body);
-                if (!doc.RootElement.TryGetProperty("records", out var records))
+                using JsonDocument doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("records", out JsonElement records))
                 {
                     result.Failures.Add($"{group.Make} {group.Model}: no 'records' field in response");
                     continue;
                 }
 
-                foreach (var record in records.EnumerateArray())
+                foreach (JsonElement record in records.EnumerateArray())
                 {
-                    var year = record.TryGetProperty("year", out var y) ? y.GetInt32() : (int?)null;
-                    var mileage = record.TryGetProperty("mileageUnformatted", out var m) ? m.GetInt32() : (int?)null;
+                    int? year = record.TryGetProperty("year", out JsonElement y) ? y.GetInt32() : null;
+                    int? mileage = record.TryGetProperty("mileageUnformatted", out JsonElement m) ? m.GetInt32() : null;
                     if (!group.MatchesYear(year) || !group.MatchesMileage(mileage))
                     {
                         continue;
@@ -63,16 +63,16 @@ public sealed class AutoDevSource(string? apiKey, RecordedResponses recorded) : 
                     result.Candidates.Add(new Candidate
                     {
                         Source = Name,
-                        Vin = record.TryGetProperty("vin", out var vin) ? vin.GetString() : null,
+                        Vin = record.TryGetProperty("vin", out JsonElement vin) ? vin.GetString() : null,
                         Year = year,
-                        Make = record.TryGetProperty("make", out var mk) ? mk.GetString() : group.Make,
-                        Model = record.TryGetProperty("model", out var md) ? md.GetString() : group.Model,
-                        Trim = record.TryGetProperty("trim", out var tr) ? tr.GetString() : null,
-                        Price = record.TryGetProperty("priceUnformatted", out var p) && p.ValueKind == JsonValueKind.Number
+                        Make = record.TryGetProperty("make", out JsonElement mk) ? mk.GetString() : group.Make,
+                        Model = record.TryGetProperty("model", out JsonElement md) ? md.GetString() : group.Model,
+                        Trim = record.TryGetProperty("trim", out JsonElement tr) ? tr.GetString() : null,
+                        Price = record.TryGetProperty("priceUnformatted", out JsonElement p) && p.ValueKind == JsonValueKind.Number
                             ? p.GetDecimal()
                             : null,
                         Mileage = mileage,
-                        Url = record.TryGetProperty("vdpUrl", out var u) ? u.GetString() : null,
+                        Url = record.TryGetProperty("vdpUrl", out JsonElement u) ? u.GetString() : null,
                         RawRecordPath = rawPath,
                         WasExtracted = false,
                     });

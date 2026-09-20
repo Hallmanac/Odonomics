@@ -44,7 +44,7 @@ public sealed record QueryGroup(string Make, string Model, int YearMin, int? Yea
             return false;
         }
 
-        var modelAndTrim = $"{model} {trim}";
+        string modelAndTrim = $"{model} {trim}";
         if (!modelAndTrim.Contains(BaseModelName, StringComparison.OrdinalIgnoreCase))
         {
             return false;

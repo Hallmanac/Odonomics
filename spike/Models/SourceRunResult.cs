@@ -16,12 +16,24 @@ public sealed class SourceRunResult
     public List<string> Failures { get; } = [];
 
     /// <summary>
-    /// For a page-walk source, the count of distinct listings found on search pages, which can
-    /// exceed <see cref="Candidates"/> when detail-page extraction was blocked partway through.
-    /// Null for API sources, where a candidate is only ever known once fully parsed.
+    /// For a page-walk source, the raw count of distinct listing links found on search pages,
+    /// before any of them were confirmed to match the query or even visited. Always reported as
+    /// <see cref="CandidatesFound"/> for a page-walk source, in place of the query-matching count
+    /// <see cref="Candidates"/> would otherwise give: it is usually larger, sometimes much larger,
+    /// since it counts every link the site returned (including wrong-model listings a site
+    /// returned because it silently ignored the model filter) rather than only the ones extraction
+    /// went on to confirm. Null for API sources, where a candidate is only ever known once fully
+    /// parsed, so <see cref="Candidates"/> is the only count that exists.
     /// </summary>
     public int? SearchOnlyCandidatesFound { get; set; }
 
+    /// <summary>
+    /// The "Candidates found" report column. For an API source this is the query-matching count
+    /// from <see cref="Candidates"/>; for a page-walk source it is the raw
+    /// <see cref="SearchOnlyCandidatesFound"/> instead, which is not filtered by query match, by
+    /// VIN presence, or by whether the link was ever visited at all. The two are not the same kind
+    /// of number: compare <see cref="CandidatesWithVin"/> across sources for a like-for-like count.
+    /// </summary>
     public int CandidatesFound => SearchOnlyCandidatesFound ?? Candidates.Count(c => c.MatchesQuery);
     public int CandidatesWithVin => Candidates.Count(c => c.MatchesQuery && !string.IsNullOrWhiteSpace(c.Vin));
 

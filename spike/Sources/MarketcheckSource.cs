@@ -20,24 +20,24 @@ public sealed class MarketcheckSource(string? apiKey, RecordedResponses recorded
             return result;
         }
 
-        var stopwatch = Stopwatch.StartNew();
+        Stopwatch stopwatch = Stopwatch.StartNew();
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
-        foreach (var group in QueryGroup.All)
+        foreach (QueryGroup group in QueryGroup.All)
         {
             try
             {
-                var yearMax = group.YearMax ?? DateTime.UtcNow.Year + 1;
-                var model = Uri.EscapeDataString(group.Model);
-                var url = "https://mc-api.marketcheck.com/v2/search/car/active" +
+                int yearMax = group.YearMax ?? DateTime.UtcNow.Year + 1;
+                string model = Uri.EscapeDataString(group.Model);
+                string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
                            $"?api_key={apiKey}&zip={group.Zip}&radius={group.RadiusMiles}" +
                            $"&make={group.Make}&model={model}&year_range={group.YearMin}-{yearMax}&miles_range=0-{group.MaxMileage}";
 
-                var response = await http.GetAsync(url, cancellationToken);
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
+                string body = await response.Content.ReadAsStringAsync(cancellationToken);
 
-                var fileName = $"{group.Make}-{group.Model}".Replace(" ", "_") + ".json";
-                var rawPath = await recorded.WriteAsync(Name, fileName, body, cancellationToken);
+                string fileName = $"{group.Make}-{group.Model}".Replace(" ", "_") + ".json";
+                string rawPath = await recorded.WriteAsync(Name, fileName, body, cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -45,20 +45,20 @@ public sealed class MarketcheckSource(string? apiKey, RecordedResponses recorded
                     continue;
                 }
 
-                using var doc = JsonDocument.Parse(body);
-                if (!doc.RootElement.TryGetProperty("listings", out var listings))
+                using JsonDocument doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("listings", out JsonElement listings))
                 {
                     result.Failures.Add($"{group.Make} {group.Model}: no 'listings' field in response");
                     continue;
                 }
 
-                foreach (var listing in listings.EnumerateArray())
+                foreach (JsonElement listing in listings.EnumerateArray())
                 {
-                    var build = listing.TryGetProperty("build", out var b) ? b : default;
-                    var year = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("year", out var y)
+                    JsonElement build = listing.TryGetProperty("build", out JsonElement b) ? b : default;
+                    int? year = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("year", out JsonElement y)
                         ? y.GetInt32()
-                        : (int?)null;
-                    var mileage = listing.TryGetProperty("miles", out var m) ? m.GetInt32() : (int?)null;
+                        : null;
+                    int? mileage = listing.TryGetProperty("miles", out JsonElement m) ? m.GetInt32() : null;
 
                     if (!group.MatchesYear(year) || !group.MatchesMileage(mileage))
                     {
@@ -68,14 +68,14 @@ public sealed class MarketcheckSource(string? apiKey, RecordedResponses recorded
                     result.Candidates.Add(new Candidate
                     {
                         Source = Name,
-                        Vin = listing.TryGetProperty("vin", out var vin) ? vin.GetString() : null,
+                        Vin = listing.TryGetProperty("vin", out JsonElement vin) ? vin.GetString() : null,
                         Year = year,
-                        Make = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("make", out var mk) ? mk.GetString() : group.Make,
-                        Model = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("model", out var md) ? md.GetString() : group.Model,
-                        Trim = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("trim", out var tr) ? tr.GetString() : null,
-                        Price = listing.TryGetProperty("price", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : null,
+                        Make = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("make", out JsonElement mk) ? mk.GetString() : group.Make,
+                        Model = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("model", out JsonElement md) ? md.GetString() : group.Model,
+                        Trim = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("trim", out JsonElement tr) ? tr.GetString() : null,
+                        Price = listing.TryGetProperty("price", out JsonElement p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : null,
                         Mileage = mileage,
-                        Url = listing.TryGetProperty("vdp_url", out var u) ? u.GetString() : null,
+                        Url = listing.TryGetProperty("vdp_url", out JsonElement u) ? u.GetString() : null,
                         RawRecordPath = rawPath,
                         WasExtracted = false,
                     });
