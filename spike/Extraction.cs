@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -24,9 +25,13 @@ public sealed record ExtractionOutcome(ExtractionResult? Result, decimal CostUsd
 ///
 /// The page text handed to this method is untrusted: it comes from a listing a third party wrote,
 /// and a hostile seller could write a prompt-injection attempt straight into a description field.
-/// Two defenses: the subprocess runs with `--allowedTools ""`, so it has no tool access at all
-/// regardless of what it is told, and every VIN that comes back is checked against the standard
-/// VIN character set before being trusted.
+/// Four defenses: the page text is substituted into the prompt between explicit delimiters with an
+/// instruction to treat it as inert data, the subprocess runs with `--allowedTools ""` so it has no
+/// tool access at all regardless of what it is told, every VIN that comes back is checked against
+/// the standard VIN character set before being trusted, and every make/model/price/mileage that
+/// comes back is checked for actually appearing in the source page text before being trusted -
+/// an extraction that names a value the page never mentioned is dropped rather than passed on to
+/// look like an observed fact.
 /// </summary>
 public sealed class ExtractionClient
 {
@@ -143,9 +148,9 @@ public sealed class ExtractionClient
             try
             {
                 ExtractionResult? extracted = JsonSerializer.Deserialize<ExtractionResult>(jsonText, JsonOptions);
-                if (extracted?.Vin is not null && !VinShape.IsMatch(extracted.Vin))
+                if (extracted is not null)
                 {
-                    extracted = extracted with { Vin = null };
+                    extracted = GroundInPageText(extracted, truncated);
                 }
                 return new ExtractionOutcome(extracted, costUsd, null);
             }
@@ -154,6 +159,61 @@ public sealed class ExtractionClient
                 return new ExtractionOutcome(null, costUsd, $"could not parse extraction JSON ({ex.Message}): {jsonText}");
             }
         }
+    }
+
+    /// <summary>
+    /// Drops any field the model returned that a prompt-injected instruction could have fabricated
+    /// rather than read off the page: a VIN of the wrong shape, or a make/model/price/mileage that
+    /// does not actually occur, in some form, in the page text the model was given.
+    /// </summary>
+    private static ExtractionResult GroundInPageText(ExtractionResult extracted, string pageText)
+    {
+        if (extracted.Vin is not null && !VinShape.IsMatch(extracted.Vin))
+        {
+            extracted = extracted with { Vin = null };
+        }
+
+        if (extracted.Make is not null && !ContainsLoosely(pageText, extracted.Make))
+        {
+            extracted = extracted with { Make = null };
+        }
+
+        if (extracted.Model is not null && !ContainsLoosely(pageText, extracted.Model))
+        {
+            extracted = extracted with { Model = null };
+        }
+
+        if (extracted.Price is not null && !ContainsNumber(pageText, extracted.Price.Value))
+        {
+            extracted = extracted with { Price = null };
+        }
+
+        if (extracted.Mileage is not null && !ContainsNumber(pageText, extracted.Mileage.Value))
+        {
+            extracted = extracted with { Mileage = null };
+        }
+
+        return extracted;
+    }
+
+    private static bool ContainsLoosely(string haystack, string needle) =>
+        haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether the digits of <paramref name="value"/> occur, in order, anywhere in the digits of
+    /// <paramref name="haystack"/> - tolerant of "$12,345", "12345.00", or "12,345 miles" all
+    /// representing the same number the page actually shows.
+    /// </summary>
+    private static bool ContainsNumber(string haystack, decimal value)
+    {
+        string needleDigits = ((long)value).ToString(CultureInfo.InvariantCulture);
+        if (needleDigits.Length == 0)
+        {
+            return true;
+        }
+
+        string haystackDigits = new(haystack.Where(char.IsAsciiDigit).ToArray());
+        return haystackDigits.Contains(needleDigits, StringComparison.Ordinal);
     }
 
     private static void TryKill(Process process)
