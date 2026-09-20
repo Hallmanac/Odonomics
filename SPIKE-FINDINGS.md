@@ -116,16 +116,21 @@ captured (see the report table), so the "30" and "74" figures previously stated 
 backed by any recorded artifact and have been removed rather than restated.
 
 For Honda Insight, `spike/recorded/cars.com/day1/Honda-Insight-search.html` carries the site's own
-model-facet JSON with `"value":"honda-insight","selected":true,"summary":"3"`, and the page's own
-heading reads "3 Honda Insight vehicles." The query the app actually sent
-(`makes[]=honda&models[]=honda-insight`, 50 miles of 32114) is the same query a person would land
-on by using Cars.com's own dropdown, so 3 is the correct same-query denominator, not 9.
+model-facet JSON with `"value":"honda-insight","selected":true,"summary":"3"`. The wording "3 Honda
+Insight vehicles" is real but sits in the page's chat-widget payload
+(`"open_chat_cta":"I found 3 Honda Insight vehicles. Want personalized recommendations?"`), not a
+page heading; the page's own `<h1>` reads "Used Honda Insight for sale near Daytona Beach, FL" and
+carries no count. The query the app actually sent (`makes[]=honda&models[]=honda-insight`, 50
+miles of 32114) is the same query a person would land on by using Cars.com's own dropdown, so 3 is
+the correct same-query denominator, not 9.
 
 For Toyota Corolla Hybrid, the walk itself did not query hybrid inventory: see the
 `PageWalkSources.cs` finding under "surprises" below. Cars.com's own recorded response for that
 day-one request shows `selected_search_filters` resolved to plain `["toyota-corolla"]`, not
-`["toyota-corolla_hybrid"]`, and the page heading reads "195 Toyota Corolla vehicles" (gas and
-hybrid trims together, all model years). The hybrid-specific facet, visible in the same page's own
+`["toyota-corolla_hybrid"]`, and the chat-widget payload reads
+`"open_chat_cta":"I found 195 Toyota Corolla vehicles in your area. Can I help you narrow it
+down?"` (gas and hybrid trims together, all model years); the page's own `<h1>` again carries no
+count. The hybrid-specific facet, visible in the same page's own
 facet JSON but never actually selected by the request, reads
 `"name":"Corolla Hybrid","value":"toyota-corolla_hybrid","summary":"21"`. None of 195, 21, or the
 previously-stated 84 are the same quantity, and since the request itself asked for the wrong
@@ -134,19 +139,27 @@ corrected walk (the model-slug fix in `PageWalkSources.cs` following this review
 
 | Query group | Cars.com listing count (50 mi of 32114, model only) | Source |
 |---|---|---|
-| Honda Insight | 3 | Cars.com's own recorded facet JSON and page heading, day one |
+| Honda Insight | 3 | Cars.com's own recorded facet JSON and chat-widget payload, day one |
 | Toyota Corolla Hybrid | not measurable from day one | day one's request resolved to plain Corolla, not Corolla Hybrid; see above |
 | Toyota Camry Hybrid | not measurable from day one | Cars.com search was blocked before any facet data was captured |
 | Toyota Prius | not measurable from day one | Cars.com search was skipped (blocked earlier in the same run) |
 
-Honda Insight is the only group with a valid same-query comparison. Auto.dev and Marketcheck
-together found 4 unique matching VINs on day one (`19XZE4F52ME000999`, `19XZE4F95ME001552`,
-`19XZE4F93NE011501`, `19XZE4F59LE013764`) against Cars.com's own in-radius count of 3.
+Honda Insight is the only group with a valid same-query comparison. Cars.com's own page lists 3
+in-radius Honda Insight listings (`19XZE4F19KE023626`, `19XZE4F59LE013764`, `19XZE4F52ME000999`),
+but one of those three, `19XZE4F19KE023626` at 101,731 miles (`data-mileage="101731"` on that
+page's own anchor), is over this spike's 100,000-mile cap and therefore out of scope, leaving an
+in-scope denominator of 2. Auto.dev and Marketcheck together found 4 unique matching VINs on day
+one (`19XZE4F52ME000999`, `19XZE4F95ME001552`, `19XZE4F93NE011501`, `19XZE4F59LE013764`); of
+those, only the two that actually appear on Cars.com's own page (`19XZE4F59LE013764`,
+`19XZE4F52ME000999`) count toward coverage of Cars.com's in-scope listings. The other two,
+`19XZE4F95ME001552` and `19XZE4F93NE011501`, are inventory Cars.com never listed here at all, so
+they cannot cover anything in this denominator; they show the free sources finding inventory
+Cars.com misses, which is worth noting, but is not itself coverage of Cars.com's listings.
 
-**Coverage: 4 of 3 in-scope Honda Insight listings, at or above 100 percent.** That clears the 80
-percent pass mark on the one group that could be measured cleanly on day one; the earlier "roughly
-50 percent... FAIL" verdict was computed against a manual count this branch's own recorded
-evidence does not support. Coverage for the other three groups still cannot be stated as a number
+**Coverage: 2 of 2 in-scope Honda Insight listings, 100 percent.** That clears the 80 percent pass
+mark on the one group that could be measured cleanly on day one; the earlier "roughly 50
+percent... FAIL" verdict was computed against a manual count this branch's own recorded evidence
+does not support. Coverage for the other three groups still cannot be stated as a number
 from day one: none of them has a valid same-query Cars.com count to compare against, for the
 reasons in the table above, not because of any risk to the browser profile (a person counting
 listings in their own browser consumes no Playwright profile; PageWalkEngine discards its profile
@@ -159,8 +172,8 @@ is work for a future day.
 2. **Price and mileage within 1 percent for ≥95 percent of the sample: PASS.** 32/32 for both.
 3. **Two free/cheap sources find ≥80 percent of the manual Cars.com count: PARTIAL, on the only
    group day one can actually measure.** Honda Insight, the one group with a same-query Cars.com
-   count backed by this branch's own recorded evidence, measures at or above 100 percent (4 of 3),
-   clearing the mark. The other three groups have no valid same-query denominator from day one at
+   count backed by this branch's own recorded evidence, measures at 100 percent (2 of 2 in-scope
+   listings), clearing the mark. The other three groups have no valid same-query denominator from day one at
    all (see "Manual Cars.com count and coverage" above): not a FAIL, since there is no clean
    number to fail against, but not a clean PASS either until a corrected walk measures them. This
    replaces the original "roughly 50 percent... FAIL" verdict, which was computed against a manual
@@ -264,8 +277,9 @@ is work for a future day.
   `toyota-corolla_hybrid`, was the fix, because that exact string appears as a distinct facet
   value in Cars.com's own model-facet JSON.** It is not: this branch's own recorded response for
   that exact query shows `selected_search_filters` resolving back to plain `["toyota-corolla"]`,
-  and the page heading reading "195 Toyota Corolla vehicles," meaning the underscored slug did not
-  apply either, and day one's Corolla Hybrid group silently walked all-Corolla inventory instead of
+  and the chat-widget payload reading "I found 195 Toyota Corolla vehicles in your area," meaning
+  the underscored slug did not apply either, and day one's Corolla Hybrid group silently walked
+  all-Corolla inventory instead of
   what it asked for. A facet existing in a site's own JSON says only that the *site's own UI* can
   reach that filter state somehow (a click, a cookie, a different parameter shape); it says nothing
   about whether a URL query parameter reproduces it. Following this review, Cars.com's query
