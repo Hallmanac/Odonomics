@@ -196,24 +196,36 @@ public sealed class ExtractionClient
         return extracted;
     }
 
-    private static bool ContainsLoosely(string haystack, string needle) =>
-        haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+    private static readonly Regex NumberToken = new(@"\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
 
     /// <summary>
-    /// Whether the digits of <paramref name="value"/> occur, in order, anywhere in the digits of
-    /// <paramref name="haystack"/> - tolerant of "$12,345", "12345.00", or "12,345 miles" all
-    /// representing the same number the page actually shows.
+    /// Whether <paramref name="needle"/> occurs as a whole word in <paramref name="haystack"/>, not
+    /// merely as a substring - so a fabricated make of "Ford" does not ground against unrelated page
+    /// copy like "affordable".
+    /// </summary>
+    private static bool ContainsLoosely(string haystack, string needle) =>
+        Regex.IsMatch(haystack, $@"\b{Regex.Escape(needle)}\b", RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Whether <paramref name="value"/> occurs as one of the page's own number tokens - tolerant of
+    /// "$12,345", "12345.00", or "12,345 miles" all representing the same number the page actually
+    /// shows, but not a number stitched together from the digits of unrelated numbers (a VIN, a zip
+    /// code, a stock number) that happen to sit next to each other on the page.
     /// </summary>
     private static bool ContainsNumber(string haystack, decimal value)
     {
-        string needleDigits = ((long)value).ToString(CultureInfo.InvariantCulture);
-        if (needleDigits.Length == 0)
+        long needle = (long)value;
+        foreach (Match match in NumberToken.Matches(haystack))
         {
-            return true;
+            string cleaned = match.Value.Replace(",", string.Empty);
+            if (decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal parsed)
+                && (long)parsed == needle)
+            {
+                return true;
+            }
         }
 
-        string haystackDigits = new(haystack.Where(char.IsAsciiDigit).ToArray());
-        return haystackDigits.Contains(needleDigits, StringComparison.Ordinal);
+        return false;
     }
 
     private static void TryKill(Process process)
