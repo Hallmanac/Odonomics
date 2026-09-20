@@ -96,12 +96,22 @@ public static class PageWalkSources
             using (doc)
             {
                 JsonElement root = doc.RootElement;
+                // Not every ld+json block is a single Vehicle object: a breadcrumb list is an
+                // array, and TryGetProperty/GetString below all assume an object of known shape.
+                if (root.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
                 if (!root.TryGetProperty("vehicleIdentificationNumber", out JsonElement vinEl) || vinEl.ValueKind != JsonValueKind.String)
                 {
                     continue;
                 }
 
-                if (!root.TryGetProperty("offers", out JsonElement offers) || !offers.TryGetProperty("url", out JsonElement urlEl))
+                if (!root.TryGetProperty("offers", out JsonElement offers)
+                    || offers.ValueKind != JsonValueKind.Object
+                    || !offers.TryGetProperty("url", out JsonElement urlEl)
+                    || urlEl.ValueKind != JsonValueKind.String)
                 {
                     continue;
                 }
@@ -114,8 +124,8 @@ public static class PageWalkSources
 
                 int? year = root.TryGetProperty("modelDate", out JsonElement yearEl) && yearEl.ValueKind == JsonValueKind.Number
                     ? yearEl.GetInt32() : null;
-                string? make = root.TryGetProperty("manufacturer", out JsonElement makeEl) ? makeEl.GetString() : null;
-                string? model = root.TryGetProperty("model", out JsonElement modelEl) ? modelEl.GetString() : null;
+                string? make = GetStringOrName(root, "manufacturer");
+                string? model = GetStringOrName(root, "model");
                 int? mileage = root.TryGetProperty("mileageFromOdometer", out JsonElement mileageEl) && mileageEl.ValueKind == JsonValueKind.Number
                     ? mileageEl.GetInt32() : null;
                 decimal? price = offers.TryGetProperty("price", out JsonElement priceEl) && priceEl.ValueKind == JsonValueKind.Number
@@ -126,6 +136,26 @@ public static class PageWalkSources
         }
 
         return byId;
+    }
+
+    /// <summary>
+    /// Reads a schema.org property that may arrive as a plain string (<c>"Toyota"</c>) or as an
+    /// object with a <c>name</c> (<c>{"@type":"Organization","name":"Toyota"}</c>) - both are valid
+    /// JSON-LD for the same field, even though no day-one fixture happens to use the object form.
+    /// </summary>
+    private static string? GetStringOrName(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out JsonElement el))
+        {
+            return null;
+        }
+
+        return el.ValueKind switch
+        {
+            JsonValueKind.String => el.GetString(),
+            JsonValueKind.Object when el.TryGetProperty("name", out JsonElement nameEl) && nameEl.ValueKind == JsonValueKind.String => nameEl.GetString(),
+            _ => null,
+        };
     }
 
     public static PageWalkListingSource CreateCarsCom(string profileDir, RecordedResponses recorded, ExtractionClient extraction) =>
