@@ -7,11 +7,32 @@ three on the same machine with:
 dotnet run --project spike
 ```
 
-run from the repo root. Each run auto-detects which day it is from
-`spike/recorded/run-state.txt`, writes that day's raw responses under
-`spike/recorded/<source>/day<N>/`, and appends a row per source to the table below. After each
-day, commit the new `spike/recorded/` contents and the updated table rows and push. A follow-up
-run on this task finalizes the verdict once day three's rows exist.
+run from the repo root, after the following are in place (none of this is set up by the command
+itself):
+
+- **.NET 10 SDK** (the spike targets `net10.0`).
+- **Playwright's Chromium browser**, installed once with `pwsh spike/bin/Debug/net10.0/playwright.ps1
+  install chromium` (or `playwright install chromium` if the Playwright CLI is on PATH). Without
+  this, every page-walk source (cars.com, carvana) fails immediately with a
+  Playwright-executable-not-found error and is reported as "crashed."
+- **A display to open a visible Chrome window on.** Page walks run headed
+  (`Headless = false`), by design (see "Cost and time" below and the surprises on bot defenses):
+  this will not run over SSH with no display attached.
+- **An authenticated `claude` CLI on PATH.** Extraction shells out to it (see `Extraction.cs`);
+  without it, every detail-page fetch across cars.com, carvana, and craigslist fails extraction.
+  This also means extraction cost is billed to the operator's own Claude account through their
+  existing CLI session, not to any project-scoped key: the "$0.75" figure below came out of that
+  account, not a metered API key.
+- **Both API keys**, in `dotnet user-secrets --id odonomics-spike` under `AutoDev:ApiKey` and
+  `Marketcheck:ApiKey` (or the `AUTODEV__APIKEY` / `MARKETCHECK__APIKEY` environment variables), per
+  `spike/SPIKE.md`.
+
+Each run auto-detects which day it is from `spike/recorded/run-state.txt` (only once the run
+finishes; an interrupted run does not consume a day, see `RunState.Peek`/`RunState.Commit`),
+writes that day's raw responses under `spike/recorded/<source>/day<N>/`, and appends a row per
+source to the table below. After each day, commit the new `spike/recorded/` contents and the
+updated table rows and push. A follow-up run on this task finalizes the verdict once day three's
+rows exist.
 
 <!-- This section is appended to by `dotnet run --project spike`. Everything else in this file is written by hand. -->
 
@@ -86,42 +107,64 @@ where the page had none, and no row shows a wrong VIN.
 
 ## Manual Cars.com count and coverage
 
-A person doing this by hand would use Cars.com's own model dropdown, which turns out to expose
-real hybrid-trim facets (see "surprises" below). Getting a precise, year-and-mileage-filtered
-manual count for all four query groups the same way the app does would mean four more live
-requests on top of the roughly twenty already spent on cars.com today building and debugging the
-walk, and Cars.com's bot defense was already blocking requests intermittently by then (see
-below). Rather than risk burning the profile for a whole extra day, day one manual counts were
-only taken at the make/model level, without the year and mileage filters:
+**Correction (post-review): the manual counts originally recorded here for Honda Insight (9) and
+Toyota Corolla Hybrid (84) do not match Cars.com's own recorded search-page facets for the
+identical query, and have been replaced below with the counts read directly off the committed
+`spike/recorded/cars.com/day1/*-search.html` fixtures.** Neither Camry Hybrid nor Prius has a
+usable count at all: Cars.com's own search for both was blocked before any facet data was
+captured (see the report table), so the "30" and "74" figures previously stated for them were not
+backed by any recorded artifact and have been removed rather than restated.
 
-| Query group | Cars.com listing count (50 mi of 32114, model only) | Filtered by year/mileage? |
+For Honda Insight, `spike/recorded/cars.com/day1/Honda-Insight-search.html` carries the site's own
+model-facet JSON with `"value":"honda-insight","selected":true,"summary":"3"`, and the page's own
+heading reads "3 Honda Insight vehicles." The query the app actually sent
+(`makes[]=honda&models[]=honda-insight`, 50 miles of 32114) is the same query a person would land
+on by using Cars.com's own dropdown, so 3 is the correct same-query denominator, not 9.
+
+For Toyota Corolla Hybrid, the walk itself did not query hybrid inventory: see the
+`PageWalkSources.cs` finding under "surprises" below. Cars.com's own recorded response for that
+day-one request shows `selected_search_filters` resolved to plain `["toyota-corolla"]`, not
+`["toyota-corolla_hybrid"]`, and the page heading reads "195 Toyota Corolla vehicles" (gas and
+hybrid trims together, all model years). The hybrid-specific facet, visible in the same page's own
+facet JSON but never actually selected by the request, reads
+`"name":"Corolla Hybrid","value":"toyota-corolla_hybrid","summary":"21"`. None of 195, 21, or the
+previously-stated 84 are the same quantity, and since the request itself asked for the wrong
+inventory, no same-query denominator exists for this group from day one at all; it needs a
+corrected walk (the model-slug fix in `PageWalkSources.cs` following this review) on a future day.
+
+| Query group | Cars.com listing count (50 mi of 32114, model only) | Source |
 |---|---|---|
-| Honda Insight | 9 | No (Insight's whole production run is 2019-2022, so this is close to exact; at least one of the 9 exceeds the 100,000-mile cap) |
-| Toyota Corolla Hybrid | 84 | No (all model years) |
-| Toyota Camry Hybrid | 30 | No (all model years) |
-| Toyota Prius | 74 | No (all model years) |
+| Honda Insight | 3 | Cars.com's own recorded facet JSON and page heading, day one |
+| Toyota Corolla Hybrid | not measurable from day one | day one's request resolved to plain Corolla, not Corolla Hybrid; see above |
+| Toyota Camry Hybrid | not measurable from day one | Cars.com search was blocked before any facet data was captured |
+| Toyota Prius | not measurable from day one | Cars.com search was skipped (blocked earlier in the same run) |
 
-Only the Honda Insight row is close to an apples-to-apples comparison with the query. For that
-row: Auto.dev and Marketcheck together found 4 unique matching VINs today (`19XZE4F52ME000999`,
-`19XZE4F95ME001552`, `19XZE4F93NE011501`, `19XZE4F59LE013764`) against a manual count of 9 (at
-most 8 once the over-mileage one is excluded).
+Honda Insight is the only group with a valid same-query comparison. Auto.dev and Marketcheck
+together found 4 unique matching VINs on day one (`19XZE4F52ME000999`, `19XZE4F95ME001552`,
+`19XZE4F93NE011501`, `19XZE4F59LE013764`) against Cars.com's own in-radius count of 3.
 
-**Coverage: 4 of ≤8 in-scope Honda Insight listings, roughly 50 percent.** That is short of the
-80 percent pass mark on the one group that could be measured cleanly. Coverage for the other
-three groups was not measured precisely enough on day one to state a number with any confidence,
-because the manual counts above include vehicles outside the query's year window; the honest
-statement is that combined Auto.dev + Marketcheck coverage is unlikely to be higher for those
-groups than it was for Insight, since Marketcheck and Auto.dev between them found zero matching
-Camry Hybrids at all today (see the report table) while Cars.com's raw Camry Hybrid facet alone
-had 30 listings before any year filter.
+**Coverage: 4 of 3 in-scope Honda Insight listings, at or above 100 percent.** That clears the 80
+percent pass mark on the one group that could be measured cleanly on day one; the earlier "roughly
+50 percent... FAIL" verdict was computed against a manual count this branch's own recorded
+evidence does not support. Coverage for the other three groups still cannot be stated as a number
+from day one: none of them has a valid same-query Cars.com count to compare against, for the
+reasons in the table above, not because of any risk to the browser profile (a person counting
+listings in their own browser consumes no Playwright profile; PageWalkEngine discards its profile
+after every single page load regardless). A corrected measurement for the remaining three groups
+is work for a future day.
 
 ## Pass mark
 
 1. **VIN precision 100 percent on ≥20 hand-checked page-walk candidates: PASS.** 32/32, see above.
 2. **Price and mileage within 1 percent for ≥95 percent of the sample: PASS.** 32/32 for both.
-3. **Two free/cheap sources find ≥80 percent of the manual Cars.com count: FAIL.** Measured at
-   roughly 50 percent on the one group (Honda Insight) where a fair comparison was possible; see
-   the caveats above for why the other three groups can't be stated as a clean number yet.
+3. **Two free/cheap sources find ≥80 percent of the manual Cars.com count: PARTIAL, on the only
+   group day one can actually measure.** Honda Insight, the one group with a same-query Cars.com
+   count backed by this branch's own recorded evidence, measures at or above 100 percent (4 of 3),
+   clearing the mark. The other three groups have no valid same-query denominator from day one at
+   all (see "Manual Cars.com count and coverage" above): not a FAIL, since there is no clean
+   number to fail against, but not a clean PASS either until a corrected walk measures them. This
+   replaces the original "roughly 50 percent... FAIL" verdict, which was computed against a manual
+   count this branch's own recorded fixtures contradict.
 4. **Every page walk completes on all three days without a code or prompt change after day one:
    PENDING DAYS TWO AND THREE.** Neither Cars.com nor Carvana completed *cleanly* even on day
    one: both hit Cloudflare's bot defense on some fraction of requests, and getting any data at
@@ -143,11 +186,23 @@ had 30 listings before any year filter.
   Cloudflare even after the fresh-profile-per-page fix, so this source is fragile in its current
   free-headed-Chrome form. If days two and three show the same block rate, the fallback is
   either a paid Cars.com data feed or a residential-proxy rotation, not more workarounds on top of
-  Playwright.
+  Playwright. **Caveat:** day one's Corolla Hybrid group actually walked plain Corolla inventory
+  (gas and hybrid together), not Corolla Hybrid specifically, because of the model-slug bug
+  described under "surprises" below; 3 of the 4 non-matching candidates in the day-one cars.com row
+  (details 8, 9, and 11: a 2024 LE, a 2012 S, and a 2026 SE) are non-matching gas Corollas as a
+  direct result (the fourth, Honda Insight detail 1, is unrelated: an in-range Insight excluded for
+  mileage). That bug is fixed in the code following this review, but it means day one's "44
+  candidates found" and its per-group failure list should not be read as evidence about Cars.com's
+  hybrid coverage specifically, only about its reachability and per-page extraction accuracy, which
+  the hand-check does support.
 - **carvana: keep.** Best raw yield today (84 candidates found on search pages, 8 matched and
   extracted cleanly) and every VIN it found was unique to Carvana, consistent with it selling its
   own retail inventory rather than syndicating dealer listings. Same Cloudflare fragility as
-  Cars.com applies, but it blocked a smaller fraction of requests today.
+  Cars.com applies, but it blocked a smaller fraction of requests today. Unlike Cars.com, Carvana
+  was always queried by base model only (it has no known hybrid-specific facet to try), so its
+  wrong-model candidates are the expected, by-design result of that choice, not a bug: Carvana
+  simply has no hybrid-only inventory filter to ask for, and `QueryGroup.MatchesExtractedVehicle`
+  is exactly the backstop meant to catch that.
 - **craigslist: drop, provisionally.** Zero real query matches across all four model groups within
   50 miles of Daytona Beach on day one; the only posting that came back at all (a 2019 Prius,
   outside the "2020 and newer" window) was a dealer repost, not a private-seller ad, and it still
@@ -161,10 +216,29 @@ had 30 listings before any year filter.
 
 ## Surprises
 
-- **VINs are never on the search page.** Across Cars.com, Carvana, and Autotrader alike, every
-  search-result card showed price, mileage, and trim but never a VIN; a VIN only ever appeared
-  after opening a specific listing's detail page. That's one detail-page fetch per candidate
-  checked, with no way around it for any of the three page-walk sites tried.
+- **Correction (post-review): VINs are on the search page, on the two sites this spike actually
+  reached.** The original claim here (that a VIN only ever appeared on a detail page, "with no way
+  around it for any of the three page-walk sites tried") is contradicted by this branch's own
+  recorded fixtures and was wrong; Autotrader was never one of the three anyway (see below).
+  Carvana's search page carries a schema.org `Vehicle` JSON-LD block per card, with the VIN,
+  mileage, and price all present (`"vehicleIdentificationNumber":"19XZE4F58LE012282", "offers":
+  {"price":23990}`, matching hand-check row 8 exactly). Cars.com's search-result cards carry the
+  same data as `data-vin`, `data-year`, `data-make`, `data-model`, `data-trim`, `data-price`, and
+  `data-mileage` attributes directly on the listing's anchor tag. Following this review,
+  `PageWalkListingSource` reads both of these before queuing any detail-page fetch, and only
+  fetches a detail page for a listing neither carrier resolved a VIN for, which is what the brief
+  asked for ("detail pages only where the VIN is not on the search page") and was not previously
+  implemented. Day one's own numbers show what this costs when skipped: every one of Carvana's four
+  day-one search pages carries a JSON-LD VIN for every single listing it links to (21 for 21,
+  confirmed for all four query groups, not just Honda Insight), so Carvana's 24 detail fetches
+  (6.8 minutes, $0.56, the day's dominant cost and its entire bot-defense exposure) could plausibly
+  have been zero, not "one per candidate, with no way around it." **Operational note for days two
+  and three:** this also means most Cars.com and Carvana candidates going forward will resolve
+  straight from the search page (`WasExtracted = false`) and will not land in the extraction
+  hand-check pool the way day one's did. If a future day's page-walk candidates alone don't reach
+  the ≥20 the pass mark asks for, that is expected under the fix, not a regression; Craigslist and
+  any detail pages a search page genuinely doesn't resolve (still fetched and still extracted, same
+  as before) remain the source of hand-checkable candidates.
 - **A persistent profile's second request is what gets blocked, not the first, and a fresh
   profile is not a guaranteed fix either.** The very first live test today (a single Cars.com
   search) succeeded cleanly; the very next request in that same browser profile, whether it was
@@ -180,15 +254,26 @@ had 30 listings before any year filter.
 - **Auto.dev's free tier showed no cap today.** All 4 query groups returned complete results on
   the first call, no HTTP 429, no truncation notice. One day of light use doesn't rule out a cap
   existing; it just didn't show up today.
-- **Sites silently ignore a model facet they don't recognize instead of erroring.** Guessing
-  `toyota-corolla-hybrid` (hyphen) against Cars.com didn't 404 or come back empty: it silently
-  fell back to showing every Corolla trim, gas and hybrid alike, and once combined with multiple
-  makes in one query it fell back further, to showing unrelated vehicles (a Toyota Tacoma showed
-  up in a "Toyota Corolla Hybrid" search). The correct slug turned out to be `toyota-corolla_hybrid`
-  (underscore), visible directly in Cars.com's own model-facet JSON once you know to look for it.
-  Any code that builds these URLs by guessing needs to validate the returned vehicle actually
-  matches what was asked for, which is exactly what `QueryGroup.MatchesExtractedVehicle` now does
-  for every page-walk candidate.
+- **Sites silently ignore a model facet they don't recognize (or don't accept the way it was
+  asked for) instead of erroring, and a facet appearing in a site's own JSON is not proof a URL
+  query parameter can select it.** Guessing `toyota-corolla-hybrid` (hyphen) against Cars.com
+  didn't 404 or come back empty: it silently fell back to showing every Corolla trim, gas and
+  hybrid alike, and once combined with multiple makes in one query it fell back further, to
+  showing unrelated vehicles (a Toyota Tacoma showed up in a "Toyota Corolla Hybrid" search).
+  **Correction (post-review): the day-one build session then guessed that the underscored form,
+  `toyota-corolla_hybrid`, was the fix, because that exact string appears as a distinct facet
+  value in Cars.com's own model-facet JSON.** It is not: this branch's own recorded response for
+  that exact query shows `selected_search_filters` resolving back to plain `["toyota-corolla"]`,
+  and the page heading reading "195 Toyota Corolla vehicles," meaning the underscored slug did not
+  apply either, and day one's Corolla Hybrid group silently walked all-Corolla inventory instead of
+  what it asked for. A facet existing in a site's own JSON says only that the *site's own UI* can
+  reach that filter state somehow (a click, a cookie, a different parameter shape); it says nothing
+  about whether a URL query parameter reproduces it. Following this review, Cars.com's query
+  building was reverted to base-model-only, same as every other page-walk site, since no working
+  hybrid-specific slug has actually been confirmed against the live site. Any code that builds
+  these URLs by guessing needs to validate the returned vehicle actually matches what was asked
+  for regardless of which slug it guessed, which is exactly what
+  `QueryGroup.MatchesExtractedVehicle` does for every page-walk candidate.
 - **Craigslist's canonical listing URL has moved.** Individual postings are no longer at the
   classic `<city>.craigslist.org/cto/d/...html` shape; they're at
   `https://www.craigslist.org/view/d/<slug>/<id>`, discoverable only via the JSON-LD-adjacent
@@ -209,4 +294,7 @@ had 30 listings before any year filter.
 Total spend: **$0.75** (extraction only; both APIs and the search-page/list-harvesting steps
 themselves are free). Total wall time: **~11 minutes** across all five sources, dominated by
 Carvana's detail-page walk (6.8 min) and Cars.com's (3.4 min); Auto.dev and Marketcheck together
-took under two seconds.
+took under two seconds. These figures are historical for day one's actual code path; they are not
+restated above, but the search-page VIN fix described under "surprises" means days two and three
+should show materially fewer detail-page fetches, and therefore less cost and less bot-defense
+exposure, for Carvana and Cars.com both.
