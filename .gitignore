@@ -9,3 +9,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# .NET build output
+bin/
+obj/
