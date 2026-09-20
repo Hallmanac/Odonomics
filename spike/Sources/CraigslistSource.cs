@@ -21,24 +21,24 @@ public sealed class CraigslistSource(RecordedResponses recorded, ExtractionClien
     public async Task<SourceRunResult> RunAsync(CancellationToken cancellationToken)
     {
         var result = new SourceRunResult { Source = Name };
-        var stopwatch = Stopwatch.StartNew();
+        Stopwatch stopwatch = Stopwatch.StartNew();
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36");
 
-        foreach (var group in QueryGroup.All)
+        foreach (QueryGroup group in QueryGroup.All)
         {
             try
             {
-                var query = Uri.EscapeDataString($"{group.Make} {group.Model}");
-                var searchUrl = $"https://{CitySubdomain}.craigslist.org/search/cta?query={query}" +
+                string query = Uri.EscapeDataString($"{group.Make} {group.Model}");
+                string searchUrl = $"https://{CitySubdomain}.craigslist.org/search/cta?query={query}" +
                                  $"&postal={group.Zip}&search_distance={group.RadiusMiles}&max_auto_miles={group.MaxMileage}";
 
-                var searchHtml = await http.GetStringAsync(searchUrl, cancellationToken);
-                var fileBase = $"{group.Make}-{group.Model}".Replace(" ", "_");
+                string searchHtml = await http.GetStringAsync(searchUrl, cancellationToken);
+                string fileBase = $"{group.Make}-{group.Model}".Replace(" ", "_");
                 await recorded.WriteAsync(Name, $"{fileBase}-search.html", searchHtml, cancellationToken);
 
-                var detailUrls = DetailLinkPattern.Matches(searchHtml)
+                List<string> detailUrls = DetailLinkPattern.Matches(searchHtml)
                     .Select(m => m.Value)
                     .Distinct()
                     .Take(detailPageCapPerGroup)
@@ -50,8 +50,8 @@ public sealed class CraigslistSource(RecordedResponses recorded, ExtractionClien
                     continue;
                 }
 
-                var index = 0;
-                foreach (var detailUrl in detailUrls)
+                int index = 0;
+                foreach (string detailUrl in detailUrls)
                 {
                     index++;
                     await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
@@ -67,10 +67,10 @@ public sealed class CraigslistSource(RecordedResponses recorded, ExtractionClien
                         continue;
                     }
 
-                    var rawPath = await recorded.WriteAsync(Name, $"{fileBase}-detail-{index}.html", detailHtml, cancellationToken);
-                    var bodyText = StripHtml(detailHtml);
+                    string rawPath = await recorded.WriteAsync(Name, $"{fileBase}-detail-{index}.html", detailHtml, cancellationToken);
+                    string bodyText = StripHtml(detailHtml);
 
-                    var outcome = await extraction.ExtractAsync(bodyText, cancellationToken);
+                    ExtractionOutcome outcome = await extraction.ExtractAsync(bodyText, cancellationToken);
                     result.DollarsSpent += outcome.CostUsd;
 
                     if (outcome.Error is not null)
@@ -79,8 +79,8 @@ public sealed class CraigslistSource(RecordedResponses recorded, ExtractionClien
                         continue;
                     }
 
-                    var extracted = outcome.Result!;
-                    var matchesQuery = group.MatchesExtractedVehicle(extracted.Make, extracted.Model, extracted.Trim, extracted.Year, extracted.Mileage);
+                    ExtractionResult extracted = outcome.Result!;
+                    bool matchesQuery = group.MatchesExtractedVehicle(extracted.Make, extracted.Model, extracted.Trim, extracted.Year, extracted.Mileage);
                     if (!matchesQuery)
                     {
                         result.Failures.Add(
@@ -117,10 +117,10 @@ public sealed class CraigslistSource(RecordedResponses recorded, ExtractionClien
 
     private static string StripHtml(string html)
     {
-        var noScripts = Regex.Replace(html, @"<script[^>]*>[\s\S]*?</script>", " ", RegexOptions.IgnoreCase);
-        var noStyles = Regex.Replace(noScripts, @"<style[^>]*>[\s\S]*?</style>", " ", RegexOptions.IgnoreCase);
-        var noTags = Regex.Replace(noStyles, "<[^>]+>", " ");
-        var decoded = System.Net.WebUtility.HtmlDecode(noTags);
+        string noScripts = Regex.Replace(html, @"<script[^>]*>[\s\S]*?</script>", " ", RegexOptions.IgnoreCase);
+        string noStyles = Regex.Replace(noScripts, @"<style[^>]*>[\s\S]*?</style>", " ", RegexOptions.IgnoreCase);
+        string noTags = Regex.Replace(noStyles, "<[^>]+>", " ");
+        string decoded = System.Net.WebUtility.HtmlDecode(noTags);
         return Regex.Replace(decoded, @"\s+", " ").Trim();
     }
 }
