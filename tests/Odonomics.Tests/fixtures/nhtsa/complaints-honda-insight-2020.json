@@ -1,0 +1,695 @@
+{
+    "count": 31,
+    "message": "Results returned successfully",
+    "results": [
+        {
+            "odiNumber": 11754308,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "08/01/2026",
+            "dateComplaintFiled": "08/02/2026",
+            "vin": "19XZE4F55LE",
+            "components": "FORWARD COLLISION AVOIDANCE",
+            "summary": "I was driving to Pilates class and everything was normal but as I reached a railroad crossing the car suddenly and for no reason stopped dead on the tracks.  Luckily for me there were no vehicles in front or behind me and there were no trains coming.  I was terrified and wasn\u2019t sure what to do but I pushed the Drive button and the vehicle went ahead as if nothing happened.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11747521,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": true,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "06/28/2026",
+            "dateComplaintFiled": "06/30/2026",
+            "vin": "19XZE4F59LE",
+            "components": "UNKNOWN OR OTHER,FORWARD COLLISION AVOIDANCE",
+            "summary": "The vehicle unintentionally accelerated while pulling into a parking space.  I was depressing the brake to slow down while making the right turn into the space.  The engine suddenly revved up (as though you were depressing the gas and brake at the same time) and it accelerated forward (a though you suddenly released the brake while depressing the gas pedal) and the car lept forward, jumping a 3 foot long curb, striking the vehicle parked in front of me.  The tires kept spinning as though the gas pedal was being depressed, even though the vehicle could no longer make any forward progress since it had run into the front of the vehicle parked in front of me.  We\u2019re it not for the vehicle in front, I feel that the car would have continued accelerating forward and could have caused injury or death to customers in the shopping center and/or damage to other vehicles or structures.  The vehicle was towed and is currently in the body shop for repairs, but I don\u2019t think this addresses my concern for the sudden acceleration.  I don\u2019t want to drive it in case the problem reoccurs and could cause further damage.  I\u2019ve reached out to Honda to see if I can tow the vehicle to their service repair center to try to diagnose the problem by reading data from the car\u2019s computer, but they have not responded.  I checked the floor mats and they were flat and properly installed.  If I had mistakenly depressed the gas pedal (not likely as I was already braking as I approached the parking space), I would have thought that the collision avoidance system would have braked the vehicle.  Airbags also did not deploy in either vehicle.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11728435,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "04/01/2026",
+            "dateComplaintFiled": "04/01/2026",
+            "vin": "19XZE4F53LE",
+            "components": "STEERING",
+            "summary": "At approximately 148,000 miles the steering would have an intermittent notchy, or sticky, feeling while driving straight.   While driving straight at cruising speed, I noticed that the resistance on the left side of the steering wheel was greater than the right side, then the resistance would decrease suddenly (release), and the steering wheel would rotate slightly to the right, but less than 1 degree, so it would be hardly noticeable on video.   The issue seems to only present itself after the vehicle is driven 20-40 minutes and when the temperature is 47 degrees or higher. I have noticed it at low speed (15-20mph) and at highway speeds.  If I recall correctly, the issue first presented itself when we had our first 60 degree day and I was driving on the highway with the wheel straight. Then as I accumulated miles throughout the weeks, I would notice that it didn't happen on colder days but then happened more often on warmer days.   Now that the vehicle has ~148,800 miles on it, and the air temperature is 67 degrees, the issue presented itself this morning (4/1/2026) after 3 minutes of driving and during the first sweeping left turn on my commute and at approximately 40 mph.  Then the issue continued to happen throughout the drive, eventually becoming nearly constant by the end of the 45-minute commute.  I do have an appointment with the Honda dealer for diagnosis, but the service advisor and I suspect that the steering rack is failing.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11714605,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "01/27/2026",
+            "dateComplaintFiled": "01/30/2026",
+            "vin": "19XZE4F5XLE",
+            "components": "ELECTRICAL SYSTEM",
+            "summary": "Battery keeps draining. On my 3rd battery and believe there\u2019s a defect in the DC/DC converter (earlier recall - K9E). This has caused issues being stranded in the cold.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11682568,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "08/23/2025",
+            "dateComplaintFiled": "08/23/2025",
+            "vin": "19XZE4F55LE",
+            "components": "SERVICE BRAKES,FORWARD COLLISION AVOIDANCE",
+            "summary": "This 2020 Honda Insight performed \u201cphantom braking\u201d of the automated braking system when I was about to enter a clear intersection with no vehicles or obstacles in front of me. It activated the automated braking system and endangered my life and the lives of others over no real threat. This occurred 08/23/2025.   The car is well maintained and does not have any service issues. This was completely random.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11675716,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "06/23/2025",
+            "dateComplaintFiled": "07/23/2025",
+            "vin": "19XZE4F51LE",
+            "components": "SERVICE BRAKES, HYDRAULIC,ELECTRICAL SYSTEM,FORWARD COLLISION AVOIDANCE",
+            "summary": "The contact owns a 2020 Honda Insight. The contact stated that after starting the vehicle, several unknown warning lights illuminated. During the failure, the brakes failed to function as intended, and the Lane Departure, Cruise Control, and Forward Collision Avoidance features failed to function as intended. The failure was intermittent. During the first failure, the vehicle was turned off and restarted after several minutes and the vehicle operated as intended. The vehicle was taken to the dealer and diagnosed with battery failure. The dealer also determined that the brake pedal simulator had failed. The vehicle was not repaired. The manufacturer was not notified of the failure. The vehicle remained with the dealer unrepaired. The failure mileage was approximately 18,000.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11671578,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "07/06/2025",
+            "dateComplaintFiled": "07/07/2025",
+            "vin": "19XZE4F53LE",
+            "components": "STRUCTURE",
+            "summary": "I was driving home from vacation when my engine splash plate came loose from my car on the interstate. The splash plate fell down and dragged on highway creating friction under my car. The metal had fallen down and was chipping away creating dangerous debris to my car and other cars on the highway. Roadside service was no help, per usual. I was traveling alone. The splash plate had to be removed entirely to prevent a fire and more damage to my car. I couldn\u2019t remove the splash plate on the side of the interstate. I drove 30-40 mph to get help to prevent further damage or loss of property and my life.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                },
+                {
+                    "type": "Vehicle",
+                    "productYear": "9999",
+                    "productMake": "TBD_TEST",
+                    "productModel": "TBD_Test",
+                    "manufacturer": "ODI Demo Co"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11641019,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "11/04/2024",
+            "dateComplaintFiled": "02/05/2025",
+            "vin": "19XZE4F5XLE",
+            "components": "SERVICE BRAKES,FORWARD COLLISION AVOIDANCE",
+            "summary": "I was driving down the highway, with no one in front of me, and my car alerted BRAKE and brought my car from 70 to an almost complete stop. This jerked myself and my passenger and caused a heat mark from the seat belt on my collar bone. It has done it multiple times since then. I'm terrified to be in traffic and for it to do this.   This is most definitely putting my safety at risk, and the safety of others.  I have not taken it to the dealership yet.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11610677,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "08/24/2024",
+            "dateComplaintFiled": "08/25/2024",
+            "vin": "19XZE4F59LE",
+            "components": "FORWARD COLLISION AVOIDANCE",
+            "summary": "I was driving on a two lane road driving over a small paved bridge going about 40mph with a car next to me and a car behind me nothing in front of me when my car did a hard phantom brake. No pre warning, the display did show BRAKE and it did beep. But everything was sudden. Luckily the car behind was able to slam on brakes. The car behind me continued to follow but was at least 4 car lengths away. I assume bc they didn't know why I braked.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11590427,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "05/15/2024",
+            "dateComplaintFiled": "05/23/2024",
+            "vin": "19XZE4F56LE",
+            "components": "FUEL SYSTEM, GASOLINE",
+            "summary": "The contact owns a 2020 Honda Insight. The contact received notification of NHTSA Campaign Number: 23V858000 (Fuel System, Gasoline) however, the part to do the recall repair was not yet available. The contact stated the vehicle had stalled on several occasions. Additionally, the vehicle occasionally failed to start-up. The local dealer was contacted, but the vehicle was not diagnosed or repaired due to the cost. The contact stated that the manufacturer had exceeded a reasonable amount of time for the recall repair. The manufacturer was not made aware of the failure. The failure mileage was approximately 49,000. Parts distribution disconnect.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11523320,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "08/01/2021",
+            "dateComplaintFiled": "05/22/2023",
+            "vin": "19XZE4F96LE",
+            "components": "STRUCTURE",
+            "summary": "The whole hood vibrates while driving or when is windy, very noticeable at times.  It was replaced once, almost a year ago but now it needs to be replaced again. same problem eventually the latches will be damaged creating a very hazardous situation. This vehicle has not been on an accident",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11510208,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": true,
+            "fire": false,
+            "numberOfInjuries": 1,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "03/01/2023",
+            "dateComplaintFiled": "03/05/2023",
+            "vin": "19XZE4F57LE",
+            "components": "SUSPENSION,POWER TRAIN,WHEELS",
+            "summary": "I believe the tire, wheel or suspension system failed while driving on the highway, causing me to hit my head on the driver's window and lose cosciousness.  I skidded into a concrete barrier on the right side of the highway and was found unconscious at the scene. The damage to the passenger side body of the vehicle is minor and does not match the catastrophic failure of the wheel, leading me to believe the wheel failed and caused the crash, not that the crash resulted in the damage to the wheel.   The vehicle is currently at a tow lot and available for inspection. Luckily, no other vehicles were involved, but I was injured and could have easily been killed, or injured and killed others as it is a busy highway, especially during rush hour when this occurred. Inspection by the insurance company is pending. The police did not investigate as a safety incident because they immediately said on site that almost all single vehicle accidents are drug/alcohol related and treated it like a DUI stop. I passed field sobriety tests and a breathalyzer on scene and blood work at the hospital showed no drugs or alcohol in my system.   I am missing time and memories starting about 5 minutes before the crash and for about 30 minutes after as a result of my concussion, I do not remember much besides a feeling that my car was falling, then I remember being woken up by the cop asking if I was under the influence.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11497478,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": true,
+            "fire": false,
+            "numberOfInjuries": 1,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "09/16/2022",
+            "dateComplaintFiled": "12/14/2022",
+            "vin": "19XZE4F5XLE",
+            "components": "AIR BAGS",
+            "summary": "On September 16, 2022, I was in an accident where a driver hit me on the rear passenger side. I went a through a green light of an intersection on the Mopac N feeder Road and Duvall. Either both our lights were green or the other driver was dishonest and his was red. Every airbag deployed. Based on the impact, it would be highly unlikely to sustain a cracked sternum. The impact was to the right and slightly behind me. I have requested information from Honda America on the airbags and they refuse. They further insulted me by telling to go to a dealership. After this, Honda is the last car I would purchase or lease. Having worked at dealerships for many years, I am certain Honda knows, as well as I do, that the dealer cannot or will not give me compete information on the airbags. My car was maintained and in amazing condition. The last time I was at First Texas Honda for service, the advisor brought it around because they were very busy. He said he was stunned it had 125,000 miles on it. It drove like it was brand new. Please see photos and reports. If you need any further information, please let me know.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11496856,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "12/09/2022",
+            "dateComplaintFiled": "12/10/2022",
+            "vin": "19XZE4F57LE",
+            "components": "POWER TRAIN,ELECTRICAL SYSTEM,ENGINE",
+            "summary": "Driving down highway at highway speed and car shot 52 failure codes.  Car lost power and crawled to side of road.  Nearly got rear ended multiple times trying to remove vehicle from roadway.    Engine permanent codes U0111 U012D U0110 U12A5 U1206 U1205  Anti lock brakes permanent codes U040168  CAN Gateway Permanent codes U0029-00  Electric power train traction motor control module permanent code U1204 U12A5 U1205 U0100 U012D U1206 U0111  Electric power steering permanent codes U0416-68  Electric servo brake - permanent codes U0029-00 U0401-68  Integrated driver support system - permanent codes U0418-92 C0023-F0 U0100-F1 U0122-F1 U0100-00 C0031-62 C0034-62 C003A-62 U0416-68   Tire Pressure monitoring  permanent codes U040168  OBDII Codes U1204 U12A5 U1205 U0100 U012D U1206 U0111  OBDII Permanent codes U1206 U12A5 U1205 U0111 U012D U0110   Over 41 codes documented and Honda says there is nothing wrong with the vehicle.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11477975,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "08/03/2022",
+            "dateComplaintFiled": "08/06/2022",
+            "vin": "19XZE4F54LE",
+            "components": "ELECTRICAL SYSTEM,ENGINE",
+            "summary": "I WAS DRIVING AT 65-70 MPH ON A FREEWAY, AND ALL OF A SUDDEN THE CAR SPEED  DROPPED EVEN MY FOOT IS ON THE GAS PEDAL, THE CAR SLOW DOWN TO 40MPH WHEN  DECIDED TO PULL OVER TO THE SHOULDER, BARELY ENOUGH TIME TO GET OUT OF DANGER. THE CAR ENGINE SHOT DOWN BY ITS SELF, I COULD NOT MOVE THE VEHICLE TO THE FAR RIGHT ASS I WANTED TOO. THE WARNING LIGHT ON DASH BOARD INDICATED IN RED \" POWER SYSTEM \"  BOTTOM OF IT IN WHITE LIGHT \" POWER SYSTEM PROBLEM DO NOT DRIVE\" THEN A MINUTE LATER, THE WARNING LIGHT CHANGED TO A RED LOGO OF A BATTERY 12 VOLT BATTERY CHARGING SYSTEM PROBLEM DO NOT DRIVE.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11476142,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "07/22/2022",
+            "dateComplaintFiled": "07/27/2022",
+            "vin": "19XZE4F53LE",
+            "components": "FUEL/PROPULSION SYSTEM",
+            "summary": "On July 22, 2022 I was driving my Honda Insight 2020. I was on the highway, current mileage on vehicle 50,796 miles, my speed was normal at 65 MPH when the car lost the ability to accelerate and it stalled. I was forced to make an emergency stop on the side of the interstate. Vehicle displayed on the dashboard \"Critical Failure Detected. Stop Driving When Safe\"  The acceleration on the car kept decreasing and when stop it displayed \"Power System Problem. Do Not Drive.\" Pulling to the side of the interstate was very scary because trucks were flying at about 80mph. I requested for tow company to pick me up but after hour wait, I gave up waiting on the tow truck. I restarted the vehicle and I was able to take off again. The fuel gas showed half of tank so I continue to drive. Forty miles later down the road, the same issue occurred again. I waited 30 minutes and since I was near a  gas station I filled up the gas tank to full capacity.  I drove another 100 miles (very skeptical) until I reached my final destination. During my drive I felt like the car had difficulties going into gear above 65MPH. The following day I took the vehicle to the Honda dealer, they said they couldn't pin point exactly what it is. Test show no issues on their diagnostic computer. However, the computer show a record of time and issue happening. They believe it is a fuel pump sensor relay. The vehicle senses I am out of fuel, which is not the case. Honda dealer will replace the sensor/relay and I will pay for it. The dealer states this vehicle is not part of a fuel pump recall.   This issue needs to be addressed before it creates a scenario with fatalities, which can easily occur.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11456246,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "03/10/2022",
+            "dateComplaintFiled": "03/10/2022",
+            "vin": "19XZE4F50LE",
+            "components": "FORWARD COLLISION AVOIDANCE",
+            "summary": "I have had 2 occasions when I experienced inadvertent spontaneous braking. Both times there was no vehicle in front of me. Both times the car stopped completely while driving in the city between 25 to 35mph. Fortunately there was no vehicle behind me either time and I did not sustain any injuries.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11454646,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "03/01/2020",
+            "dateComplaintFiled": "03/01/2022",
+            "vin": "19XZE4F90LE",
+            "components": "ELECTRICAL SYSTEM,SERVICE BRAKES",
+            "summary": "The contact owns a 2020 Honda Insight. The contact stated that while driving at various speeds, the brake engaged erroneously. The contact stated that the failure was intermittent. The contact stated that there was no object or vehicle nearby during the failure. The vehicle was driven to the dealer to be diagnosed; however, the vehicle remained at the dealer unrepaired. The manufacturer was not notified of the failure. The contact stated that he has not contacted the manufacturer. The failure mileage was 33,000.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11454585,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "02/16/2022",
+            "dateComplaintFiled": "02/28/2022",
+            "vin": "19XZE4F53LE",
+            "components": "FORWARD COLLISION AVOIDANCE",
+            "summary": "In 3 instances the emergency braking system has activated when the car was being driven on the freeway and the lane was curving with no obstacles in front of the car in the lane but a semi truck in the next lane over in one instance and cars in the next lane over in the other instances.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11453970,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "10/23/2021",
+            "dateComplaintFiled": "02/25/2022",
+            "vin": "19XZE4F51LE",
+            "components": "FORWARD COLLISION AVOIDANCE",
+            "summary": "Two instances of braking system activating at highway speeds. In one instance, it was broad daylight, there was some traffic but nothing in my lane for a good distance, highway speed (approximately 65 mph) short sharp braking maneuver that dropped the speed approximately 10mph. I assumed there was some reflected light off of a sign that messed with the sensors, but the second instance was at midnight, same highway, same speed, no one else on the road.  In these instances, with light traffic, there was no danger to my safety but if this happens again under heavier traffic, it could conceivably cause someone to rear end the vehicle.   I have not been able to reproduce the problem.  There might\u2019ve been a flash on the dashboard warning the system was activated, but I couldn\u2019t say for sure.  Vehicle is available for inspection.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11441308,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "11/15/2021",
+            "dateComplaintFiled": "11/22/2021",
+            "vin": "",
+            "components": "VEHICLE SPEED CONTROL",
+            "summary": "The contact stated 2020 Honda Insight. The contact stated while driving approximately 4-5 MPH through a drive-thru, the cruise control set button was tapped and the speed increased to 25 mph without warning. The local dealer was not contacted. The vehicle was not diagnosed or repaired. The manufacturer was not notified. The failure mileage was approximately 2,800. The VIN was not available.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11399273,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "02/26/2021",
+            "dateComplaintFiled": "03/05/2021",
+            "vin": "19XZE4F59LE",
+            "components": "POWER TRAIN,ELECTRICAL SYSTEM,ENGINE",
+            "summary": "WHILE DRIVING ON THE INTERSTATE WHERE SPEED LIMIT IS 70 MILES PER HOUR, I LOOKED IN MY REAR VIEW MIRROR AND SAW SMOKE COMING OUT OF THE BACK OF MY CAR. I THEN SAW WARNINGS FLASHING FROM MY DASH BOARD SAYING: AC MALFUNCTION, LKAS MALFUNCTION,AND THEN ANOTHER WARNING FLASHED SAYING - LOW OIL FLUID, STOP CAR DO NOT DRIVE. I COASTED CAR TO THE SIDE OF THE INTERSTATE AND GOT OUT OF VEHICLE AND CALLED TOWING SERVICE.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11398985,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "09/14/2020",
+            "dateComplaintFiled": "03/03/2021",
+            "vin": "19XZE4F51LE",
+            "components": "STEERING,UNKNOWN OR OTHER,FORWARD COLLISION AVOIDANCE",
+            "summary": "DAMAGE TO THE POWER STEERING LINKAGE CABLE AND OXYGEN SENSOR CAUSED ALL ADAS SYSTEMS TO BE OFFLINE INCLUDING POWER STEERING. IF THIS UNIT WERE TO BE DAMAGED JUST ENOUGH AND FAIL WHILE DRIVING THIS WILL LIKELY RESULT IN A CRASH/COLLISION AS THE CAR BECOMES COMPLETELY UNDRIVABLE. LUCKILY SO FAR, THIS HAS HAPPENED WHEN THE VEHICLE WAS PARKED AND DID NOT CAUSE ANY INJURY. I FEEL THE VEHICLE IS UNSAFE UNTIL THEY FIX THIS ISSUE. IT HAS HAPPENED 3 TIMES NOW AND NOTHING SEEMS TO BE BEING DONE ABOUT THIS ISSUE AS OF YET FROM HONDA. THIS WAS BROUGHT FORWARD TO HONDA'S ATTENTION WITH NO AFFIRMATION THAT THIS IS A PROBLEM. IT FIRST HAPPENED IN SEPTEMBER LAST YEAR AND HAS HAPPENED TWO ADDITIONAL TIMES SINCE.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11398680,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "02/27/2021",
+            "dateComplaintFiled": "03/02/2021",
+            "vin": "19XZE4F57LE",
+            "components": "ELECTRICAL SYSTEM,VISIBILITY/WIPER,BACK OVER PREVENTION",
+            "summary": "TL* THE CONTACT OWNS A 2020 HONDA INSIGHT. THE CONTACT RECEIVED NOTIFICATION OF NHTSA CAMPAIGN NUMBER: 20V771000 (ELECTRICAL SYSTEM, BACK OVER PREVENTION, VISIBILITY/WIPER, VISIBILITY, EXTERIOR LIGHTING). THE CONTACT STATED WHILE APPROACHING THE VEHICLE ON 3/1/2021, SHE NOTICED SOMEONE SLEEPING INSIDE THE VEHICLE. THE CONTACT STATED WHILE CALLING THE POLICE DEPARTMENT, THE PERSON GOT AWAY. A POLICE REPORT WAS FILED. THE CONTACT STATED HER ANTI-THEFT ALERT FAILED. THE CONTACT ASSOCIATED THE FAILURE WITH THE RECALL CAMPAIGN. THE VEHICLE WAS TAKEN TO THE LOCAL DEALER VACAVILLE HONDA (751 ORANGE DR, VACAVILLE, CA 95687, (707) 449-5900) TO DIAGNOSED. THE RESULTS WERE STILL PENDING. THE MANUFACTURER HAD NOT BEEN INFORMED OF THE FAILURE. THE FAILURE MILEAGE WAS 3,126. Consumer was notified transmission needed to be replaced, vehicle is currently not a year old.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11385705,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "12/28/2020",
+            "dateComplaintFiled": "12/30/2020",
+            "vin": "19XZE4F59LE",
+            "components": "UNKNOWN OR OTHER",
+            "summary": "WHEN PUTTING THE CAR IN REVERSE, THE CAR IS MAKING VERY LOUD 'DONG DONG DONG' NOISE. THIS ISSUE ALSO OCCURS WHEN THE CAR IS IN IDLE (STOP FOR THE TRAFFIC LIGHT). I AM NOT SURE IF THE NOISE IS FROM THE HYBRID SYSTEM, BUT THE NOISE MAKE ONE'S EARS VERY UNCOMFORTABLE.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11383531,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "09/07/2020",
+            "dateComplaintFiled": "12/15/2020",
+            "vin": "19XZE4F90LE",
+            "components": "POWER TRAIN,ENGINE",
+            "summary": "~TL-THE CONTACT OWNS A 2020 HONDA INSIGHT. THE CONTACT STATED THAT WHEN ACCELERATE TO GO UP  A SMALL HILL, THE VEHICLE FAILED TO ACCELERATED. THE CONTACT STATED THAT THE VEHICLE STAY STOCK AT 40 MPH, THE CONTACT ALSO STATED THAT THE SPEEDOMETER BOUNCING UP AND DOWN 42-20 MPH, THE CONTACT STATED THAT THE VEHICLE TAKE 15 MINUTES TO GO UP ONE SPEEDOMETER. THE CONTACT CALLED HONDA OF HACKETTSTOWN, 48 US-46, HACKETTSTOWN, NJ 07840, AND INFORMED THEM OF THE FAILURE, THE DEALER INFORMED THE CONTACT TO SCHEDULE AN APPOINTMENT. THE CONTACT STATED ON ANOTHER OCCASION, THE CONTACT STATED WHILE PULLING OUT THE ROAD, A   FLICKER NOISE OCCURRED, THE VEHICLE STALLED. THE CONTACT STATED THAT SHE PUSHED THE START BUTTON TWO OR THREE TIMES TO ENGAGED THE ENGINE. THE VEHICLE WAS ABLE TO DRIVE. IN ADDITION, THE CONTACT ALSO STATED THAT THERE WAS FAILURE WITH THE RADAR SENSOR, IT BUILD UP  WITH SNOW CAUSING THE VEHICLE STALLED. THE VEHICLE WAS TAKEN TO MADISON HONDA, 280 MAIN ST, MADISON, NJ 07940, WHERE A TEST DRIVE WAS COMPLETED WITH THE CONTACT, AND WITH HER FOOT ON THE ACCELERATOR PEDAL THE VEHICLE FAILED TO ACCELERATE. THE CONTACT WAS INFORMED BY THE DEALER THAT THE VEHICLE BATTERY HAD TO BE ABOVE 50 DEGREE TO GET ENOUGH POWER WHEN THE WEATHER DROP.  THE VEHICLE WAS NOT REPAIRED. THE FAILURE RECURRED. THE CONTACT CALL BACK THE SAME DEALER AND WAS INFORMED THAT A CASE MANAGER WOULD CALL HER BACK. THE FAILURE RECURRED AND THE CONTACT MENTION SHE ALMOST GET HIT BY ANOTHER VEHICLE. THE VEHICLE WAS TAKEN BACK TO THE DEALER AND WAS INFORMED THAT THE SECOND ENGINE NEEDED TO BE CONNECTED TO THE FIRST ENGINE. THE DEALER WAS UNABLE TO FIND A FAILURE CODE. THE VEHICLE WAS NOT REPAIRED. THE MANUFACTURER WAS MADE AWARE OF THE FAILURE AND PROVIDED A CASE NUMBER. THE FAILURE MILEAGE WAS APPROXIMATE UNKNOWN. AW*DT  CONSUMER STATED SHE DOES NOT DRIVE THE CAR ANYMORE.*JB",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11383112,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "12/05/2020",
+            "dateComplaintFiled": "12/11/2020",
+            "vin": "19XZE4F52LE",
+            "components": "FORWARD COLLISION AVOIDANCE",
+            "summary": "VERY OCCASIONALLY THE CAR COLLISION AVOIDANCE SYSTEMS KICKS IN ERRATICALLY. THE CAR BRAKES AUTOMATICALLY TO REDUCE SPEED SUBSTANTIALLY. THIS CAN BE VERY DANGEROUS BECAUSE SOMEONE MIGHT HIT FROM THE BACK.    THIS HAS HAPPENED TO ME ON CITY STREETS AS WELL AS THE HIGHWAY. I THINK IT MIGHT BE DUE TO THE COLLISON SENSOR MISSCLASSIFYING SIGNBOARDS OR OVERHEAD BRIDGES AS HUMANS OR CARS",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11374922,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "11/16/2020",
+            "dateComplaintFiled": "11/16/2020",
+            "vin": "19XZE4F90LE",
+            "components": "FORWARD COLLISION AVOIDANCE",
+            "summary": "DRIVING ALONE ON ROAD DOING 30 MPH THE CAR SLAMMED ON THE BRAKES AND SLOWED TO ABOUT 20 MPH WHILE FLASHING \"BRAKE\" IN INSTRUMENT CLUSTER.  NO OTHER CARS ON THIS ROAD AT THE TIME.  THERE WERE SHADOWS ACROSS THE ROAD FROM SUN AND TREES.  SINCE I ALWAYS DRIVE THE SPEED LIMIT, IF THERE IS SOMEONE FOLLOWING ME, THEY ARE USUALLY RIGHT ON MY TAIL.  I DON'T WANT TO BE SHOT FOR \"BRAKE CHECKING\" SOME REDNECK IN A PICKUP WHEN IT ISN'T EVEN ME DOING THE BRAKING.  NHTSA ISN'T DOING IT'S JOB BY ALLOWING THIS ISSUE TO CONTINUE.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11361385,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "09/24/2020",
+            "dateComplaintFiled": "09/27/2020",
+            "vin": "19XZE4F58LE",
+            "components": "VEHICLE SPEED CONTROL",
+            "summary": "ACC ON, TRAVELING 75MPH ON IH-10 E; CAR TWO LENGTHS IN FRONT OF ME, IN RH LANE, PULLS OFF ONTO EXIT RAMP, MY CAR SLAMS ON THE BRAKES AND BRINGS MY CAR DOWN TO 45MPH, IF THERE HAD BEEN SOMEONE BEHIND ME THERE WOULD HAVE BEEN AN ACCIDENT.  SAME HI-WAY, CAR 1/2 CAR LENGTH IN FRONT ON MY LEFT.  WE GO AROUND A SLOPING CURVE TO THE RIGHT, MY CAR AGAIN SLAMS ON THE BRAKES, AND I HAD TO JUMP ON MY GAS PEDDLE, AS THERE WAS A CAR BEHIND ME THIS TIME.  COMPLAINED TO MY SERVICE MANAGER AND WAS TOLD THIS WAS NORMAL!  NOPE, NOTHING NORMAL ABOUT THIS SITUATION!  ACCIDENT WAITING TO HAPPEN.  THEIR SOLUTION, DON'T USE CRUISE CONTROL!",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11351704,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "07/09/2020",
+            "dateComplaintFiled": "08/27/2020",
+            "vin": "19XZE4F58LE",
+            "components": "STRUCTURE",
+            "summary": "RIGHT AFTER A DAY OF PURCHASED AND DRIVING BACK HOME. WE DID HEAR WINDY NOISE WAS COMING OUT FROM THE FRONT OF THE VEHICLE BY THE DRIVER SIDE AND TOOK IT BACK TO THE DEALERSHIP AND THEY HAVE HELPED FIX IT FOR NOW.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        },
+        {
+            "odiNumber": 11340291,
+            "manufacturer": "Honda (American Honda Motor Co.)",
+            "crash": false,
+            "fire": false,
+            "numberOfInjuries": 0,
+            "numberOfDeaths": 0,
+            "dateOfIncident": "07/10/2020",
+            "dateComplaintFiled": "07/19/2020",
+            "vin": "19XZE4F90LE",
+            "components": "POWER TRAIN",
+            "summary": "I BOUGHT A 2020 HONDA INSIGHT IN MARCH 2020.  I HAVE 8,000 MILES ON IT AND JUST THE THREE WEEKS AGO I STARTED HAVING TRANSMISSION PROBLEMS.  THE DASHBOARD ILLUMINATED SAYING TRANSMISSION PROBLEM, SEE DEALERSHIP.  IT'S BRAND NEW.  I TOOK IT TO THE LODI HONDA AND THE CODES WERE A STUCK SELONIED.  THEY SAID THERE WAS NO DAMAGE.  OK, IT DID IT A SECOND TIME AND I AM READY TO GIVE IT BACK.  PLEASE HELP ME.  SCARED OF GETTING STRANDED ON THE ROAD.  I WAS DRIVING ON THE HIGHWAY.",
+            "products": [
+                {
+                    "type": "Vehicle",
+                    "productYear": "2020",
+                    "productMake": "HONDA",
+                    "productModel": "INSIGHT",
+                    "manufacturer": "Honda (American Honda Motor Co.)"
+                }
+            ]
+        }
+    ]
+}
