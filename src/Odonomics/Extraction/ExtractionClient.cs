@@ -232,7 +232,7 @@ public sealed class ExtractionClient
     /// fabricated rather than read off the page.</summary>
     private static ExtractionResult GroundInPageText(ExtractionResult extracted, string pageText)
     {
-        if (extracted.Vin is not null && !VinShape.IsMatch(extracted.Vin))
+        if (extracted.Vin is not null && (!VinShape.IsMatch(extracted.Vin) || !ContainsLoosely(pageText, extracted.Vin)))
         {
             extracted = extracted with { Vin = null };
         }
@@ -262,7 +262,12 @@ public sealed class ExtractionClient
 
     private static readonly Regex NumberToken = new(@"\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
 
-    private static readonly Regex ConnectedNumberBlock = new(@"\(?\d+\)?(?:[ \t-]+\(?\d+\)?)+", RegexOptions.Compiled);
+    /// <summary>Matches hyphen-joined digit groups (a zip+4, a dashed stock number, the "123-4567"
+    /// half of a phone number), optionally paren-wrapped. Deliberately does not bridge on bare
+    /// whitespace: two independent comma-grouped numbers routinely sit on the same line separated
+    /// only by a space (a price immediately followed by a mileage), and bridging on whitespace
+    /// alone destroyed both instead of masking one unrelated number.</summary>
+    private static readonly Regex ConnectedNumberBlock = new(@"\(?\d+\)?(?:[ \t]*-[ \t]*\(?\d+\)?)+", RegexOptions.Compiled);
 
     private static bool ContainsLoosely(string haystack, string needle) =>
         Regex.IsMatch(haystack, $@"\b{Regex.Escape(needle)}\b", RegexOptions.IgnoreCase);
