@@ -86,23 +86,32 @@ public class WalkDetailWalkTests
     [Fact]
     public async Task RunAsync_EveryOutcomeKind_TalliesEachIntoItsOwnDroppedReason()
     {
-        List<string> links = Links(5);
-        DetailPageOutcome[] outcomes = [DetailPageOutcome.MissingFields, DetailPageOutcome.NoVin, DetailPageOutcome.NotMatching, DetailPageOutcome.Failed, DetailPageOutcome.Upserted];
+        List<string> links = Links(6);
+        DetailPageOutcome[] outcomes =
+        [
+            DetailPageOutcome.MissingFields,
+            DetailPageOutcome.NoVin,
+            DetailPageOutcome.NotMatching,
+            DetailPageOutcome.Failed,
+            DetailPageOutcome.ExtractionFailed,
+            DetailPageOutcome.Upserted,
+        ];
 
         DetailWalkTally tally = await WalkDetailWalk.RunAsync(
             links,
-            maxDetailPages: 5,
+            maxDetailPages: 6,
             (_, i, _) => Task.FromResult(outcomes[i]),
             _ => Task.CompletedTask,
             CancellationToken.None);
 
-        Assert.Equal(5, tally.Visited);
+        Assert.Equal(6, tally.Visited);
         Assert.Equal(1, tally.Upserted);
         Assert.Equal(1, tally.Dropped.MissingFields);
         Assert.Equal(1, tally.Dropped.NoVin);
         Assert.Equal(1, tally.Dropped.NotMatching);
         Assert.Equal(1, tally.Dropped.Failed);
-        Assert.Equal(4, tally.Dropped.Total);
+        Assert.Equal(1, tally.Dropped.ExtractionFailed);
+        Assert.Equal(5, tally.Dropped.Total);
         Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
     }
 

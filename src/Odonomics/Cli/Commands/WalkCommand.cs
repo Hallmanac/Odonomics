@@ -196,19 +196,19 @@ public static class WalkCommand
                 ExtractionOutcome outcome = await extraction.ExtractAsync(bodyText, ct);
                 if (outcome.Error is not null || outcome.Result is null)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.Failed)} (extraction failed: {outcome.Error})[/]");
-                    return DetailPageOutcome.Failed;
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.ExtractionFailed)} ({outcome.Error})[/]");
+                    return DetailPageOutcome.ExtractionFailed;
                 }
 
                 if (string.IsNullOrWhiteSpace(outcome.Result.Vin))
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NoVin)} (found on the page)[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NoVin)} found on the page[/]");
                     return DetailPageOutcome.NoVin;
                 }
 
                 if (outcome.Result.Year is null || outcome.Result.Price is null || outcome.Result.Mileage is null)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage) ({outcome.Result.Vin})[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage; {outcome.Result.Vin})[/]");
                     return DetailPageOutcome.MissingFields;
                 }
 
@@ -287,27 +287,39 @@ public static class WalkCommand
         AnsiConsole.Write(BuildSummaryTable(summaries));
     }
 
+    // Column widths are chosen so that, added to Border.Minimal's per-column padding and
+    // separators (3 chars per column plus 1 for the table's own edges), the table never needs
+    // more than 80 columns: 8 + 22 + 5 + 5 + 15 + 6 + (3 * 6 + 1) = 80. Site and Model are also
+    // truncated to their column's width before they reach the table, since Spectre wraps a cell
+    // that overflows its declared width onto a second line rather than cropping it, which would
+    // split one pair's row across two lines of the table.
+    private const int SiteColumnWidth = 8;
+    private const int ModelColumnWidth = 22;
+    private const int PagesColumnWidth = 5;
+    private const int SavedColumnWidth = 5;
+    private const int DroppedColumnWidth = 15;
+    private const int StatusColumnWidth = 6;
+
     /// <summary>Builds the end-of-run table without writing it, so a rendering test can capture
     /// it against a fixed-width console instead of the real one.</summary>
     public static Table BuildSummaryTable(IReadOnlyList<WalkPairSummary> summaries)
     {
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
-        table.AddColumn("Site");
-        table.AddColumn("Model");
-        table.AddColumn("Pages");
-        table.AddColumn("Saved");
-        table.AddColumn("Dropped");
-        table.AddColumn("Status");
+        table.AddColumn(new TableColumn("Site") { Width = SiteColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Model") { Width = ModelColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Pages") { Width = PagesColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Saved") { Width = SavedColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Dropped") { Width = DroppedColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Status") { Width = StatusColumnWidth, NoWrap = true });
         foreach (WalkPairSummary summary in summaries)
         {
-            string droppedCell = WalkPairSummaryLine.DroppedCell(summary.Dropped);
             table.AddRow(
-                Format.Cell(summary.Site),
-                Format.Cell(summary.Model),
+                Format.Cell(Format.Truncate(summary.Site, SiteColumnWidth)),
+                Format.Cell(Format.Truncate(summary.Model, ModelColumnWidth)),
                 summary.DetailPagesVisited.ToString(),
                 summary.Upserted.ToString(),
-                Format.Cell(droppedCell.Length == 0 ? summary.Dropped.Total.ToString() : $"{summary.Dropped.Total} ({droppedCell})"),
+                Format.Cell(WalkPairSummaryLine.TableCell(summary.Dropped, DroppedColumnWidth)),
                 summary.Completed ? "ok" : "[yellow]failed[/]");
         }
 
