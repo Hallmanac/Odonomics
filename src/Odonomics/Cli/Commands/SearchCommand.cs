@@ -41,7 +41,7 @@ public static class SearchCommand
                 continue;
             }
 
-            sourcesCovered.Add(source.Name);
+            sourcesCovered.AddRange(result.ModelsCovered.Select(model => RunSources.Key(source.Name, model)));
             AnsiConsole.MarkupLineInterpolated($"{source.Name}: {result.Candidates.Count} candidates, {result.Rejections.Count} rejected");
             foreach (ListingCandidate candidate in result.Candidates)
             {

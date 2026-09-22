@@ -4,20 +4,20 @@ namespace Odonomics.Tests.Ledger;
 
 public class LedgerDiffServiceTests
 {
-    private static ListingCandidate Candidate(string vin, decimal price, string url, string source = "auto.dev") => new()
+    private static ListingCandidate Candidate(string vin, decimal price, string url, string source = "auto.dev", string model = "Prius") => new()
     {
         Vin = vin,
         Source = source,
         Url = url,
         Year = 2020,
         Make = "Toyota",
-        Model = "Prius",
+        Model = model,
         Trim = "LE",
         Price = price,
         Mileage = 40000,
     };
 
-    private static RunEntity Run(DateTimeOffset startedAt, string sources = "auto.dev") => new() { Command = "search", Sources = sources, StartedAt = startedAt };
+    private static RunEntity Run(DateTimeOffset startedAt, string sources = "auto.dev:Prius") => new() { Command = "search", Sources = sources, StartedAt = startedAt };
 
     [Fact]
     public async Task ComputeAsync_FirstRunEver_EverythingIsNewAndNothingIsGone()
@@ -158,7 +158,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a"), run1, CancellationToken.None);
 
-        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev,carvana");
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev:Prius,carvana:Prius");
         db.Runs.Add(run2);
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a"), run2, CancellationToken.None);
@@ -180,7 +180,7 @@ public class LedgerDiffServiceTests
         var upsert = new LedgerUpsertService(db);
         var diffService = new LedgerDiffService(db);
 
-        RunEntity searchRun = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev,marketcheck");
+        RunEntity searchRun = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev:Prius,marketcheck:Prius");
         db.Runs.Add(searchRun);
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a"), searchRun, CancellationToken.None);
@@ -188,12 +188,38 @@ public class LedgerDiffServiceTests
 
         // A walk only ever touches cars.com; it must not report the search's auto.dev/marketcheck
         // postings as gone, since it never looked at those sources at all.
-        RunEntity walkRun = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com");
+        RunEntity walkRun = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
         db.Runs.Add(walkRun);
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("3VWFE21C04M000000", 12000m, "https://cars.com/b", "cars.com"), walkRun, CancellationToken.None);
 
         SearchDiff diff = await diffService.ComputeAsync(walkRun, CancellationToken.None);
+
+        Assert.Empty(diff.Gone);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_WalkOfADifferentModelOnTheSameSite_DoesNotReportTheOtherModelGone()
+    {
+        // odo walk cars.com (Honda Insight, the scenario's default model), then
+        // odo walk cars.com --model "Toyota Prius": the Prius walk must not report the earlier
+        // Insight posting gone, since it never looked at cars.com Insight listings at all.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity insightWalk = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Insight");
+        db.Runs.Add(insightWalk);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("19XZE4F52ME000999", 19000m, "https://cars.com/insight-a", "cars.com", "Insight"), insightWalk, CancellationToken.None);
+
+        RunEntity priusWalk = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(priusWalk);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/prius-a", "cars.com", "Prius"), priusWalk, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(priusWalk, CancellationToken.None);
 
         Assert.Empty(diff.Gone);
     }

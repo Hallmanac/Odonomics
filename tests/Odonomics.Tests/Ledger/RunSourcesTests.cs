@@ -40,4 +40,32 @@ public class RunSourcesTests
 
         Assert.Equal(later.StartedAt, latest["auto.dev"]);
     }
+
+    [Fact]
+    public void Key_RoundTripsThroughSplitKey()
+    {
+        string token = RunSources.Key("cars.com", "Insight");
+
+        (string source, string model) = RunSources.SplitKey(token);
+
+        Assert.Equal("cars.com:Insight", token);
+        Assert.Equal("cars.com", source);
+        Assert.Equal("Insight", model);
+    }
+
+    [Fact]
+    public void Key_DifferentModelsOnTheSameSource_AreDifferentTokens()
+    {
+        string insightWalk = RunSources.Key("cars.com", "Insight");
+        string priusWalk = RunSources.Key("cars.com", "Prius");
+
+        Dictionary<string, DateTimeOffset> latest = RunSources.LatestCoverageBySource(
+        [
+            Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), insightWalk),
+            Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), priusWalk),
+        ]);
+
+        Assert.Equal(2, latest.Count);
+        Assert.NotEqual(latest[insightWalk], latest[priusWalk]);
+    }
 }

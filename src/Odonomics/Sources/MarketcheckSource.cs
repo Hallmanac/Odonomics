@@ -48,6 +48,7 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
                     continue;
                 }
 
+                result.ModelsCovered.Add(query.Model);
                 foreach (JsonElement listing in listings.EnumerateArray())
                 {
                     AddCandidateIfValid(result, query, listing);

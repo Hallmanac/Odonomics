@@ -44,5 +44,20 @@ public class MarketcheckSourceTests
         Assert.Equal("EX", candidate.Trim);
         Assert.Equal(2021, candidate.Year);
         Assert.Equal("marketcheck", candidate.Source);
+        Assert.Equal(["Insight"], result.ModelsCovered);
+    }
+
+    [Fact]
+    public async Task RunAsync_QueryFails_ModelIsNotReportedCovered()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        var handler = new StatusCodeHttpMessageHandler(System.Net.HttpStatusCode.Unauthorized);
+        var source = new MarketcheckSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.False(result.CouldNotRun);
+        Assert.Empty(result.ModelsCovered);
+        Assert.Contains(result.Rejections, r => r.Contains("HTTP 401"));
     }
 }

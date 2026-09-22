@@ -14,15 +14,16 @@ public sealed record SearchDiff(
     IReadOnlyList<GonePostingEntry> Gone);
 
 /// <summary>
-/// Diffs one run against whatever ran before it, per source. A posting counts as "new" when this
-/// run created it (its FirstSeen matches the run's own timestamp), "price-dropped" when this run
-/// itself appended a lower price than the one before it, and "gone" when the last run to cover
-/// that posting's own source before this one had it active but this run never touched it. See
-/// LedgerUpsertService: every posting touched by a run is stamped with that run's own StartedAt,
-/// not wall-clock time, which is what makes this an exact equality comparison rather than an
-/// elapsed-time heuristic. Scoping "gone" to each posting's own source (via <see cref="RunEntity.Sources"/>)
-/// keeps a search from reporting a walk's postings gone and vice versa, since neither command's run
-/// ever touches the other's sources.
+/// Diffs one run against whatever ran before it, per source and model. A posting counts as "new"
+/// when this run created it (its FirstSeen matches the run's own timestamp), "price-dropped" when
+/// this run itself appended a lower price than the one before it, and "gone" when the last run to
+/// cover that posting's own source and model before this one had it active but this run never
+/// touched it. See LedgerUpsertService: every posting touched by a run is stamped with that run's
+/// own StartedAt, not wall-clock time, which is what makes this an exact equality comparison
+/// rather than an elapsed-time heuristic. Scoping "gone" to each posting's own source and model
+/// (via <see cref="RunEntity.Sources"/>, one "source:model" token per pair the run actually
+/// covered) keeps a search from reporting a walk's postings gone and vice versa, and keeps a run
+/// that only covered one model from marking every other model on that same source as checked too.
 /// </summary>
 public sealed class LedgerDiffService(OdonomicsDbContext db)
 {
@@ -61,23 +62,24 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             }
         }
 
-        string[] sources = RunSources.Split(currentRun);
+        string[] tokens = RunSources.Split(currentRun);
         List<RunEntity> allRuns = await db.Runs.ToListAsync(cancellationToken);
         List<RunEntity> priorRuns = [.. allRuns.Where(r => r.Id != currentRun.Id && r.StartedAt < currentRun.StartedAt)];
         Dictionary<string, DateTimeOffset> previousCoverageBySource = RunSources.LatestCoverageBySource(priorRuns);
 
         var gone = new List<GonePostingEntry>();
-        foreach (string source in sources)
+        foreach (string token in tokens)
         {
-            if (!previousCoverageBySource.TryGetValue(source, out DateTimeOffset previousCoverage))
+            if (!previousCoverageBySource.TryGetValue(token, out DateTimeOffset previousCoverage))
             {
-                continue; // this run is the first to ever cover this source; nothing to compare against
+                continue; // this run is the first to ever cover this source/model; nothing to compare against
             }
 
+            (string source, string model) = RunSources.SplitKey(token);
             List<PostingEntity> stillMarkedFromPreviousCoverage = await db.Postings
                 .Include(p => p.Vehicle)
                 .Include(p => p.PriceObservations)
-                .Where(p => p.Source == source && p.LastSeen == previousCoverage)
+                .Where(p => p.Source == source && p.Vehicle!.Model == model && p.LastSeen == previousCoverage)
                 .ToListAsync(cancellationToken);
 
             foreach (PostingEntity posting in stillMarkedFromPreviousCoverage)

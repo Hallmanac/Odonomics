@@ -47,7 +47,7 @@ public static class WalkCommand
         ExtractionClient extraction = ExtractionClient.FromAppDirectory(secrets.AnthropicApiKey, http);
 
         using OdonomicsDbContext db = LedgerFactory.Open();
-        var currentRun = new RunEntity { Command = $"walk {site.Name}", Sources = site.Name, StartedAt = DateTimeOffset.UtcNow };
+        var currentRun = new RunEntity { Command = $"walk {site.Name}", Sources = "", StartedAt = DateTimeOffset.UtcNow };
         db.Runs.Add(currentRun);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -144,6 +144,12 @@ public static class WalkCommand
             }
         }
 
+        // Only stamped once the walk actually reaches here without throwing or being cancelled:
+        // this run covered exactly this one model on this one site, never the site as a whole, so
+        // an earlier throw (a bad GotoAsync, a cancelled challenge wait) or a walk of a different
+        // model must never leave this or any other model's postings looking checked when they
+        // were not.
+        currentRun.Sources = RunSources.Key(site.Name, model);
         currentRun.CompletedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
