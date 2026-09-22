@@ -9,8 +9,9 @@ namespace Odonomics.Cli.Commands;
 
 /// <summary>`odo dealer grade`: looks up each ungraded dealer's CarEdge Dealer Rating over the
 /// same operator-launched browser connection `odo walk` uses (see <see cref="CdpConnection"/>),
-/// paced like the walk and pausing on a bot-defense challenge the same way. A dealer CarEdge has
-/// no rating for is still stamped as checked, so it is never looked up again on a later run.</summary>
+/// paced like the walk and pausing on a bot-defense challenge the same way. A dealer CarEdge
+/// positively says it has no rating for is stamped as checked, so it is never looked up again on a
+/// later run; a page that merely failed to parse is left unstamped so a later run retries it.</summary>
 public static class DealerGradeCommand
 {
     public static async Task<int> RunAsync(bool all, string? vin, CancellationToken cancellationToken)
@@ -46,20 +47,19 @@ public static class DealerGradeCommand
                 return 1;
             }
 
-            DealerEntity? dealer = vehicle.Postings.Select(p => p.Dealer).FirstOrDefault(d => d is not null);
-            if (dealer is null)
+            List<DealerEntity> dealers = [.. vehicle.Postings.Select(p => p.Dealer).OfType<DealerEntity>().DistinctBy(d => d.Id)];
+            if (dealers.Count == 0)
             {
                 AnsiConsole.MarkupLine("[yellow]no known dealer for this VIN yet[/]");
                 return 0;
             }
 
-            if (dealer.GradeCheckedAt is not null)
+            foreach (DealerEntity dealer in dealers.Where(d => d.GradeCheckedAt is not null))
             {
                 PrintGrade(dealer);
-                return 0;
             }
 
-            targets = [dealer];
+            targets = [.. dealers.Where(d => d.GradeCheckedAt is null)];
         }
 
         if (targets.Count == 0)
@@ -101,22 +101,28 @@ public static class DealerGradeCommand
                 string bodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
                 await recorder.WriteAsync($"dealer-{dealer.Id}.txt", bodyText, cancellationToken);
 
-                CarEdgeGradeResult result = CarEdgeGradeParser.Parse(bodyText);
-                dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
-                if (result.Found)
+                CarEdgeGradeResult result = CarEdgeGradeParser.Parse(bodyText, dealer.Name);
+                switch (result.Status)
                 {
-                    dealer.Grade = result.Grade;
-                    dealer.GradeReason = result.Reason;
-                    graded++;
-                    AnsiConsole.MarkupLineInterpolated($"{dealer.Name}: {result.Grade}");
+                    case CarEdgeGradeStatus.Graded:
+                        dealer.Grade = result.Grade;
+                        dealer.GradeReason = result.Reason;
+                        dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
+                        graded++;
+                        AnsiConsole.MarkupLineInterpolated($"{dealer.Name}: {result.Grade}");
+                        await db.SaveChangesAsync(cancellationToken);
+                        break;
+                    case CarEdgeGradeStatus.NotFound:
+                        dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
+                        ungraded++;
+                        AnsiConsole.MarkupLineInterpolated($"[grey]{dealer.Name}: not on CarEdge[/]");
+                        await db.SaveChangesAsync(cancellationToken);
+                        break;
+                    case CarEdgeGradeStatus.Unrecognized:
+                        failed++;
+                        AnsiConsole.MarkupLineInterpolated($"[yellow]{dealer.Name}: page didn't match a known CarEdge layout, will retry later[/]");
+                        break;
                 }
-                else
-                {
-                    ungraded++;
-                    AnsiConsole.MarkupLineInterpolated($"[grey]{dealer.Name}: not on CarEdge[/]");
-                }
-
-                await db.SaveChangesAsync(cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

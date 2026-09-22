@@ -17,9 +17,9 @@ public class CarEdgeGradeParserTests
     {
         string pageText = await ReadFixtureAsync("graded-a-plus.txt");
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText);
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda");
 
-        Assert.True(result.Found);
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
         Assert.Equal("A+", result.Grade);
         Assert.Null(result.Reason);
     }
@@ -29,9 +29,9 @@ public class CarEdgeGradeParserTests
     {
         string pageText = await ReadFixtureAsync("graded-f-with-reason.txt");
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText);
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Bayview Motors");
 
-        Assert.True(result.Found);
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
         Assert.Equal("F", result.Grade);
         Assert.NotNull(result.Reason);
         Assert.Contains("bait-and-switch", result.Reason);
@@ -43,18 +43,29 @@ public class CarEdgeGradeParserTests
     {
         string pageText = await ReadFixtureAsync("not-found.txt");
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText);
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Ace Motors");
 
-        Assert.False(result.Found);
+        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
         Assert.Null(result.Grade);
         Assert.Null(result.Reason);
     }
 
     [Fact]
-    public void Parse_NoGradeLineOnThePage_ReturnsNotFound()
+    public void Parse_NoGradeLineOnThePage_ReturnsUnrecognized()
     {
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse("Just a moment... checking your browser.");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse("Just a moment... checking your browser.", "Holler Honda");
 
-        Assert.False(result.Found);
+        Assert.Equal(CarEdgeGradeStatus.Unrecognized, result.Status);
+    }
+
+    [Fact]
+    public async Task Parse_GradeLineBelongsToADifferentDealer_ReturnsUnrecognized()
+    {
+        string pageText = await ReadFixtureAsync("graded-a-plus.txt");
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Bayview Motors");
+
+        Assert.Equal(CarEdgeGradeStatus.Unrecognized, result.Status);
+        Assert.Null(result.Grade);
     }
 }
