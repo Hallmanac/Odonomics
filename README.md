@@ -83,11 +83,19 @@ Launch line (also printed by `odo walk` itself, with your own data directory fil
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir="$HOME/Library/Application Support/Odonomics/chrome-profile"
 ```
 
-**Windows** (PowerShell or cmd)
+**Windows (PowerShell)**
+
+```
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Odonomics\chrome-profile"
+```
+
+**Windows (cmd)**
 
 ```
 "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%LOCALAPPDATA%\Odonomics\chrome-profile"
 ```
+
+A bare quoted path needs PowerShell's `&` call operator to run at all; cmd runs it either way. `odo walk` itself prints both forms when it can't find Chrome listening.
 
 Leave that Chrome window open; `odo walk cars.com` or `odo walk carvana` then visits one search page, scrolls and dwells like a person, opens a capped number of detail pages with a random gap between each, and beeps and waits for Enter if a page looks like a bot-defense challenge, so you can solve it by hand in the same window before the walk continues.
 

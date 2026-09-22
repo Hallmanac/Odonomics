@@ -31,7 +31,18 @@ public static class WalkCommand
         {
             AnsiConsole.MarkupLine("[yellow]nothing is listening on the CDP debugging port. Launch Chrome with this line, then run `odo walk` again:[/]");
             AnsiConsole.WriteLine();
-            AnsiConsole.WriteLine(ChromeLaunchLine.Build());
+            if (OperatingSystem.IsWindows())
+            {
+                AnsiConsole.MarkupLine("[grey]PowerShell:[/]");
+                AnsiConsole.WriteLine(ChromeLaunchLine.BuildForPowerShell());
+                AnsiConsole.MarkupLine("[grey]cmd:[/]");
+                AnsiConsole.WriteLine(ChromeLaunchLine.Build());
+            }
+            else
+            {
+                AnsiConsole.WriteLine(ChromeLaunchLine.Build());
+            }
+
             return 1;
         }
 

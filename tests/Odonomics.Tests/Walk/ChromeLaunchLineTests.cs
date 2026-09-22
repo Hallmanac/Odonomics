@@ -13,4 +13,13 @@ public class ChromeLaunchLineTests
         Assert.Contains("--user-data-dir=", line);
         Assert.Contains("chrome-profile", line);
     }
+
+    [Fact]
+    public void BuildForPowerShell_PrefixesTheCallOperator()
+    {
+        string line = ChromeLaunchLine.BuildForPowerShell();
+
+        Assert.StartsWith("& ", line);
+        Assert.EndsWith(ChromeLaunchLine.Build(), line);
+    }
 }
