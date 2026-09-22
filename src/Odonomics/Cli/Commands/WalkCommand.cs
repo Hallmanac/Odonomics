@@ -137,7 +137,12 @@ public static class WalkCommand
                     Url = detailUrl,
                     Year = outcome.Result.Year.Value,
                     Make = outcome.Result.Make ?? make,
-                    Model = outcome.Result.Model ?? model,
+                    // Always the canonical model this walk was launched for, not the extraction's
+                    // own free-text model field: VehicleEntity.Model has to match the model half of
+                    // the "source:model" token this run stamps on itself (RunSources.Key below), or
+                    // a page whose extracted text reads as a trimmed variant (e.g. "Insight EX")
+                    // would silently break both the rank view's and the diff's coverage lookups.
+                    Model = model,
                     Trim = outcome.Result.Trim,
                     Price = outcome.Result.Price.Value,
                     Mileage = outcome.Result.Mileage.Value,

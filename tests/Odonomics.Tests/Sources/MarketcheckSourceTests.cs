@@ -1,3 +1,4 @@
+using Odonomics.Ledger;
 using Odonomics.Sources;
 using Odonomics.Tests.TestSupport;
 
@@ -44,6 +45,42 @@ public class MarketcheckSourceTests
         Assert.Equal("EX", candidate.Trim);
         Assert.Equal(2021, candidate.Year);
         Assert.Equal("marketcheck", candidate.Source);
+        Assert.Equal(["Insight"], result.ModelsCovered);
+    }
+
+    [Fact]
+    public async Task RunAsync_ApiReturnsADifferentModelStringThanQueried_CandidateModelStaysCanonical()
+    {
+        // build.model is free to differ from the model this run actually queried for (a bare
+        // "Insight" for a compound query, or the reverse); the candidate has to carry the queried
+        // model, since that's the model half of the "source:model" token RunSources.Key stamps on
+        // the run, and a mismatch here lets a posting silently escape the rank view's "still
+        // active" check and the diff's "gone" check.
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        int yearMax = DateTime.UtcNow.Year + 1;
+        string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
+                     $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+        const string body = """
+            {
+              "listings": [
+                {
+                  "vin": "19XZE4F52ME000999",
+                  "vdp_url": "https://marketcheck.com/listing/1",
+                  "price": 19394,
+                  "miles": 69599,
+                  "build": { "year": 2021, "make": "Honda", "model": "Insight EX", "trim": "EX" }
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new MarketcheckSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("Insight", candidate.Model);
         Assert.Equal(["Insight"], result.ModelsCovered);
     }
 

@@ -73,7 +73,6 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
         int? mileage = listing.TryGetProperty("miles", out JsonElement m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : null;
         decimal? price = listing.TryGetProperty("price", out JsonElement p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : null;
         string make = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("make", out JsonElement mk) ? mk.GetString() ?? query.Make : query.Make;
-        string model = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("model", out JsonElement md) ? md.GetString() ?? query.Model : query.Model;
         string? trim = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("trim", out JsonElement tr) ? tr.GetString() : null;
 
         if (string.IsNullOrWhiteSpace(vin))
@@ -101,7 +100,11 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
             Url = url,
             Year = year.Value,
             Make = make,
-            Model = model,
+            // The canonical model queried, not the API's own "build.model" field: VehicleEntity.Model
+            // has to match the model half of the "source:model" token ModelsCovered feeds into
+            // RunSources.Key, and the API is free to return a bare model ("Camry") for a query on a
+            // compound one ("Camry Hybrid").
+            Model = query.Model,
             Trim = trim,
             Price = price.Value,
             Mileage = mileage.Value,
