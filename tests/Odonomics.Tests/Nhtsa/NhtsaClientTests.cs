@@ -81,4 +81,59 @@ public class NhtsaClientTests
 
         Assert.Equal(31, count);
     }
+
+    [Fact]
+    public async Task GetComplaintCountAsync_RecordedFixtureWithZeroComplaints_ReturnsZero()
+    {
+        // NHTSA's complaintsByVehicle endpoint carries the same quirk as recallsByVehicle: a
+        // brand-new model year with zero complaints on file comes back as HTTP 400 with a perfectly
+        // valid "count":0 body. This fixture was recorded from exactly that case (2026 Toyota
+        // Corolla Hybrid); GetComplaintCountAsync must read the body rather than throw on the
+        // status code, the same way GetRecallsAsync already does.
+        string url = "https://api.nhtsa.gov/complaints/complaintsByVehicle?make=Toyota&model=Corolla Hybrid&modelYear=2026";
+        NhtsaClient client = BuildClient(new Dictionary<string, string>
+        {
+            [url] = await File.ReadAllTextAsync(FixturePath("complaints-toyota-corolla-hybrid-2026-zero.json")),
+        });
+
+        int count = await client.GetComplaintCountAsync("Toyota", "Corolla Hybrid", 2026, CancellationToken.None);
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public async Task GetSafetyRatingsAsync_RecordedFixture_ParsesEveryCategory()
+    {
+        string lookupUrl = "https://api.nhtsa.gov/SafetyRatings/modelyear/2020/make/Honda/model/Insight";
+        string detailUrl = "https://api.nhtsa.gov/SafetyRatings/VehicleId/14485";
+        NhtsaClient client = BuildClient(new Dictionary<string, string>
+        {
+            [lookupUrl] = await File.ReadAllTextAsync(FixturePath("safety-ratings-lookup-honda-insight-2020.json")),
+            [detailUrl] = await File.ReadAllTextAsync(FixturePath("safety-ratings-detail-14485.json")),
+        });
+
+        SafetyRatingsResult result = await client.GetSafetyRatingsAsync("Honda", "Insight", 2020, CancellationToken.None);
+
+        Assert.Equal(5, result.OverallRating);
+        Assert.Equal(5, result.FrontRating);
+        Assert.Equal(5, result.SideRating);
+        Assert.Equal(5, result.RolloverRating);
+        Assert.Null(result.ErrorText);
+        Assert.Contains("INSIGHT", result.VehicleDescription);
+    }
+
+    [Fact]
+    public async Task GetSafetyRatingsAsync_RecordedFixtureWithNoVehicleOnFile_ReturnsErrorTextNoStars()
+    {
+        string lookupUrl = "https://api.nhtsa.gov/SafetyRatings/modelyear/1988/make/Yugo/model/GV";
+        NhtsaClient client = BuildClient(new Dictionary<string, string>
+        {
+            [lookupUrl] = await File.ReadAllTextAsync(FixturePath("safety-ratings-lookup-no-results.json")),
+        });
+
+        SafetyRatingsResult result = await client.GetSafetyRatingsAsync("Yugo", "GV", 1988, CancellationToken.None);
+
+        Assert.Null(result.OverallRating);
+        Assert.NotNull(result.ErrorText);
+    }
 }
