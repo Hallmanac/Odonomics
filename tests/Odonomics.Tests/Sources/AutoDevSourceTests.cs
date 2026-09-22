@@ -100,6 +100,42 @@ public class AutoDevSourceTests
     }
 
     [Fact]
+    public async Task RunAsync_ApiReturnsTheBaseGasModelForAHybridQuery_CandidateIsRejectedNotUpserted()
+    {
+        // auto.dev is free to return a plain "Camry" record for a "Camry Hybrid" query; that car
+        // is not a hybrid, and upserting it under the canonical "Camry Hybrid" model would let a
+        // gas car pass the scorer's target-model filter and get ranked with the hybrid's mpg and
+        // insurance figures.
+        ListingQuery query = new("Toyota", "Camry Hybrid", YearMin: 2018, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        const string body = """
+            {
+              "records": [
+                {
+                  "vin": "4T1G11AK5NU000111",
+                  "vdpUrl": "https://auto.dev/listing/2",
+                  "year": 2022,
+                  "make": "Toyota",
+                  "model": "Camry",
+                  "trim": "LE",
+                  "priceUnformatted": 21000,
+                  "mileageUnformatted": 30000
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Empty(result.Candidates);
+        Assert.Contains(result.Rejections, r => r.Contains("doesn't match the query"));
+        Assert.Equal(["Camry Hybrid"], result.ModelsCovered);
+    }
+
+    [Fact]
     public async Task RunAsync_CandidateOutsideMileageRange_IsRejectedNotUpserted()
     {
         // The fixture's third record is a 2022 with 84,595 miles; a max-mileage query of 50,000

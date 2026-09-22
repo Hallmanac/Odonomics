@@ -72,8 +72,10 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
             ? y.GetInt32() : null;
         int? mileage = listing.TryGetProperty("miles", out JsonElement m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : null;
         decimal? price = listing.TryGetProperty("price", out JsonElement p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : null;
-        string make = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("make", out JsonElement mk) ? mk.GetString() ?? query.Make : query.Make;
+        string? apiMake = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("make", out JsonElement mk) ? mk.GetString() : null;
+        string? apiModel = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("model", out JsonElement md) ? md.GetString() : null;
         string? trim = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("trim", out JsonElement tr) ? tr.GetString() : null;
+        string make = apiMake ?? query.Make;
 
         if (string.IsNullOrWhiteSpace(vin))
         {
@@ -93,6 +95,12 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
             return;
         }
 
+        if (!query.MatchesExtractedVehicle(apiMake, apiModel, trim))
+        {
+            result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, returned vehicle doesn't match the query ({vin}: {apiMake} {apiModel} {trim})");
+            return;
+        }
+
         result.Candidates.Add(new ListingCandidate
         {
             Vin = vin,
@@ -102,8 +110,10 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
             Make = make,
             // The canonical model queried, not the API's own "build.model" field: VehicleEntity.Model
             // has to match the model half of the "source:model" token ModelsCovered feeds into
-            // RunSources.Key, and the API is free to return a bare model ("Camry") for a query on a
-            // compound one ("Camry Hybrid").
+            // RunSources.Key. The API is free to return a bare model ("Camry") for a query on a
+            // compound one ("Camry Hybrid"), but MatchesExtractedVehicle above has already rejected
+            // any candidate that isn't actually this query's model, so stamping the canonical model
+            // here never mislabels a vehicle the API returned for a different reason.
             Model = query.Model,
             Trim = trim,
             Price = price.Value,
