@@ -173,7 +173,10 @@ public static class WalkCommand
 
         string[] hrefs = await page.EvaluateAsync<string[]>("() => Array.from(document.querySelectorAll('a')).map(a => a.href)");
         int linkPoolSize = maxDetailPages * site.DetailLinkOverfetchMultiplier;
-        List<string> candidateLinks = [.. hrefs.Where(h => site.DetailUrlPattern.IsMatch(h)).Distinct().Take(linkPoolSize)];
+        List<string> candidateLinks = [.. hrefs
+            .Where(h => site.DetailUrlPattern.IsMatch(h))
+            .DistinctBy(WalkSites.CanonicalDetailUrl)
+            .Take(linkPoolSize)];
         AnsiConsole.MarkupLineInterpolated($"found {candidateLinks.Count} detail link(s) to consider (cap {maxDetailPages} matching candidate(s))");
 
         async Task<DetailPageOutcome> VisitLinkAsync(string detailUrl, int i, CancellationToken ct)
