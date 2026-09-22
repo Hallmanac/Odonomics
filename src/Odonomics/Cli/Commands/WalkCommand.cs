@@ -88,8 +88,9 @@ public static class WalkCommand
 
         using IPlaywright playwright = await Playwright.CreateAsync();
         await using IBrowser browser = await playwright.Chromium.ConnectOverCDPAsync($"http://localhost:{ChromeLaunchLine.DebugPort}");
+        ICDPSession browserCdp = await browser.NewBrowserCDPSessionAsync();
         IBrowserContext context = browser.Contexts.FirstOrDefault() ?? await browser.NewContextAsync();
-        IPage page = context.Pages.FirstOrDefault() ?? await context.NewPageAsync();
+        IPage page = context.Pages.FirstOrDefault() ?? await BackgroundTabs.OpenAsync(browserCdp, context);
 
         string searchUrl = site.BuildSearchUrl(make, model, scenario.Zip, scenario.RadiusMiles);
         AnsiConsole.MarkupLineInterpolated($"opening search page for {make} {model} on {site.Name}");
@@ -119,7 +120,7 @@ public static class WalkCommand
             }
 
             string detailUrl = detailLinks[i];
-            IPage detailPage = await context.NewPageAsync();
+            IPage detailPage = await BackgroundTabs.OpenAsync(browserCdp, context);
             try
             {
                 await detailPage.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
