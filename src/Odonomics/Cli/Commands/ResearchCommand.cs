@@ -58,7 +58,7 @@ public static class ResearchCommand
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         var researchService = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient(secrets.MarketcheckApiKey, http));
 
-        var flagged = new List<(VehicleEntity Vehicle, IReadOnlyList<RedFlag> Flags)>();
+        var summaryEntries = new List<ResearchSummaryEntry>();
         int fullyResearched = 0;
         int partiallyResearched = 0;
         int unreachable = 0;
@@ -76,10 +76,8 @@ public static class ResearchCommand
 
                 decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
                 IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
-                if (redFlags.Count > 0)
-                {
-                    flagged.Add((vehicle, redFlags));
-                }
+                summaryEntries.Add(new ResearchSummaryEntry(
+                    vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Vin, [.. redFlags.Select(f => f.ShortTag)]));
 
                 bool anyPieceFailed = research.Recalls.CouldNotFetchReason is not null
                     || research.Complaints.CouldNotFetchReason is not null
@@ -102,6 +100,7 @@ public static class ResearchCommand
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 unreachable++;
+                summaryEntries.Add(new ResearchSummaryEntry(vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Vin, ["unreachable"]));
                 AnsiConsole.MarkupLineInterpolated($"[red]{label}: could not be reached ({ex.Message})[/]");
             }
 
@@ -115,22 +114,7 @@ public static class ResearchCommand
         AnsiConsole.MarkupLineInterpolated($"{fullyResearched} fully researched, {partiallyResearched} partially researched, {unreachable} unreachable");
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLineInterpolated($"[bold]Red flags ({flagged.Count} of {vehicles.Count} researched)[/]");
-        if (flagged.Count == 0)
-        {
-            AnsiConsole.MarkupLine("  none found");
-        }
-        else
-        {
-            foreach ((VehicleEntity vehicle, IReadOnlyList<RedFlag> flags) in flagged)
-            {
-                AnsiConsole.MarkupLineInterpolated($"  {vehicle.Vin} ({vehicle.Year} {vehicle.Make} {vehicle.Model}):");
-                foreach (RedFlag flag in flags)
-                {
-                    AnsiConsole.MarkupLineInterpolated($"    [red]- {flag.Detail}[/]");
-                }
-            }
-        }
+        ResearchSummaryRenderer.Render(AnsiConsole.Console, summaryEntries);
 
         return fullyResearched + partiallyResearched == 0 ? 1 : 0;
     }
