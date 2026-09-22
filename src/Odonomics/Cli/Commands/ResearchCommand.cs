@@ -83,7 +83,7 @@ public static class ResearchCommand
                 string flagSummary = redFlags.Count == 0 ? "no red flags" : $"{redFlags.Count} red flag(s)";
                 AnsiConsole.MarkupLineInterpolated($"{label}: {source}, {flagSummary}");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 failures++;
                 AnsiConsole.MarkupLineInterpolated($"[red]{label}: failed to research ({ex.Message})[/]");
