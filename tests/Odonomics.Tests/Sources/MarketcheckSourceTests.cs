@@ -46,6 +46,8 @@ public class MarketcheckSourceTests
         Assert.Equal(2021, candidate.Year);
         Assert.Equal("marketcheck", candidate.Source);
         Assert.Equal(["Insight"], result.ModelsCovered);
+        Assert.Equal("Driver's Mart Sanford", candidate.DealerName);
+        Assert.Equal("Sanford, FL", candidate.DealerLocation);
     }
 
     [Fact]

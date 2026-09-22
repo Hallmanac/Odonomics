@@ -72,6 +72,9 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
         string? apiModel = record.TryGetProperty("model", out JsonElement md) ? md.GetString() : null;
         string? trim = record.TryGetProperty("trim", out JsonElement tr) ? tr.GetString() : null;
         string make = apiMake ?? query.Make;
+        string? dealerName = record.TryGetProperty("dealerName", out JsonElement dn) ? dn.GetString() : null;
+        string? dealerCity = record.TryGetProperty("city", out JsonElement dc) ? dc.GetString() : null;
+        string? dealerState = record.TryGetProperty("state", out JsonElement ds) ? ds.GetString() : null;
 
         if (string.IsNullOrWhiteSpace(vin))
         {
@@ -114,6 +117,8 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
             Trim = trim,
             Price = price.Value,
             Mileage = mileage.Value,
+            DealerName = dealerName,
+            DealerLocation = DealerLocationFormat.Build(dealerCity, dealerState),
         });
     }
 }

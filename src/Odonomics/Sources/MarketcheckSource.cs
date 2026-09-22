@@ -76,6 +76,10 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
         string? apiModel = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("model", out JsonElement md) ? md.GetString() : null;
         string? trim = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("trim", out JsonElement tr) ? tr.GetString() : null;
         string make = apiMake ?? query.Make;
+        JsonElement dealerObj = listing.TryGetProperty("dealer", out JsonElement de) ? de : default;
+        string? dealerName = dealerObj.ValueKind == JsonValueKind.Object && dealerObj.TryGetProperty("name", out JsonElement dn) ? dn.GetString() : null;
+        string? dealerCity = dealerObj.ValueKind == JsonValueKind.Object && dealerObj.TryGetProperty("city", out JsonElement dc) ? dc.GetString() : null;
+        string? dealerState = dealerObj.ValueKind == JsonValueKind.Object && dealerObj.TryGetProperty("state", out JsonElement ds) ? ds.GetString() : null;
 
         if (string.IsNullOrWhiteSpace(vin))
         {
@@ -118,6 +122,8 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
             Trim = trim,
             Price = price.Value,
             Mileage = mileage.Value,
+            DealerName = dealerName,
+            DealerLocation = DealerLocationFormat.Build(dealerCity, dealerState),
         });
     }
 }

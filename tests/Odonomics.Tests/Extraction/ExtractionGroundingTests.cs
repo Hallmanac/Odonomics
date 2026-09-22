@@ -20,7 +20,7 @@ public class ExtractionGroundingTests
     [Fact]
     public void GroundInPageText_VinNotOnPage_DropsTheVinEvenThoughItHasVinShape()
     {
-        var extracted = new ExtractionResult("1HGCM82633A004352", 2020, "Honda", "Accord", null, 18000m, 45000);
+        var extracted = new ExtractionResult("1HGCM82633A004352", 2020, "Honda", "Accord", null, 18000m, 45000, null, null);
         string pageText = "2020 Honda Accord, one owner, $18,000, 45,000 miles. Call about financing.";
 
         ExtractionResult grounded = GroundInPageText(extracted, pageText);
@@ -31,7 +31,7 @@ public class ExtractionGroundingTests
     [Fact]
     public void GroundInPageText_VinOnPage_KeepsIt()
     {
-        var extracted = new ExtractionResult("1HGCM82633A004352", 2020, "Honda", "Accord", null, 18000m, 45000);
+        var extracted = new ExtractionResult("1HGCM82633A004352", 2020, "Honda", "Accord", null, 18000m, 45000, null, null);
         string pageText = "VIN: 1HGCM82633A004352. 2020 Honda Accord, $18,000, 45,000 miles.";
 
         ExtractionResult grounded = GroundInPageText(extracted, pageText);
@@ -42,7 +42,7 @@ public class ExtractionGroundingTests
     [Fact]
     public void GroundInPageText_PriceAndMileageOnSameLineSeparatedByASpace_KeepsBoth()
     {
-        var extracted = new ExtractionResult(null, 2020, "Honda", "Insight", "EX", 18500m, 45231);
+        var extracted = new ExtractionResult(null, 2020, "Honda", "Insight", "EX", 18500m, 45231, null, null);
         string pageText = "2020 Honda Insight EX $18,500 45,231 miles";
 
         ExtractionResult grounded = GroundInPageText(extracted, pageText);
@@ -54,7 +54,7 @@ public class ExtractionGroundingTests
     [Fact]
     public void GroundInPageText_HyphenJoinedPhoneNumber_DoesNotGroundAFabricatedPriceAgainstIt()
     {
-        var extracted = new ExtractionResult(null, 2020, "Honda", "Insight", null, 4567m, null);
+        var extracted = new ExtractionResult(null, 2020, "Honda", "Insight", null, 4567m, null, null, null);
         string pageText = "2020 Honda Insight. Call the dealer at (555) 123-4567 for details.";
 
         ExtractionResult grounded = GroundInPageText(extracted, pageText);
@@ -65,11 +65,34 @@ public class ExtractionGroundingTests
     [Fact]
     public void GroundInPageText_HyphenJoinedZipPlusFour_DoesNotGroundAFabricatedMileageAgainstIt()
     {
-        var extracted = new ExtractionResult(null, 2020, "Honda", "Insight", null, null, 1234);
+        var extracted = new ExtractionResult(null, 2020, "Honda", "Insight", null, null, 1234, null, null);
         string pageText = "2020 Honda Insight, located at 90210-1234.";
 
         ExtractionResult grounded = GroundInPageText(extracted, pageText);
 
         Assert.Null(grounded.Mileage);
+    }
+
+    [Fact]
+    public void GroundInPageText_DealerNameNotOnPage_DropsIt()
+    {
+        var extracted = new ExtractionResult(null, 2020, "Honda", "Insight", null, 18000m, 45000, "Holler Honda", null);
+        string pageText = "2020 Honda Insight, $18,000, 45,000 miles.";
+
+        ExtractionResult grounded = GroundInPageText(extracted, pageText);
+
+        Assert.Null(grounded.DealerName);
+    }
+
+    [Fact]
+    public void GroundInPageText_DealerNameAndLocationOnPage_KeepsBoth()
+    {
+        var extracted = new ExtractionResult(null, 2020, "Honda", "Insight", null, 18000m, 45000, "Holler Honda", "Winter Park, FL");
+        string pageText = "2020 Honda Insight, $18,000, 45,000 miles. Sold by Holler Honda in Winter Park, FL.";
+
+        ExtractionResult grounded = GroundInPageText(extracted, pageText);
+
+        Assert.Equal("Holler Honda", grounded.DealerName);
+        Assert.Equal("Winter Park, FL", grounded.DealerLocation);
     }
 }
