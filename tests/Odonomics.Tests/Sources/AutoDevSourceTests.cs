@@ -1,3 +1,4 @@
+using Odonomics.Ledger;
 using Odonomics.Sources;
 using Odonomics.Tests.TestSupport;
 
@@ -59,6 +60,43 @@ public class AutoDevSourceTests
         Assert.False(result.CouldNotRun);
         Assert.Empty(result.ModelsCovered);
         Assert.Contains(result.Rejections, r => r.Contains("HTTP 429"));
+    }
+
+    [Fact]
+    public async Task RunAsync_ApiReturnsADifferentModelStringThanQueried_CandidateModelStaysCanonical()
+    {
+        // The API is free to return its own "model" field ("Insight" for a query on "Insight EX",
+        // or vice versa); the candidate must carry the model this run actually queried for, since
+        // that's the model half of the "source:model" token RunSources.Key stamps on the run, and a
+        // mismatch here is exactly what lets a posting silently escape both the rank view's
+        // "still active" check and the diff's "gone" check.
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        const string body = """
+            {
+              "records": [
+                {
+                  "vin": "19XZE4F52ME000999",
+                  "vdpUrl": "https://auto.dev/listing/1",
+                  "year": 2021,
+                  "make": "Honda",
+                  "model": "Insight EX",
+                  "trim": "EX",
+                  "priceUnformatted": 19393,
+                  "mileageUnformatted": 69599
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("Insight", candidate.Model);
+        Assert.Equal(["Insight"], result.ModelsCovered);
     }
 
     [Fact]
