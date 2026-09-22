@@ -61,8 +61,8 @@ Run from the repo root, either as `dotnet run --project src/Odonomics -- <comman
 
 ```
 odo search                          run Auto.dev and Marketcheck, upsert the ledger, print the diff
-odo walk cars.com|carvana [--model "Make Model"] [--max N]
-                                     an operator-assisted walk of one site (see below)
+odo walk [cars.com|carvana] [--model "Make Model"] [--max N]
+                                     an operator-assisted walk (see below)
 odo dealer grade [--all | <vin>]    look up each ungraded dealer's CarEdge grade (see below)
 odo rank [--budget N] [--term M]    score every vehicle in the ledger against the scenario
 odo show <vin> [--refresh]          NHTSA decode, recalls, complaints, safety ratings, Marketcheck
@@ -161,7 +161,9 @@ Launch line (also printed by `odo walk` itself, with your own data directory fil
 
 A bare quoted path needs PowerShell's `&` call operator to run at all; cmd runs it either way. `odo walk` itself prints all four forms (Chrome and Edge, PowerShell and cmd) on Windows, and both browsers' lines on macOS and Linux, when it can't find one listening.
 
-Leave that window open; `odo walk cars.com` or `odo walk carvana` then visits one search page, scrolls and dwells like a person, and opens a capped number of detail pages with a random gap between each. Every detail tab opens as a CDP background target and closes the same way, so the browser stays out of the way on your desktop the whole time; it never comes to the front of your other windows. The one exception is a bot-defense challenge: the walk beeps and brings the challenged page to the front so you can solve it by hand, then puts your previous window back in front once you press Enter, and the walk itself goes back to running in the background.
+Leave that window open. A bare `odo walk` then walks the whole shortlist in one command: cars.com first, then carvana, and on each site every model in the scenario's `allowedModels`, in order, printing which site and model it's about to visit before each. `odo walk cars.com` or `odo walk carvana` narrows it to that one site (still every model); `--model "Make Model"` narrows either form to that one model exactly, matching the scenario's own casing case-insensitively. Every site-and-model pair visits one search page, scrolls and dwells like a person, and opens up to `--max` detail pages (10 by default) with a random gap between each; there's a further random gap before moving on to the next model and before moving on to the next site. Every detail tab opens as a CDP background target and closes the same way, so the browser stays out of the way on your desktop the whole time; it never comes to the front of your other windows. The one exception is a bot-defense challenge: the walk beeps and brings the challenged page to the front so you can solve it by hand, then puts your previous window back in front once you press Enter, and the walk itself goes back to running in the background.
+
+`--max` caps detail pages per site-and-model pair, not per run, so a bare walk across two sites and four models can still open up to 10 detail pages on each of the eight pairs. A pair's own coverage is only stamped on the run once that pair's walk actually finishes; a pair that errors (a page that never loads, a site that fails outright) is reported inline and the walk moves on to the next pair rather than aborting the whole run, and a walk interrupted partway through (Ctrl-C, a crash) leaves the pairs that already finished marked covered and the rest untouched. At the end, a summary table lists, per site and model, how many detail pages were visited, how many candidates were upserted, and how many were dropped for having no VIN, followed by the usual new/price-dropped/gone diff for the whole run.
 
 ## Dealer grades
 
