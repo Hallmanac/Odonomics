@@ -223,4 +223,77 @@ public class LedgerDiffServiceTests
 
         Assert.Empty(diff.Gone);
     }
+
+    [Fact]
+    public async Task ComputeAsync_VinRelistedUnderADifferentUrl_IsNeverReportedGone()
+    {
+        // The exact shape of the 2026-09-22 run gap: a VIN's old posting URL goes untouched (the
+        // listing moved, or the site's per-run query string changed before URL canonicalization),
+        // but the same VIN is sighted again this run under a second URL. It must show as new (the
+        // fresh posting), never as gone.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/b", "cars.com"), run2, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+
+        Assert.Empty(diff.Gone);
+        NewPostingEntry added = Assert.Single(diff.New);
+        Assert.Equal("1HGCM82633A004352", added.Vin);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_VinReachedTheLedgerThroughTwoPostingsInOneRun_AppearsOnceUnderNew()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/b", "cars.com"), run1, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run1, CancellationToken.None);
+
+        NewPostingEntry added = Assert.Single(diff.New);
+        Assert.Equal("1HGCM82633A004352", added.Vin);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_VinGoneUnderTwoStalePostings_AppearsOnceUnderGone()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/b", "cars.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal("1HGCM82633A004352", gone.Vin);
+    }
 }

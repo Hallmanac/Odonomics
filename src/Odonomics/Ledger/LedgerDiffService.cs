@@ -37,8 +37,14 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
 
         var newEntries = new List<NewPostingEntry>();
         var priceDrops = new List<PriceDropEntry>();
+        var newEntryVins = new HashSet<string>();
+        var priceDropVins = new HashSet<string>();
 
-        foreach (PostingEntity posting in touchedThisRun)
+        // Ordered by Id (insertion order) so that when a VIN reached the ledger through two
+        // postings touched in the same run (two detail links, two dealers cross-listing the same
+        // car), the entry that survives dedup below is the one this run saw first, not whichever
+        // the query happened to return last.
+        foreach (PostingEntity posting in touchedThisRun.OrderBy(p => p.Id))
         {
             VehicleEntity vehicle = posting.Vehicle ?? throw new InvalidOperationException($"posting {posting.Id} has no vehicle");
             List<PriceObservationEntity> observations = [.. posting.PriceObservations.OrderBy(o => o.ObservedAt)];
@@ -46,7 +52,11 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
 
             if (posting.FirstSeen == currentRun.StartedAt)
             {
-                newEntries.Add(new NewPostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, currentPrice));
+                if (newEntryVins.Add(vehicle.Vin))
+                {
+                    newEntries.Add(new NewPostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, currentPrice));
+                }
+
                 continue;
             }
 
@@ -54,7 +64,8 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             // newer of the two observations; otherwise the price was already reported dropped on
             // whichever earlier run actually saw it change, and repeating it here would be stale
             // news every run after until the price moves again.
-            if (observations.Count >= 2 && observations[^1].ObservedAt == currentRun.StartedAt && observations[^2].Price > currentPrice)
+            if (observations.Count >= 2 && observations[^1].ObservedAt == currentRun.StartedAt && observations[^2].Price > currentPrice
+                && priceDropVins.Add(vehicle.Vin))
             {
                 priceDrops.Add(new PriceDropEntry(
                     vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url,
@@ -62,12 +73,20 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             }
         }
 
+        // A VIN sighted anywhere this run, under any posting, is never "gone" even if the specific
+        // posting that used to carry it went untouched: a relisted URL, a second dealer's listing,
+        // or (before URL canonicalization) a per-run query-string change all leave the old posting
+        // stale while the vehicle itself is still on the market. See the "New" entries above for
+        // where that fresh sighting itself gets reported.
+        var vinsSightedThisRun = new HashSet<string>(touchedThisRun.Select(p => p.VehicleVin));
+
         string[] tokens = RunSources.Split(currentRun);
         List<RunEntity> allRuns = await db.Runs.ToListAsync(cancellationToken);
         List<RunEntity> priorRuns = [.. allRuns.Where(r => r.Id != currentRun.Id && r.StartedAt < currentRun.StartedAt)];
         Dictionary<string, DateTimeOffset> previousCoverageBySource = RunSources.LatestCoverageBySource(priorRuns);
 
         var gone = new List<GonePostingEntry>();
+        var goneVins = new HashSet<string>();
         foreach (string token in tokens)
         {
             if (!previousCoverageBySource.TryGetValue(token, out DateTimeOffset previousCoverage))
@@ -80,11 +99,17 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                 .Include(p => p.Vehicle)
                 .Include(p => p.PriceObservations)
                 .Where(p => p.Source == source && p.Vehicle!.Model == model && p.LastSeen == previousCoverage)
+                .OrderBy(p => p.Id)
                 .ToListAsync(cancellationToken);
 
             foreach (PostingEntity posting in stillMarkedFromPreviousCoverage)
             {
                 VehicleEntity vehicle = posting.Vehicle ?? throw new InvalidOperationException($"posting {posting.Id} has no vehicle");
+                if (vinsSightedThisRun.Contains(vehicle.Vin) || !goneVins.Add(vehicle.Vin))
+                {
+                    continue;
+                }
+
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
                 gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice));
             }
