@@ -61,7 +61,8 @@ Run from the repo root, either as `dotnet run --project src/Odonomics -- <comman
 
 ```
 odo search                          run Auto.dev and Marketcheck, upsert the ledger, print the diff
-odo walk cars.com|carvana [--max N] an operator-assisted walk of one site (see below)
+odo walk cars.com|carvana [--model "Make Model"] [--max N]
+                                     an operator-assisted walk of one site (see below)
 odo rank [--budget N] [--term M]    score every vehicle in the ledger against the scenario
 odo show <vin>                      NHTSA decode, recalls, complaints, postings, notes, finalist status
 odo note <vin> "<text>"             attach a free-text note to a vehicle

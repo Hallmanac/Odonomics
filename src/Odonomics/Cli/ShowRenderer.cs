@@ -22,7 +22,7 @@ public static class ShowRenderer
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLineInterpolated($"[bold]Open recalls ({recalls.Count})[/]");
+        AnsiConsole.MarkupLineInterpolated($"[bold]Recalls, remedy status unknown ({recalls.Count})[/]");
         foreach (RecallEntry recall in recalls)
         {
             AnsiConsole.MarkupLineInterpolated($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component}");
