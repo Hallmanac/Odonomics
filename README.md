@@ -204,6 +204,8 @@ from F-range-graded dealers under its own warning heading, still ranked, never h
 
 `scenarios/daughter.json` is the shipped scenario: target models, hard filters, and every cost assumption (APR, gas price, insurance, mpg, fees, residual value, and so on), each either a single pinned value or a loose min/max range. A loose input makes every cost line in `odo rank` and `odo show` a band instead of a point. Edit the file directly; there is no `odo scenario set` in v0.
 
+`hybridOnlyFromModelYear` is an optional map, keyed the same way as `mpgByModel` and `insuranceMonthlyByModel` ("Make Model", e.g. `"Toyota Camry Hybrid"`), naming the model year a base model stopped shipping a gas-only trim. A candidate for that model at or above the named year matches this scenario's hybrid model even when its own listing text never says "Hybrid": Toyota dropped the gas-only Camry for model year 2025, so the shipped scenario ships `"Toyota Camry Hybrid": 2025`, and a plain "2025 Camry SE" candidate is kept and scored as a Camry Hybrid instead of dropped as a non-matching gas trim. A candidate below the named year, or a model with no rule at all, is still rejected unless its own text says "Hybrid", same as before this existed. `ScenarioLoader` rejects a scenario file whose key isn't one of `filters.allowedModels` or whose value isn't a four-digit year.
+
 ## Development
 
 ```
