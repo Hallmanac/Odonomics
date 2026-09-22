@@ -148,6 +148,8 @@ public static class ShowRenderer
         }
 
         string label = dealer.Grade is null ? $"{dealer.Name} (ungraded)" : $"{dealer.Name} ({dealer.Grade})";
-        return dealer.Grade == "F" && dealer.GradeReason is not null ? $"{label}: {dealer.GradeReason}" : label;
+        return dealer.Grade is not null && dealer.Grade.StartsWith('F') && dealer.GradeReason is not null
+            ? $"{label}: {dealer.GradeReason}"
+            : label;
     }
 }

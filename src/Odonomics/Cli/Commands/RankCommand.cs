@@ -41,7 +41,7 @@ public static class RankCommand
                 Mileage = vehicle.Mileage,
                 LowestCurrentPrice = lowestCurrentPrice,
                 DealerGrade = DealerGradeSummary(vehicle),
-                OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade == "F"),
+                OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade?.StartsWith('F') == true),
             };
             scores.Add(Scorer.Score(forScoring, scenario));
             research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), lowestCurrentPrice);
