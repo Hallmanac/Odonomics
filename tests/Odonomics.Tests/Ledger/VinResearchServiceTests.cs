@@ -30,7 +30,7 @@ public class VinResearchServiceTests
     [Fact]
     public void NeedsRefresh_RecentRecord_ReturnsFalse()
     {
-        var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "", ResearchedAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "", ResearchedAt = DateTimeOffset.UtcNow.AddDays(-1), HistoryRawJson = "[]" };
 
         Assert.False(VinResearchService.NeedsRefresh(record, refresh: false));
     }
@@ -38,7 +38,7 @@ public class VinResearchServiceTests
     [Fact]
     public void NeedsRefresh_StaleRecord_ReturnsTrue()
     {
-        var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "", ResearchedAt = DateTimeOffset.UtcNow.AddDays(-8) };
+        var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "", ResearchedAt = DateTimeOffset.UtcNow.AddDays(-8), HistoryRawJson = "[]" };
 
         Assert.True(VinResearchService.NeedsRefresh(record, refresh: false));
     }
@@ -46,9 +46,17 @@ public class VinResearchServiceTests
     [Fact]
     public void NeedsRefresh_RefreshFlagOnRecentRecord_ReturnsTrue()
     {
-        var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "", ResearchedAt = DateTimeOffset.UtcNow.AddHours(-1) };
+        var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "", ResearchedAt = DateTimeOffset.UtcNow.AddHours(-1), HistoryRawJson = "[]" };
 
         Assert.True(VinResearchService.NeedsRefresh(record, refresh: true));
+    }
+
+    [Fact]
+    public void NeedsRefresh_RecentRecordWithoutHistory_ReturnsTrue()
+    {
+        var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "", ResearchedAt = DateTimeOffset.UtcNow.AddHours(-1), HistoryRawJson = null };
+
+        Assert.True(VinResearchService.NeedsRefresh(record, refresh: false));
     }
 
     [Fact]

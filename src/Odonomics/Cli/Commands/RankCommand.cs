@@ -50,8 +50,9 @@ public static class RankCommand
 
     private static ResearchStatus ResearchStatusFor(VinRecordEntity? record, decimal? currentPrice)
     {
-        if (record?.ResearchedAt is not DateTimeOffset researchedAt)
+        if (record?.ResearchedAt is not DateTimeOffset researchedAt || record.HistoryRawJson is null)
         {
+            // Null HistoryRawJson means the history-based red flags were never evaluated, so this isn't "clean".
             return new ResearchStatus(Researched: false, ResearchedAt: null, HasRedFlag: false);
         }
 

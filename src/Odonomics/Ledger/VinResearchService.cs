@@ -22,15 +22,20 @@ public sealed record VinResearchResult(
 public sealed record ResearchStatus(bool Researched, DateTimeOffset? ResearchedAt, bool HasRedFlag);
 
 /// <summary>Fetches and caches the research lookup `odo show` and `odo research` both run: NHTSA
-/// decode, recalls, complaints, and safety ratings, plus the Marketcheck VIN history. Refreshed only
-/// on request or when the cached record is older than <see cref="RefreshInterval"/>, per the seven-day
-/// refresh rule.</summary>
+/// decode, recalls, complaints, and safety ratings, plus the Marketcheck VIN history. Refreshed on
+/// request, when the cached record is older than <see cref="RefreshInterval"/> (the seven-day refresh
+/// rule), or when the Marketcheck VIN history was never successfully fetched (a missing key or a
+/// failed call leaves <see cref="VinRecordEntity.HistoryRawJson"/> null), so a batch retries that half
+/// of the research on its own rather than waiting out the window with no history ever fetched.</summary>
 public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClient marketcheck)
 {
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromDays(7);
 
     public static bool NeedsRefresh(VinRecordEntity? record, bool refresh) =>
-        refresh || record?.ResearchedAt is not DateTimeOffset researchedAt || DateTimeOffset.UtcNow - researchedAt > RefreshInterval;
+        refresh
+        || record?.ResearchedAt is not DateTimeOffset researchedAt
+        || record.HistoryRawJson is null
+        || DateTimeOffset.UtcNow - researchedAt > RefreshInterval;
 
     /// <summary>Fetches fresh data from NHTSA and Marketcheck and persists it onto
     /// <paramref name="vehicle"/>'s <see cref="VinRecordEntity"/>, creating one if this is the

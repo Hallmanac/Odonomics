@@ -40,7 +40,7 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
             int? daysOnMarket = await FetchCurrentDaysOnMarketAsync(vin, cancellationToken);
             return new VinHistoryResult(priorListings, daysOnMarket, null);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new VinHistoryResult([], null, ex.Message);
         }
@@ -49,7 +49,7 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
     private async Task<IReadOnlyList<VinHistoryListing>> FetchPriorListingsAsync(string vin, CancellationToken cancellationToken)
     {
         string url = $"https://mc-api.marketcheck.com/v2/history/car/{Uri.EscapeDataString(vin)}?api_key={apiKey}";
-        HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
+        using HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
         string body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -77,7 +77,7 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
     private async Task<int?> FetchCurrentDaysOnMarketAsync(string vin, CancellationToken cancellationToken)
     {
         string url = $"https://mc-api.marketcheck.com/v2/search/car/active?api_key={apiKey}&vin={Uri.EscapeDataString(vin)}";
-        HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
+        using HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
         string body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {

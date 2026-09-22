@@ -89,16 +89,17 @@ VIN, on top of the NHTSA decode/recalls/complaints `odo show` has always fetched
   no key set, this degrades to a "could not fetch" line rather than failing the command.
 
 Both are cached on the vehicle's ledger row with a fetched-at stamp, and are only re-fetched when
-the cached research is more than seven days old or `--refresh` is passed; a `show`/`research` inside
-that window reads the cache and makes no network call.
+the cached research is more than seven days old, `--refresh` is passed, or the Marketcheck VIN
+history was never successfully fetched (a missing key or a failed call); a `show`/`research` inside
+the window with a fetched history reads the cache and makes no network call.
 
 `odo research` runs that lookup for many vehicles in one go, with a short pause between each so as
 not to hammer either API, printing one line per vehicle as it finishes (`researched` or `cached`,
 and a red-flag count) and a summary of every flagged vehicle at the end. With no VINs given, it
 covers every vehicle in the ledger that passes the scenario's hard filters (allowed model, minimum
 year, maximum mileage, not new stock; a vehicle with no current asking price is still eligible) and
-hasn't been researched in the last seven days. A single vehicle's failed lookup is reported inline
-and the rest of the batch continues.
+needs a refresh (see above: stale, never refreshed, or missing its Marketcheck history). A single
+vehicle's failed lookup is reported inline and the rest of the batch continues.
 
 The red-flags section (shown by both `show` and `research`) lists, with a reason, anything the data
 shows:
