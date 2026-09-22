@@ -14,44 +14,42 @@ public sealed record WalkSite(
     int DetailLinkOverfetchMultiplier = 1);
 
 /// <summary>Search-URL shapes and detail-link patterns for the two v0 walk targets, ported from
-/// spike/Sources/PageWalkSources.cs.</summary>
+/// spike/Sources/PageWalkSources.cs. Neither site has a confirmed model facet that separates a
+/// hybrid or plug-in variant from its base model: cars.com's underscored
+/// "toyota-corolla_hybrid" looked like a fix because that exact value appears in the site's own
+/// model-facet JSON, but the site's own recorded response to that query still resolved back to
+/// plain "toyota-corolla" (SPIKE-FINDINGS.md's "sites silently ignore a model facet they don't
+/// recognize" surprise has the detail). So every query here asks for the base model only and
+/// leans on <see cref="WalkSite.DetailLinkOverfetchMultiplier"/> plus
+/// <see cref="Odonomics.Sources.ListingQuery.MatchesExtractedVehicle"/> to fill the per-pair cap
+/// with real candidates instead.</summary>
 public static class WalkSites
 {
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");
 
-    /// <summary>Cars.com's own model facet value: the make and model joined by a hyphen, with
-    /// every space inside the model itself turned into an underscore rather than a hyphen. This
-    /// is how cars.com separates a hybrid variant from its gas counterpart in the models[] filter
-    /// (confirmed against a recorded cars.com search page's own model-facet list: "Corolla
-    /// Hybrid" carries the value "toyota-corolla_hybrid", distinct from plain "Corolla"'s
-    /// "toyota-corolla") and how it separates "Prius Prime" from "Prius" the same way. Stripping
-    /// the qualifier instead, as this used to do, ticks only the base model's box and cars.com
-    /// shows that model's inventory with every variant mixed in.</summary>
-    private static string CarsComModelSlug(string make, string model) =>
-        $"{Slugify(make)}-{model.ToLowerInvariant().Replace(" ", "_")}";
+    private static string BaseModelSlug(string model)
+    {
+        int hybridIndex = model.IndexOf(" Hybrid", StringComparison.OrdinalIgnoreCase);
+        return Slugify(hybridIndex >= 0 ? model[..hybridIndex] : model);
+    }
 
     public static readonly WalkSite CarsCom = new(
         "cars.com",
         (make, model, zip, radius) =>
         {
             string makeSlug = Slugify(make);
-            string modelSlug = CarsComModelSlug(make, model);
+            string modelSlug = $"{makeSlug}-{BaseModelSlug(model)}";
             return $"https://www.cars.com/shopping/results/?makes[]={makeSlug}&models[]={modelSlug}" +
                    $"&maximum_distance={radius}&zip={zip}&stock_type=used";
         },
-        new Regex("/vehicledetail/", RegexOptions.IgnoreCase));
+        new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
+        DetailLinkOverfetchMultiplier: 3);
 
-    /// <summary>Carvana's search URL has no confirmed model facet that separates a hybrid variant
-    /// from its gas counterpart (its own bot defenses block probing for one), so the walk still
-    /// asks for the base model only and relies on <see cref="DetailLinkOverfetchMultiplier"/> plus
-    /// the existing model-match rejection to fill the per-pair cap with real candidates.</summary>
     public static readonly WalkSite Carvana = new(
         "carvana",
         (make, model, zip, _) =>
         {
-            int hybridIndex = model.IndexOf(" Hybrid", StringComparison.OrdinalIgnoreCase);
-            string baseModel = hybridIndex >= 0 ? model[..hybridIndex] : model;
-            string modelSlug = $"{Slugify(make)}-{Slugify(baseModel)}";
+            string modelSlug = $"{Slugify(make)}-{BaseModelSlug(model)}";
             return $"https://www.carvana.com/cars/{modelSlug}?zip={zip}";
         },
         new Regex("/vehicle/", RegexOptions.IgnoreCase),
