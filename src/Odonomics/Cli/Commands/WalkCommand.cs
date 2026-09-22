@@ -170,56 +170,47 @@ public static class WalkCommand
         await recorder.WriteAsync("search.txt", searchBodyText, cancellationToken);
 
         string[] hrefs = await page.EvaluateAsync<string[]>("() => Array.from(document.querySelectorAll('a')).map(a => a.href)");
-        List<string> detailLinks = [.. hrefs.Where(h => site.DetailUrlPattern.IsMatch(h)).Distinct().Take(maxDetailPages)];
-        AnsiConsole.MarkupLineInterpolated($"found {detailLinks.Count} detail link(s) to visit");
+        int linkPoolSize = maxDetailPages * site.DetailLinkOverfetchMultiplier;
+        List<string> candidateLinks = [.. hrefs.Where(h => site.DetailUrlPattern.IsMatch(h)).Distinct().Take(linkPoolSize)];
+        AnsiConsole.MarkupLineInterpolated($"found {candidateLinks.Count} detail link(s) to consider (cap {maxDetailPages} matching candidate(s))");
 
-        int upserted = 0;
-        int droppedNoVin = 0;
-        for (int i = 0; i < detailLinks.Count; i++)
+        async Task<DetailPageOutcome> VisitLinkAsync(string detailUrl, int i, CancellationToken ct)
         {
-            if (i > 0)
-            {
-                TimeSpan gap = pacing.RandomDetailGap();
-                await Task.Delay(gap, cancellationToken);
-            }
-
-            string detailUrl = detailLinks[i];
             IPage? detailPage = null;
             try
             {
                 detailPage = await BackgroundTabs.OpenAsync(browserCdp, context);
                 await detailPage.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-                await CdpConnection.HandleChallengeIfPresentAsync(detailPage, cancellationToken);
+                await CdpConnection.HandleChallengeIfPresentAsync(detailPage, ct);
                 await detailPage.EvaluateAsync("() => window.scrollBy(0, window.innerHeight)");
-                await Task.Delay(pacing.RandomScrollPause(), cancellationToken);
+                await Task.Delay(pacing.RandomScrollPause(), ct);
 
                 string bodyText = await detailPage.EvaluateAsync<string>("() => document.body.innerText");
-                await recorder.WriteAsync($"detail-{i + 1}.txt", bodyText, cancellationToken);
+                await recorder.WriteAsync($"detail-{i + 1}.txt", bodyText, ct);
 
-                ExtractionOutcome outcome = await extraction.ExtractAsync(bodyText, cancellationToken);
+                ExtractionOutcome outcome = await extraction.ExtractAsync(bodyText, ct);
                 if (outcome.Error is not null || outcome.Result is null)
                 {
                     AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: extraction failed ({outcome.Error})[/]");
-                    continue;
+                    return DetailPageOutcome.Failed;
                 }
 
                 if (string.IsNullOrWhiteSpace(outcome.Result.Vin))
                 {
-                    droppedNoVin++;
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, no VIN found on the page[/]");
-                    continue;
+                    return DetailPageOutcome.NoVin;
                 }
 
                 if (outcome.Result.Year is null || outcome.Result.Price is null || outcome.Result.Mileage is null)
                 {
                     AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, missing year/price/mileage ({outcome.Result.Vin})[/]");
-                    continue;
+                    return DetailPageOutcome.MissingFields;
                 }
 
                 if (!query.MatchesExtractedVehicle(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim))
                 {
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, doesn't match {make} {model} ({outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim})[/]");
-                    continue;
+                    return DetailPageOutcome.NotMatching;
                 }
 
                 var candidate = new ListingCandidate
@@ -244,12 +235,13 @@ public static class WalkCommand
                     DealerName = outcome.Result.DealerName,
                     DealerLocation = outcome.Result.DealerLocation,
                 };
-                await upsertService.UpsertAsync(candidate, currentRun, cancellationToken);
-                upserted++;
+                await upsertService.UpsertAsync(candidate, currentRun, ct);
+                return DetailPageOutcome.Upserted;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: failed to load ({ex.Message})[/]");
+                return DetailPageOutcome.Failed;
             }
             finally
             {
@@ -267,9 +259,16 @@ public static class WalkCommand
             }
         }
 
-        AnsiConsole.MarkupLineInterpolated($"{site.Name} / {make} {model}: upserted {upserted} vehicle(s), dropped {droppedNoVin} candidate(s) with no VIN");
+        DetailWalkTally tally = await WalkDetailWalk.RunAsync(
+            candidateLinks,
+            maxDetailPages,
+            VisitLinkAsync,
+            ct => Task.Delay(pacing.RandomDetailGap(), ct),
+            cancellationToken);
 
-        return new WalkPairOutcome(detailLinks.Count, upserted, droppedNoVin);
+        AnsiConsole.MarkupLineInterpolated($"{site.Name} / {make} {model}: upserted {tally.Upserted} vehicle(s), dropped {tally.DroppedNoVin} candidate(s) with no VIN");
+
+        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.DroppedNoVin);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
