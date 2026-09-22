@@ -1,4 +1,5 @@
 using Odonomics.Ledger;
+using Odonomics.Marketcheck;
 using Odonomics.Nhtsa;
 using Spectre.Console;
 
@@ -6,8 +7,10 @@ namespace Odonomics.Cli;
 
 public static class ShowRenderer
 {
-    public static void Render(VehicleEntity vehicle, VinDecodeResult decode, IReadOnlyList<RecallEntry> recalls, int complaintCount)
+    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<string> redFlags)
     {
+        (VinDecodeResult decode, IReadOnlyList<RecallEntry> recalls, int complaintCount, SafetyRatingsResult safety, VinHistoryResult history) = research;
+
         AnsiConsole.MarkupLineInterpolated($"[bold]{vehicle.Year} {vehicle.Make} {vehicle.Model} {vehicle.Trim}[/] ({vehicle.Vin})");
         AnsiConsole.MarkupLineInterpolated($"mileage: {vehicle.Mileage:N0}");
         AnsiConsole.MarkupLine(vehicle.FinalistMarkedAt is not null ? "[bold green]finalist[/]" : "not a finalist");
@@ -32,6 +35,70 @@ public static class ShowRenderer
         AnsiConsole.MarkupLineInterpolated($"[bold]Complaints for model year {vehicle.Year}: {complaintCount}[/]");
 
         AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]NHTSA safety ratings[/]");
+        if (safety.ErrorText is not null)
+        {
+            AnsiConsole.MarkupLineInterpolated($"  {safety.ErrorText}");
+        }
+        else
+        {
+            AnsiConsole.MarkupLineInterpolated($"  overall: {Stars(safety.OverallRating)}");
+            AnsiConsole.MarkupLineInterpolated($"  front crash: {Stars(safety.FrontRating)}");
+            AnsiConsole.MarkupLineInterpolated($"  side crash: {Stars(safety.SideRating)}");
+            AnsiConsole.MarkupLineInterpolated($"  rollover: {Stars(safety.RolloverRating)}");
+        }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Marketcheck VIN history[/]");
+        if (history.CouldNotFetchReason is not null)
+        {
+            AnsiConsole.MarkupLineInterpolated($"  could not fetch: {history.CouldNotFetchReason}");
+        }
+        else
+        {
+            AnsiConsole.MarkupLineInterpolated($"  days on market (current listing): {(history.CurrentListingDaysOnMarket is int dom ? dom.ToString("N0") : "(unknown)")}");
+            if (history.PriorListings.Count == 0)
+            {
+                AnsiConsole.MarkupLine("  no prior listings on file");
+            }
+            else
+            {
+                var historyTable = new Table { Border = TableBorder.Minimal };
+                historyTable.Width(80);
+                historyTable.AddColumn("Dealer");
+                historyTable.AddColumn("First");
+                historyTable.AddColumn("Last");
+                historyTable.AddColumn("Price");
+                historyTable.AddColumn("Miles");
+                foreach (VinHistoryListing listing in history.PriorListings.OrderBy(l => l.FirstSeen))
+                {
+                    historyTable.AddRow(
+                        Format.Cell(listing.Dealer ?? "(unknown)"),
+                        listing.FirstSeen?.ToString("yyyy-MM-dd") ?? "?",
+                        listing.LastSeen?.ToString("yyyy-MM-dd") ?? "?",
+                        listing.Price is decimal price ? Format.Money(price) : "?",
+                        listing.Mileage is int miles ? miles.ToString("N0") : "?");
+                }
+
+                AnsiConsole.Write(historyTable);
+            }
+        }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLineInterpolated($"[bold]Red flags ({redFlags.Count})[/]");
+        if (redFlags.Count == 0)
+        {
+            AnsiConsole.MarkupLine("  none found");
+        }
+        else
+        {
+            foreach (string flag in redFlags)
+            {
+                AnsiConsole.MarkupLineInterpolated($"  [red]- {flag}[/]");
+            }
+        }
+
+        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Postings[/]");
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
@@ -41,10 +108,10 @@ public static class ShowRenderer
         table.AddColumn("Price history");
         foreach (PostingEntity posting in vehicle.Postings)
         {
-            string history = string.Join(" -> ", posting.PriceObservations
+            string priceHistory = string.Join(" -> ", posting.PriceObservations
                 .OrderBy(o => o.ObservedAt)
                 .Select(o => Format.Money(o.Price)));
-            table.AddRow(Format.Cell(posting.Source), posting.FirstSeen.ToString("yyyy-MM-dd"), posting.LastSeen.ToString("yyyy-MM-dd"), Format.Cell(history));
+            table.AddRow(Format.Cell(posting.Source), posting.FirstSeen.ToString("yyyy-MM-dd"), posting.LastSeen.ToString("yyyy-MM-dd"), Format.Cell(priceHistory));
         }
 
         AnsiConsole.Write(table);
@@ -56,4 +123,6 @@ public static class ShowRenderer
             AnsiConsole.MarkupLineInterpolated($"  [[{note.CreatedAt:yyyy-MM-dd}]] {note.Text}");
         }
     }
+
+    private static string Stars(int? rating) => rating is int stars ? $"{stars}/5" : "(not rated)";
 }

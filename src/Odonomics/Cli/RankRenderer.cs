@@ -1,11 +1,12 @@
 using Odonomics.Domain;
+using Odonomics.Ledger;
 using Spectre.Console;
 
 namespace Odonomics.Cli;
 
 public static class RankRenderer
 {
-    public static void Render(IReadOnlyList<Score> scores, decimal? budget)
+    public static void Render(IReadOnlyList<Score> scores, decimal? budget, IReadOnlyDictionary<string, ResearchStatus> research)
     {
         List<Score> ranked = [];
         List<Score> overBudget = [];
@@ -43,19 +44,19 @@ public static class RankRenderer
         int ByTenYearAverage(Score a, Score b) => a.Cost!.TenYearAverageMonthly.Expected.CompareTo(b.Cost!.TenYearAverageMonthly.Expected);
         ranked.Sort(ByTenYearAverage);
 
-        RenderRanked($"Ranked ({ranked.Count})", ranked);
+        RenderRanked($"Ranked ({ranked.Count})", ranked, research);
 
         if (budget is decimal budgetValue && overBudget.Count > 0)
         {
             overBudget.Sort(ByTenYearAverage);
-            RenderRanked($"Over the ${budgetValue:N0} budget ({overBudget.Count})", overBudget);
+            RenderRanked($"Over the ${budgetValue:N0} budget ({overBudget.Count})", overBudget, research);
         }
 
         RenderInsuranceUnknown(insuranceUnknown);
         RenderExcluded(excluded);
     }
 
-    private static void RenderRanked(string heading, IReadOnlyList<Score> scores)
+    private static void RenderRanked(string heading, IReadOnlyList<Score> scores, IReadOnlyDictionary<string, ResearchStatus> research)
     {
         AnsiConsole.MarkupLine($"[bold]{heading}[/]");
         if (scores.Count == 0)
@@ -71,6 +72,7 @@ public static class RankRenderer
         table.AddColumn("Price");
         table.AddColumn("During-loan");
         table.AddColumn("10yr avg");
+        table.AddColumn("Research");
 
         foreach (Score score in scores)
         {
@@ -80,11 +82,19 @@ public static class RankRenderer
                 Format.Cell($"{score.Vehicle.Year} {score.Vehicle.MakeModel}"),
                 Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m),
                 Format.Band(cost.DuringLoanMonthly),
-                Format.Band(cost.TenYearAverageMonthly));
+                Format.Band(cost.TenYearAverageMonthly),
+                ResearchCell(research.GetValueOrDefault(score.Vehicle.Vin)));
         }
 
         AnsiConsole.Write(table);
     }
+
+    private static string ResearchCell(ResearchStatus? status) => status switch
+    {
+        null or { Researched: false } => Format.Cell("not researched"),
+        { HasRedFlag: true } => "[red]red flag[/]",
+        _ => "[green]clean[/]",
+    };
 
     private static void RenderInsuranceUnknown(IReadOnlyList<Score> scores)
     {

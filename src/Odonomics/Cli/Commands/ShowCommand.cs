@@ -1,14 +1,15 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Odonomics.Ledger;
+using Odonomics.Marketcheck;
 using Odonomics.Nhtsa;
+using Odonomics.Secrets;
 using Spectre.Console;
 
 namespace Odonomics.Cli.Commands;
 
 public static class ShowCommand
 {
-    public static async Task<int> RunAsync(string vin, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string vin, bool refresh, CancellationToken cancellationToken)
     {
         using OdonomicsDbContext db = LedgerFactory.Open();
 
@@ -24,31 +25,19 @@ public static class ShowCommand
             return 1;
         }
 
+        var secrets = new SecretResolver();
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        var nhtsa = new NhtsaClient(http);
+        var researchService = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient(secrets.MarketcheckApiKey, http));
 
-        VinDecodeResult decode = await nhtsa.DecodeVinAsync(vin, cancellationToken);
-        IReadOnlyList<RecallEntry> recalls = await nhtsa.GetRecallsAsync(vehicle.Make, vehicle.Model, vehicle.Year, cancellationToken);
-        int complaintCount = await nhtsa.GetComplaintCountAsync(vehicle.Make, vehicle.Model, vehicle.Year, cancellationToken);
+        VinResearchResult research = VinResearchService.NeedsRefresh(vehicle.VinRecord, refresh)
+            ? await researchService.RefreshAsync(db, vehicle, cancellationToken)
+            : VinResearchService.FromCached(vehicle.VinRecord!);
 
-        VinRecordEntity? record = vehicle.VinRecord;
-        if (record is null)
-        {
-            record = new VinRecordEntity { Vin = vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = JsonSerializer.Serialize(decode) };
-            db.VinRecords.Add(record);
-        }
-        else
-        {
-            record.DecodedAt = DateTimeOffset.UtcNow;
-            record.DecodeRawJson = JsonSerializer.Serialize(decode);
-        }
+        List<RunEntity> runs = await db.Runs.ToListAsync(cancellationToken);
+        decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, RunSources.LatestCoverageBySource(runs));
+        IReadOnlyList<string> redFlags = VinResearchService.RedFlags(research, currentPrice);
 
-        record.OpenRecallCount = recalls.Count;
-        record.RecallsRawJson = JsonSerializer.Serialize(recalls);
-        record.ComplaintCount = complaintCount;
-        await db.SaveChangesAsync(cancellationToken);
-
-        ShowRenderer.Render(vehicle, decode, recalls, complaintCount);
+        ShowRenderer.Render(vehicle, research, redFlags);
         return 0;
     }
 }
