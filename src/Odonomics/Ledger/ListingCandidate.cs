@@ -13,4 +13,6 @@ public sealed record ListingCandidate
     public string? Trim { get; init; }
     public required decimal Price { get; init; }
     public required int Mileage { get; init; }
+    public string? DealerName { get; init; }
+    public string? DealerLocation { get; init; }
 }

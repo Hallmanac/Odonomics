@@ -10,6 +10,7 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
     public DbSet<RunEntity> Runs => Set<RunEntity>();
     public DbSet<VinRecordEntity> VinRecords => Set<VinRecordEntity>();
     public DbSet<NoteEntity> Notes => Set<NoteEntity>();
+    public DbSet<DealerEntity> Dealers => Set<DealerEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,8 +26,14 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
         {
             entity.HasIndex(p => new { p.VehicleVin, p.Source, p.Url }).IsUnique();
             entity.HasMany(p => p.PriceObservations).WithOne(o => o.Posting).HasForeignKey(o => o.PostingId);
+            entity.HasOne(p => p.Dealer).WithMany(d => d.Postings).HasForeignKey(p => p.DealerId);
         });
 
         modelBuilder.Entity<VinRecordEntity>().HasKey(r => r.Vin);
+
+        modelBuilder.Entity<DealerEntity>(entity =>
+        {
+            entity.HasIndex(d => new { d.NormalizedName, d.NormalizedLocation }).IsUnique();
+        });
     }
 }

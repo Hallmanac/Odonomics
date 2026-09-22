@@ -31,9 +31,32 @@ public sealed class PostingEntity
     public required string Url { get; set; }
     public required DateTimeOffset FirstSeen { get; set; }
     public required DateTimeOffset LastSeen { get; set; }
+    public int? DealerId { get; set; }
 
     public VehicleEntity? Vehicle { get; set; }
+    public DealerEntity? Dealer { get; set; }
     public List<PriceObservationEntity> PriceObservations { get; set; } = [];
+}
+
+/// <summary>A selling dealer, keyed by its normalized name and location (see
+/// <see cref="DealerNormalizer"/>) so the same dealer named slightly differently across sources or
+/// runs still resolves to one row. <see cref="Grade"/>, <see cref="GradeReason"/>, and
+/// <see cref="GradeCheckedAt"/> come from `odo dealer grade`: <see cref="GradeCheckedAt"/> is
+/// stamped the moment CarEdge is checked regardless of whether it had a rating, which is what lets
+/// a dealer CarEdge has no rating for stay ungraded without being looked up again on every later
+/// run.</summary>
+public sealed class DealerEntity
+{
+    public int Id { get; set; }
+    public required string Name { get; set; }
+    public string? Location { get; set; }
+    public required string NormalizedName { get; set; }
+    public required string NormalizedLocation { get; set; }
+    public string? Grade { get; set; }
+    public string? GradeReason { get; set; }
+    public DateTimeOffset? GradeCheckedAt { get; set; }
+
+    public List<PostingEntity> Postings { get; set; } = [];
 }
 
 /// <summary>Append-only: one row per run where the price was observed, written only on the first

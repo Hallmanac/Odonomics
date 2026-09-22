@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Odonomics.Ledger;
 
@@ -10,9 +11,11 @@ using Odonomics.Ledger;
 namespace Odonomics.Ledger.Migrations
 {
     [DbContext(typeof(OdonomicsDbContext))]
-    partial class OdonomicsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922152642_AddDealers")]
+    partial class AddDealers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
@@ -207,9 +210,6 @@ namespace Odonomics.Ledger.Migrations
                     b.Property<int>("ComplaintCount")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("CurrentListingDaysOnMarket")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("DecodeRawJson")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -217,32 +217,11 @@ namespace Odonomics.Ledger.Migrations
                     b.Property<DateTimeOffset>("DecodedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("HistoryRawJson")
-                        .HasColumnType("TEXT");
-
                     b.Property<int>("OpenRecallCount")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("RecallsRawJson")
                         .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("ResearchedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("SafetyFrontRating")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("SafetyOverallRating")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("SafetyRawJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("SafetyRolloverRating")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("SafetySideRating")
-                        .HasColumnType("INTEGER");
 
                     b.HasKey("Vin");
 
