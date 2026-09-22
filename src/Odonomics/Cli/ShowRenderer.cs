@@ -9,7 +9,7 @@ public static class ShowRenderer
 {
     public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<string> redFlags)
     {
-        (VinDecodeResult decode, IReadOnlyList<RecallEntry> recalls, int complaintCount, SafetyRatingsResult safety, VinHistoryResult history) = research;
+        (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
         AnsiConsole.MarkupLineInterpolated($"[bold]{vehicle.Year} {vehicle.Make} {vehicle.Model} {vehicle.Trim}[/] ({vehicle.Vin})");
         AnsiConsole.MarkupLineInterpolated($"mileage: {vehicle.Mileage:N0}");
@@ -25,18 +25,38 @@ public static class ShowRenderer
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLineInterpolated($"[bold]Recalls, remedy status unknown ({recalls.Count})[/]");
-        foreach (RecallEntry recall in recalls)
+        if (recalls.CouldNotFetchReason is not null)
         {
-            AnsiConsole.MarkupLineInterpolated($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component}");
+            AnsiConsole.MarkupLine("[bold]Recalls[/]");
+            AnsiConsole.MarkupLineInterpolated($"  could not fetch: {recalls.CouldNotFetchReason}");
+        }
+        else
+        {
+            AnsiConsole.MarkupLineInterpolated($"[bold]Recalls, remedy status unknown ({recalls.Entries.Count})[/]");
+            foreach (RecallEntry recall in recalls.Entries)
+            {
+                AnsiConsole.MarkupLineInterpolated($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component}");
+            }
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLineInterpolated($"[bold]Complaints for model year {vehicle.Year}: {complaintCount}[/]");
+        if (complaints.CouldNotFetchReason is not null)
+        {
+            AnsiConsole.MarkupLine("[bold]Complaints[/]");
+            AnsiConsole.MarkupLineInterpolated($"  could not fetch: {complaints.CouldNotFetchReason}");
+        }
+        else
+        {
+            AnsiConsole.MarkupLineInterpolated($"[bold]Complaints for model year {vehicle.Year}: {complaints.Count}[/]");
+        }
 
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]NHTSA safety ratings[/]");
-        if (safety.ErrorText is not null)
+        if (safety.CouldNotFetchReason is not null)
+        {
+            AnsiConsole.MarkupLineInterpolated($"  could not fetch: {safety.CouldNotFetchReason}");
+        }
+        else if (safety.ErrorText is not null)
         {
             AnsiConsole.MarkupLineInterpolated($"  {safety.ErrorText}");
         }
