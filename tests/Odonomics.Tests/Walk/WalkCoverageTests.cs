@@ -24,7 +24,7 @@ public class WalkCoverageTests
             run,
             [SiteA, SiteB],
             ["Honda Insight", "Toyota Prius"],
-            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, 0)),
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0))),
             (_, _) => { },
             (_, _, _) => { },
             _ => Task.CompletedTask,
@@ -61,7 +61,7 @@ public class WalkCoverageTests
                     throw new OperationCanceledException(ct);
                 }
 
-                return Task.FromResult(new WalkPairOutcome(1, 1, 0));
+                return Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0)));
             },
             (_, _) => { },
             (_, _, _) => { },
@@ -96,7 +96,7 @@ public class WalkCoverageTests
             ["Honda Insight", "Toyota Prius"],
             (site, model, _) => model == "Honda Insight"
                 ? throw new InvalidOperationException("the page never loaded")
-                : Task.FromResult(new WalkPairOutcome(2, 1, 1)),
+                : Task.FromResult(new WalkPairOutcome(2, 1, new DroppedBreakdown(0, 1, 0, 0))),
             (_, _) => { },
             (site, model, ex) => failures.Add((site.Name, model, ex.Message)),
             _ => Task.CompletedTask,
@@ -129,7 +129,7 @@ public class WalkCoverageTests
             run,
             [SiteA],
             ["Honda Insight", "Toyota Prius"],
-            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, 0)),
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0))),
             (_, _) => { },
             (_, _, _) => { },
             _ => Task.CompletedTask,

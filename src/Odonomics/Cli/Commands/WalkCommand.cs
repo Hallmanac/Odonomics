@@ -196,25 +196,25 @@ public static class WalkCommand
                 ExtractionOutcome outcome = await extraction.ExtractAsync(bodyText, ct);
                 if (outcome.Error is not null || outcome.Result is null)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: extraction failed ({outcome.Error})[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.Failed)} (extraction failed: {outcome.Error})[/]");
                     return DetailPageOutcome.Failed;
                 }
 
                 if (string.IsNullOrWhiteSpace(outcome.Result.Vin))
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, no VIN found on the page[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NoVin)} (found on the page)[/]");
                     return DetailPageOutcome.NoVin;
                 }
 
                 if (outcome.Result.Year is null || outcome.Result.Price is null || outcome.Result.Mileage is null)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, missing year/price/mileage ({outcome.Result.Vin})[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage) ({outcome.Result.Vin})[/]");
                     return DetailPageOutcome.MissingFields;
                 }
 
                 if (!query.MatchesExtractedVehicle(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim))
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, doesn't match {make} {model} ({outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim})[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NotMatching)} (doesn't match {make} {model}: {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim})[/]");
                     return DetailPageOutcome.NotMatching;
                 }
 
@@ -249,7 +249,7 @@ public static class WalkCommand
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: failed to load ({ex.Message})[/]");
+                AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.Failed)} ({ex.Message})[/]");
                 return DetailPageOutcome.Failed;
             }
             finally
@@ -275,35 +275,43 @@ public static class WalkCommand
             ct => Task.Delay(pacing.RandomDetailGap(), ct),
             cancellationToken);
 
-        AnsiConsole.MarkupLineInterpolated($"{site.Name} / {make} {model}: upserted {tally.Upserted} vehicle(s), dropped {tally.DroppedNoVin} candidate(s) with no VIN");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, tally.Upserted, tally.Dropped)}");
 
-        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.DroppedNoVin);
+        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
     {
         AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Walk summary[/]");
+        AnsiConsole.Write(BuildSummaryTable(summaries));
+    }
+
+    /// <summary>Builds the end-of-run table without writing it, so a rendering test can capture
+    /// it against a fixed-width console instead of the real one.</summary>
+    public static Table BuildSummaryTable(IReadOnlyList<WalkPairSummary> summaries)
+    {
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
         table.AddColumn("Site");
         table.AddColumn("Model");
-        table.AddColumn("Detail pages");
-        table.AddColumn("Upserted");
-        table.AddColumn("Dropped (no VIN)");
+        table.AddColumn("Pages");
+        table.AddColumn("Saved");
+        table.AddColumn("Dropped");
         table.AddColumn("Status");
         foreach (WalkPairSummary summary in summaries)
         {
+            string droppedCell = WalkPairSummaryLine.DroppedCell(summary.Dropped);
             table.AddRow(
                 Format.Cell(summary.Site),
                 Format.Cell(summary.Model),
                 summary.DetailPagesVisited.ToString(),
                 summary.Upserted.ToString(),
-                summary.DroppedNoVin.ToString(),
+                Format.Cell(droppedCell.Length == 0 ? summary.Dropped.Total.ToString() : $"{summary.Dropped.Total} ({droppedCell})"),
                 summary.Completed ? "ok" : "[yellow]failed[/]");
         }
 
-        AnsiConsole.MarkupLine("[bold]Walk summary[/]");
-        AnsiConsole.Write(table);
+        return table;
     }
 
     private static async Task ScrollInStepsAsync(IPage page, WalkPacing pacing, CancellationToken cancellationToken)
