@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Odonomics.Domain;
 
 namespace Odonomics.Tests.Domain;
@@ -26,6 +27,121 @@ public class ScenarioLoaderTests
         Assert.Null(scenario.InsuranceMonthlyByModel["Honda Insight"]);
         Assert.Equal(95m, scenario.InsuranceMonthlyByModel["Toyota Corolla Hybrid"]);
         Assert.Contains(300m, scenario.TargetMonthlyBudgets);
+        Assert.Equal(2025, scenario.HybridOnlyFromModelYear["Toyota Camry Hybrid"]);
+    }
+
+    [Fact]
+    public void Parse_HybridOnlyFromModelYearOmitted_DefaultsToEmpty()
+    {
+        const string json = """
+            {
+              "name": "test",
+              "zip": "32114",
+              "radiusMiles": 50,
+              "annualMiles": 12000,
+              "gasPricePerGallon": { "min": 3.00, "max": 3.60 },
+              "holdYears": 10,
+              "downPayment": 3000,
+              "apr": { "min": 0.065, "max": 0.095 },
+              "termMonths": 60,
+              "maintenancePerMile": 0.07,
+              "emergencyReservePerMonth": 50,
+              "salesTaxStateRate": 0.06,
+              "countySurtaxRate": 0.005,
+              "countySurtaxSource": "test",
+              "fees": 500,
+              "residualFraction": 0.35,
+              "insuranceMonthlyByModel": {},
+              "mpgByModel": {},
+              "filters": {
+                "minModelYear": 2019,
+                "minModelYearOverrides": {},
+                "maxMileage": 100000,
+                "allowedModels": []
+              },
+              "targetMonthlyBudgets": [300]
+            }
+            """;
+
+        Scenario scenario = ScenarioLoader.Parse(json);
+
+        Assert.Empty(scenario.HybridOnlyFromModelYear);
+    }
+
+    [Fact]
+    public void Parse_HybridOnlyFromModelYearKeyNotAnAllowedModel_Throws()
+    {
+        const string json = """
+            {
+              "name": "test",
+              "zip": "32114",
+              "radiusMiles": 50,
+              "annualMiles": 12000,
+              "gasPricePerGallon": { "min": 3.00, "max": 3.60 },
+              "holdYears": 10,
+              "downPayment": 3000,
+              "apr": { "min": 0.065, "max": 0.095 },
+              "termMonths": 60,
+              "maintenancePerMile": 0.07,
+              "emergencyReservePerMonth": 50,
+              "salesTaxStateRate": 0.06,
+              "countySurtaxRate": 0.005,
+              "countySurtaxSource": "test",
+              "fees": 500,
+              "residualFraction": 0.35,
+              "insuranceMonthlyByModel": {},
+              "mpgByModel": {},
+              "filters": {
+                "minModelYear": 2019,
+                "minModelYearOverrides": {},
+                "maxMileage": 100000,
+                "allowedModels": ["Toyota Corolla Hybrid"]
+              },
+              "hybridOnlyFromModelYear": { "Toyota Camry Hybrid": 2025 },
+              "targetMonthlyBudgets": [300]
+            }
+            """;
+
+        JsonException ex = Assert.Throws<JsonException>(() => ScenarioLoader.Parse(json));
+        Assert.Contains("Toyota Camry Hybrid", ex.Message);
+    }
+
+    [Fact]
+    public void Parse_HybridOnlyFromModelYearValueNotFourDigits_Throws()
+    {
+        const string json = """
+            {
+              "name": "test",
+              "zip": "32114",
+              "radiusMiles": 50,
+              "annualMiles": 12000,
+              "gasPricePerGallon": { "min": 3.00, "max": 3.60 },
+              "holdYears": 10,
+              "downPayment": 3000,
+              "apr": { "min": 0.065, "max": 0.095 },
+              "termMonths": 60,
+              "maintenancePerMile": 0.07,
+              "emergencyReservePerMonth": 50,
+              "salesTaxStateRate": 0.06,
+              "countySurtaxRate": 0.005,
+              "countySurtaxSource": "test",
+              "fees": 500,
+              "residualFraction": 0.35,
+              "insuranceMonthlyByModel": {},
+              "mpgByModel": {},
+              "filters": {
+                "minModelYear": 2019,
+                "minModelYearOverrides": {},
+                "maxMileage": 100000,
+                "allowedModels": ["Toyota Camry Hybrid"]
+              },
+              "hybridOnlyFromModelYear": { "Toyota Camry Hybrid": 25 },
+              "targetMonthlyBudgets": [300]
+            }
+            """;
+
+        JsonException ex = Assert.Throws<JsonException>(() => ScenarioLoader.Parse(json));
+        Assert.Contains("four-digit year", ex.Message);
     }
 
     [Fact]

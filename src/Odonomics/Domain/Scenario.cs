@@ -51,6 +51,14 @@ public sealed record Scenario
     /// it knows better, but vPIC does not return fuel economy, so v0 always uses this table.</summary>
     public required IReadOnlyDictionary<string, decimal> MpgByModel { get; init; }
 
+    /// <summary>Keyed by "Make Model" (e.g. "Toyota Camry Hybrid"); the model year a base model
+    /// went hybrid-only, so a candidate at or above that year matches this scenario's hybrid model
+    /// even when the listing text never says "Hybrid" (Toyota dropped the gas-only Camry for model
+    /// year 2025). Optional: a model absent here is matched only when its own listing text says
+    /// so, same as before this existed. ScenarioLoader validates every key is an allowed model and
+    /// every value a four-digit year.</summary>
+    public IReadOnlyDictionary<string, int> HybridOnlyFromModelYear { get; init; } = new Dictionary<string, int>();
+
     public required HardFilters Filters { get; init; }
 
     public required IReadOnlyList<decimal> TargetMonthlyBudgets { get; init; }
