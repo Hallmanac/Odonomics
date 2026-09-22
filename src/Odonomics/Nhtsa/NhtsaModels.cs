@@ -23,3 +23,16 @@ public sealed record RecallEntry(
     string Consequence,
     string Remedy,
     string ReportReceivedDate);
+
+/// <summary>NHTSA's five-star safety ratings for one year/make/model. A rating is null when NHTSA
+/// has not tested that category ("Not Rated" in the raw response) rather than 0, so a caller never
+/// mistakes "untested" for "tested and failed." <see cref="ErrorText"/> is set instead of throwing
+/// when NHTSA has no vehicle on file at all for this year/make/model; a category NHTSA simply never
+/// rated on an otherwise-found vehicle is not an error, just a null star count.</summary>
+public sealed record SafetyRatingsResult(
+    int? OverallRating,
+    int? FrontRating,
+    int? SideRating,
+    int? RolloverRating,
+    string? VehicleDescription,
+    string? ErrorText);
