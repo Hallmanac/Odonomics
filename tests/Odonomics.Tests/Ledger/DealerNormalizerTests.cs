@@ -14,6 +14,14 @@ public class DealerNormalizerTests
     }
 
     [Theory]
+    [InlineData("Winter Park, FL", "WINTER PARK FL")]
+    [InlineData("Winter Park FL", "WINTER PARK FL")]
+    public void Normalize_WithOrWithoutPunctuation_ProducesTheSameKey(string value, string expected)
+    {
+        Assert.Equal(expected, DealerNormalizer.Normalize(value));
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
