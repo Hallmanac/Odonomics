@@ -42,6 +42,10 @@ public class AutoDevSourceTests
         Assert.All(result.Candidates, c => Assert.False(string.IsNullOrWhiteSpace(c.Url)));
         Assert.All(result.Candidates, c => Assert.Equal("auto.dev", c.Source));
         Assert.Equal(["Insight"], result.ModelsCovered);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates, c => c.Vin == "19XZE4F52ME000999");
+        Assert.Equal("Holler Driver's Mart Sanford", candidate.DealerName);
+        Assert.Equal("Sanford, FL", candidate.DealerLocation);
     }
 
     [Fact]

@@ -13,7 +13,9 @@ public sealed record ExtractionResult(
     [property: JsonPropertyName("model")] string? Model,
     [property: JsonPropertyName("trim")] string? Trim,
     [property: JsonPropertyName("price")] decimal? Price,
-    [property: JsonPropertyName("mileage")] int? Mileage);
+    [property: JsonPropertyName("mileage")] int? Mileage,
+    [property: JsonPropertyName("dealerName")] string? DealerName,
+    [property: JsonPropertyName("dealerLocation")] string? DealerLocation);
 
 public sealed record ExtractionOutcome(ExtractionResult? Result, decimal CostUsd, string? Error);
 
@@ -255,6 +257,16 @@ public sealed class ExtractionClient
         if (extracted.Mileage is not null && !ContainsNumber(pageText, extracted.Mileage.Value))
         {
             extracted = extracted with { Mileage = null };
+        }
+
+        if (extracted.DealerName is not null && !ContainsLoosely(pageText, extracted.DealerName))
+        {
+            extracted = extracted with { DealerName = null };
+        }
+
+        if (extracted.DealerLocation is not null && !ContainsLoosely(pageText, extracted.DealerLocation))
+        {
+            extracted = extracted with { DealerLocation = null };
         }
 
         return extracted;

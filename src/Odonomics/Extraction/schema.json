@@ -30,8 +30,16 @@
     "mileage": {
       "type": ["integer", "null"],
       "description": "Odometer mileage in miles as a plain integer. Null if no mileage is stated."
+    },
+    "dealerName": {
+      "type": ["string", "null"],
+      "description": "The selling dealer's name exactly as printed on the page (e.g. 'Holler Honda'). Null if no dealer name is stated, such as a private-party listing."
+    },
+    "dealerLocation": {
+      "type": ["string", "null"],
+      "description": "The selling dealer's city and state as printed on the page, e.g. 'Winter Park, FL'. Null if no dealer location is stated."
     }
   },
-  "required": ["vin", "year", "make", "model", "trim", "price", "mileage"],
+  "required": ["vin", "year", "make", "model", "trim", "price", "mileage", "dealerName", "dealerLocation"],
   "additionalProperties": false
 }
