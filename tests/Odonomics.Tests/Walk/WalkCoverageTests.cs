@@ -113,4 +113,44 @@ public class WalkCoverageTests
         Assert.Equal("Honda Insight", model);
         Assert.Equal("the page never loaded", message);
     }
+
+    [Fact]
+    public async Task RunAsync_PersistFailsForAPair_DoesNotLeaveThatPairsTokenOnTheRunAfterward()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        int saveCount = 0;
+
+        List<WalkPairSummary> summaries = await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight", "Toyota Prius"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, 0)),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct =>
+            {
+                saveCount++;
+                if (saveCount == 1)
+                {
+                    throw new InvalidOperationException("database is locked");
+                }
+
+                return db.SaveChangesAsync(ct);
+            },
+            CancellationToken.None);
+
+        Assert.False(summaries[0].Completed);
+        Assert.True(summaries[1].Completed);
+
+        // The first pair's save failed, so its token must not linger in memory to be swept up by
+        // the second pair's successful save: the run's Sources should show only what actually
+        // persisted.
+        Assert.Equal("site-a:Prius", run.Sources);
+    }
 }
