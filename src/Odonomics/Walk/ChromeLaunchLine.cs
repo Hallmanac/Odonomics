@@ -25,4 +25,11 @@ public static class ChromeLaunchLine
 
         return $"google-chrome --remote-debugging-port={DebugPort} --user-data-dir=\"{profileDir}\"";
     }
+
+    /// <summary>The Windows line from <see cref="Build"/>, prefixed with PowerShell's call
+    /// operator. A bare quoted path followed by arguments (what <see cref="Build"/> returns) runs
+    /// fine in cmd, but PowerShell only invokes a leading quoted string as a command when told to
+    /// with <c>&amp;</c>; without it, PowerShell parses the rest of the line as further expression
+    /// tokens and fails with "Unexpected token". Only meaningful on Windows.</summary>
+    public static string BuildForPowerShell() => $"& {Build()}";
 }
