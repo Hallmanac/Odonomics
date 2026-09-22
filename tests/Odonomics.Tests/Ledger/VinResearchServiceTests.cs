@@ -294,6 +294,99 @@ public class VinResearchServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_RecallsCallFailsOnStaleRecordWithCachedRecalls_ReturnedResultKeepsCachedEntries()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        VehicleEntity vehicle = Vehicle();
+        var existingRecord = new VinRecordEntity
+        {
+            Vin = Vin,
+            DecodedAt = DateTimeOffset.UtcNow.AddDays(-10),
+            DecodeRawJson = "{}",
+            ResearchedAt = DateTimeOffset.UtcNow.AddDays(-10),
+            OpenRecallCount = 2,
+            RecallsRawJson = "[{\"CampaignNumber\":\"21V001\",\"Component\":\"AIR BAGS\",\"Summary\":\"s\",\"Consequence\":\"c\",\"Remedy\":\"r\",\"ReportReceivedDate\":\"2021-01-01\"},{\"CampaignNumber\":\"21V002\",\"Component\":\"FUEL SYSTEM\",\"Summary\":\"s\",\"Consequence\":\"c\",\"Remedy\":\"r\",\"ReportReceivedDate\":\"2021-01-02\"}]",
+            ComplaintCount = 4,
+            SafetyOverallRating = 3,
+            SafetyRawJson = "{\"OverallRating\":3,\"FrontRating\":null,\"SideRating\":null,\"RolloverRating\":null,\"VehicleDescription\":null,\"ErrorText\":null}",
+            HistoryRawJson = "[]",
+        };
+        db.Vehicles.Add(vehicle);
+        db.VinRecords.Add(existingRecord);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        string fixtureRoot = Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures");
+        string htmlError = await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "akamai-error.html"));
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            [$"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{Vin}?format=json"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "decode-1HGCM82633A004352.json")),
+            ["https://api.nhtsa.gov/recalls/recallsByVehicle?make=Honda&model=Insight&modelYear=2020"] = htmlError,
+            ["https://api.nhtsa.gov/complaints/complaintsByVehicle?make=Honda&model=Insight&modelYear=2020"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "complaints-honda-insight-2020.json")),
+            ["https://api.nhtsa.gov/SafetyRatings/modelyear/2020/make/Honda/model/Insight"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "safety-ratings-lookup-honda-insight-2020.json")),
+            ["https://api.nhtsa.gov/SafetyRatings/VehicleId/14485"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "safety-ratings-detail-14485.json")),
+            ["https://mc-api.marketcheck.com/v2/history/car/1HGCM82633A004352?api_key=test-key"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "vin-history-19XZE4F52ME000999.json")),
+            ["https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&vin=1HGCM82633A004352"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "active-search-19XZE4F52ME000999.json")),
+        });
+        var http = new HttpClient(handler);
+        var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient("test-key", http));
+
+        // Recalls fails on both attempts (the fixture always answers with the Akamai HTML page), so
+        // the persisted OpenRecallCount/RecallsRawJson stay untouched (RefreshAsync_...StillPersists
+        // already covers that). What this test proves is the *returned* result: a caller like
+        // ShowRenderer or RedFlags must still see the two cached recalls, with the failure reason
+        // layered on top, rather than an empty list that would hide a real red flag.
+        VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
+
+        Assert.NotNull(result.Recalls.CouldNotFetchReason);
+        Assert.Equal(2, result.Recalls.Entries.Count);
+        IReadOnlyList<string> redFlags = VinResearchService.RedFlags(result, currentPrice: null);
+        Assert.Contains(redFlags, f => f.Contains("open NHTSA recall"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_FirstResearchAllNhtsaPiecesFail_DoesNotStampResearchedAt()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        VehicleEntity vehicle = Vehicle();
+        db.Vehicles.Add(vehicle);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        string fixtureRoot = Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures");
+        string htmlError = await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "akamai-error.html"));
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            [$"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{Vin}?format=json"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "decode-1HGCM82633A004352.json")),
+            ["https://api.nhtsa.gov/recalls/recallsByVehicle?make=Honda&model=Insight&modelYear=2020"] = htmlError,
+            ["https://api.nhtsa.gov/complaints/complaintsByVehicle?make=Honda&model=Insight&modelYear=2020"] = htmlError,
+            ["https://api.nhtsa.gov/SafetyRatings/modelyear/2020/make/Honda/model/Insight"] = htmlError,
+            ["https://mc-api.marketcheck.com/v2/history/car/1HGCM82633A004352?api_key=test-key"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "vin-history-19XZE4F52ME000999.json")),
+            ["https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&vin=1HGCM82633A004352"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "active-search-19XZE4F52ME000999.json")),
+        });
+        var http = new HttpClient(handler);
+        var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient("test-key", http));
+
+        await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
+
+        VinRecordEntity saved = await db.VinRecords.FindAsync([Vin]) ?? throw new InvalidOperationException();
+        Assert.Null(saved.ResearchedAt);
+
+        // Since ResearchedAt is still null, the next research run still picks this vehicle up
+        // rather than a rank-only reader mistaking it for "researched, clean".
+        Assert.True(VinResearchService.NeedsRefresh(saved, refresh: false));
+    }
+
+    [Fact]
     public void FromCached_NeverResearched_ReturnsPlaceholderNotesWithoutThrowing()
     {
         var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "{}" };

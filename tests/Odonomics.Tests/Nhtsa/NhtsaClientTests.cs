@@ -250,4 +250,101 @@ public class NhtsaClientTests
         Assert.Contains("NHTSA safety ratings", result.CouldNotFetchReason);
         Assert.Contains("INSIGHT", result.VehicleDescription);
     }
+
+    [Fact]
+    public async Task GetRecallsAsync_FirstAttemptConnectionFailure_RetriesAndSucceeds()
+    {
+        string goodBody = await File.ReadAllTextAsync(FixturePath("recalls-toyota-prius-2020.json"));
+        var handler = new FailThenSucceedHttpMessageHandler(
+            new HttpRequestException("Connection refused"),
+            () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(goodBody) });
+        var client = new NhtsaClient(new HttpClient(handler));
+
+        RecallsResult result = await client.GetRecallsAsync("Toyota", "Prius", 2020, CancellationToken.None);
+
+        Assert.Null(result.CouldNotFetchReason);
+        Assert.Empty(result.Entries);
+    }
+
+    [Fact]
+    public async Task GetRecallsAsync_BothAttemptsConnectionFailure_ReturnsCouldNotFetchReasonNamingTransportError()
+    {
+        var handler = new ThrowingHttpMessageHandler(new HttpRequestException("Connection refused"));
+        var client = new NhtsaClient(new HttpClient(handler));
+
+        RecallsResult result = await client.GetRecallsAsync("Toyota", "Prius", 2026, CancellationToken.None);
+
+        Assert.Empty(result.Entries);
+        Assert.NotNull(result.CouldNotFetchReason);
+        Assert.Contains("NHTSA recalls", result.CouldNotFetchReason);
+        Assert.Contains("could not be reached", result.CouldNotFetchReason);
+        Assert.Contains("Connection refused", result.CouldNotFetchReason);
+    }
+
+    /// <summary>An HttpClient.Timeout expiry surfaces as a TaskCanceledException (an
+    /// OperationCanceledException) even though nobody cancelled the caller's own token: this must
+    /// still retry once and degrade to a reason rather than propagate, the same as any other failed
+    /// attempt.</summary>
+    [Fact]
+    public async Task GetRecallsAsync_HttpClientTimesOutWithoutCallerCancelling_DegradesToCouldNotFetchReason()
+    {
+        var handler = new ThrowingHttpMessageHandler(
+            new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 30 seconds elapsing."));
+        var client = new NhtsaClient(new HttpClient(handler));
+
+        RecallsResult result = await client.GetRecallsAsync("Toyota", "Prius", 2026, CancellationToken.None);
+
+        Assert.Empty(result.Entries);
+        Assert.NotNull(result.CouldNotFetchReason);
+        Assert.Contains("NHTSA recalls", result.CouldNotFetchReason);
+        Assert.Contains("timed out", result.CouldNotFetchReason);
+    }
+
+    [Fact]
+    public async Task GetRecallsAsync_CallerCancels_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var handler = new ThrowingHttpMessageHandler(new TaskCanceledException("canceled", null, cts.Token));
+        var client = new NhtsaClient(new HttpClient(handler));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetRecallsAsync("Toyota", "Prius", 2026, cts.Token));
+    }
+
+    [Fact]
+    public async Task GetRecallsAsync_BothAttemptsLongNonHtmlBody_TruncatesPreviewInReason()
+    {
+        string url = "https://api.nhtsa.gov/recalls/recallsByVehicle?make=Toyota&model=Prius&modelYear=2026";
+        string longBody = new('x', 500);
+        NhtsaClient client = BuildClient(new Dictionary<string, Queue<(HttpStatusCode, string)>>
+        {
+            [url] = Sequence((HttpStatusCode.OK, longBody), (HttpStatusCode.OK, longBody)),
+        });
+
+        RecallsResult result = await client.GetRecallsAsync("Toyota", "Prius", 2026, CancellationToken.None);
+
+        Assert.NotNull(result.CouldNotFetchReason);
+        Assert.True(result.CouldNotFetchReason.Length < 300, result.CouldNotFetchReason);
+        Assert.Contains("...", result.CouldNotFetchReason);
+    }
+
+    private sealed class ThrowingHttpMessageHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw exception;
+    }
+
+    /// <summary>Throws <paramref name="exception"/> on the first request and calls
+    /// <paramref name="buildSuccessResponse"/> for every request after that, proving a connection
+    /// failure is retried rather than propagated raw.</summary>
+    private sealed class FailThenSucceedHttpMessageHandler(Exception exception, Func<HttpResponseMessage> buildSuccessResponse) : HttpMessageHandler
+    {
+        private int attempt;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            attempt++;
+            return attempt == 1 ? throw exception : Task.FromResult(buildSuccessResponse());
+        }
+    }
 }

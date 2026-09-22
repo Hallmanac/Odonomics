@@ -51,7 +51,12 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
     /// skipped (and their cached values reused) under that same condition UNLESS that specific piece
     /// previously could not be fetched, in which case it is retried regardless of staleness. A piece
     /// that fails here never throws (see NhtsaClient) and never blocks the others: each is persisted,
-    /// or marked could-not-fetch, independently. A Marketcheck fetch failure (including a missing
+    /// or marked could-not-fetch, independently, and the returned result carries that same piece's
+    /// last known-good cached value (not an empty one) alongside the reason, so a real red flag never
+    /// silently disappears just because that round's retry failed. <see cref="VinRecordEntity.ResearchedAt"/>
+    /// is stamped only when the batch was stale or forced AND at least one of recalls, complaints, or
+    /// safety ratings actually succeeded, so a vehicle NHTSA could not answer at all is not recorded as
+    /// researched. A Marketcheck fetch failure (including a missing
     /// key) never throws either: <see cref="MarketcheckHistoryClient"/> already degrades that to
     /// <see cref="VinHistoryResult.CouldNotFetchReason"/>, and the vehicle's previously cached
     /// history (if any) is left untouched rather than being overwritten with nothing.</summary>
@@ -92,7 +97,6 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
         {
             record.DecodedAt = DateTimeOffset.UtcNow;
             record.DecodeRawJson = JsonSerializer.Serialize(decode);
-            record.ResearchedAt = DateTimeOffset.UtcNow;
         }
 
         if (refetchRecalls)
@@ -136,9 +140,31 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
             record.CurrentListingDaysOnMarket = history.CurrentListingDaysOnMarket;
         }
 
+        bool anyPieceSucceeded = recalls.CouldNotFetchReason is null
+            || complaints.CouldNotFetchReason is null
+            || safety.CouldNotFetchReason is null;
+        if (staleOrForced && anyPieceSucceeded)
+        {
+            record.ResearchedAt = DateTimeOffset.UtcNow;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
-        return new VinResearchResult(decode, recalls, complaints, safety, history);
+        // A piece that failed this round keeps its last known-good data on the returned result too
+        // (not just on the persisted record), the same overlay FromCached applies: only the
+        // could-not-fetch reason reflects this round's failure, so a caller never sees a real red
+        // flag vanish just because the retry that would have confirmed it again failed.
+        RecallsResult recallsForCaller = recalls.CouldNotFetchReason is null
+            ? recalls
+            : cached.Recalls with { CouldNotFetchReason = recalls.CouldNotFetchReason };
+        ComplaintsResult complaintsForCaller = complaints.CouldNotFetchReason is null
+            ? complaints
+            : cached.Complaints with { CouldNotFetchReason = complaints.CouldNotFetchReason };
+        SafetyRatingsResult safetyForCaller = safety.CouldNotFetchReason is null
+            ? safety
+            : cached.Safety with { CouldNotFetchReason = safety.CouldNotFetchReason };
+
+        return new VinResearchResult(decode, recallsForCaller, complaintsForCaller, safetyForCaller, history);
     }
 
     /// <summary>Rebuilds a <see cref="VinResearchResult"/> from a cached record's raw JSON, without

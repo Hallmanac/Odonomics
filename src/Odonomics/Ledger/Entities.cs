@@ -92,7 +92,11 @@ public sealed class RunEntity
 /// refreshed by `odo show` and `odo research` (v0 keeps the most recent fetch only; the raw JSON is
 /// kept for anything the typed fields do not carry yet). <see cref="ResearchedAt"/> is the
 /// fetched-at stamp that gates the seven-day refresh rule for the whole NHTSA batch (decode,
-/// recalls, complaints, safety ratings) and the VIN history. Recalls, complaints, and safety
+/// recalls, complaints, safety ratings) and the VIN history, and is what `odo rank`'s research
+/// column reads to decide "researched" vs. "not researched"; <see cref="VinResearchService.RefreshAsync"/>
+/// only stamps it when at least one of recalls, complaints, or safety ratings actually came back, so
+/// a vehicle NHTSA could not answer at all (every piece could-not-fetch) is never shown as
+/// researched. Recalls, complaints, and safety
 /// ratings each also carry their own FetchedAt stamp and CouldNotFetchReason: when NHTSA answers
 /// one of those calls with a bad response (see NhtsaClient's retry-then-degrade behavior), that
 /// piece alone is marked could-not-fetch and the next research run retries only it, rather than
