@@ -65,9 +65,11 @@ public sealed class RunEntity
     public required string Sources { get; set; }
 }
 
-/// <summary>The NHTSA vPIC decode and safety lookups for one VIN, refreshed by `odo show` (v0
-/// keeps the most recent decode only; the raw JSON is kept for anything the typed fields do not
-/// carry yet).</summary>
+/// <summary>The NHTSA vPIC decode and safety lookups, and the Marketcheck VIN history, for one VIN,
+/// refreshed by `odo show` and `odo research` (v0 keeps the most recent fetch only; the raw JSON is
+/// kept for anything the typed fields do not carry yet). <see cref="ResearchedAt"/> is the
+/// fetched-at stamp that gates the seven-day refresh rule for the safety ratings and VIN history;
+/// it is null until the first successful research fetch.</summary>
 public sealed class VinRecordEntity
 {
     public required string Vin { get; set; }
@@ -76,6 +78,15 @@ public sealed class VinRecordEntity
     public int OpenRecallCount { get; set; }
     public string? RecallsRawJson { get; set; }
     public int ComplaintCount { get; set; }
+
+    public DateTimeOffset? ResearchedAt { get; set; }
+    public int? SafetyOverallRating { get; set; }
+    public int? SafetyFrontRating { get; set; }
+    public int? SafetySideRating { get; set; }
+    public int? SafetyRolloverRating { get; set; }
+    public string? SafetyRawJson { get; set; }
+    public string? HistoryRawJson { get; set; }
+    public int? CurrentListingDaysOnMarket { get; set; }
 
     public VehicleEntity? Vehicle { get; set; }
 }
