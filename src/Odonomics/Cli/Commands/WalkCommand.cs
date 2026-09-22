@@ -54,6 +54,19 @@ public static class WalkCommand
             throw new InvalidOperationException("the scenario has no allowed models to walk");
         }
 
+        foreach (string model in models)
+        {
+            try
+            {
+                MakeModel.Split(model);
+            }
+            catch (InvalidOperationException ex)
+            {
+                AnsiConsole.MarkupLineInterpolated($"[red]{ex.Message}[/]");
+                return 1;
+            }
+        }
+
         var secrets = new SecretResolver();
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
         ExtractionClient extraction = ExtractionClient.FromAppDirectory(secrets.AnthropicApiKey, http);
@@ -94,7 +107,7 @@ public static class WalkCommand
         SearchDiff diff = await diffService.ComputeAsync(currentRun, cancellationToken);
         DiffRenderer.Render(diff);
 
-        return 0;
+        return summaries.Any(s => s.Completed) ? 0 : 1;
     }
 
     /// <summary>Resolves which "Make Model" values to walk. --model narrows to exactly one,
@@ -171,9 +184,10 @@ public static class WalkCommand
             }
 
             string detailUrl = detailLinks[i];
-            IPage detailPage = await BackgroundTabs.OpenAsync(browserCdp, context);
+            IPage? detailPage = null;
             try
             {
+                detailPage = await BackgroundTabs.OpenAsync(browserCdp, context);
                 await detailPage.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
                 await CdpConnection.HandleChallengeIfPresentAsync(detailPage, cancellationToken);
                 await detailPage.EvaluateAsync("() => window.scrollBy(0, window.innerHeight)");
@@ -239,7 +253,17 @@ public static class WalkCommand
             }
             finally
             {
-                await detailPage.CloseAsync();
+                if (detailPage is not null)
+                {
+                    try
+                    {
+                        await detailPage.CloseAsync();
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: failed to close tab ({ex.Message})[/]");
+                    }
+                }
             }
         }
 
