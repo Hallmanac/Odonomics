@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Odonomics.Domain;
 using Odonomics.Ledger;
 using Odonomics.Marketcheck;
 using Odonomics.Nhtsa;
@@ -306,7 +307,7 @@ public class VinResearchServiceTests
             DecodeRawJson = "{}",
             ResearchedAt = DateTimeOffset.UtcNow.AddDays(-10),
             OpenRecallCount = 2,
-            RecallsRawJson = "[{\"CampaignNumber\":\"21V001\",\"Component\":\"AIR BAGS\",\"Summary\":\"s\",\"Consequence\":\"c\",\"Remedy\":\"r\",\"ReportReceivedDate\":\"2021-01-01\"},{\"CampaignNumber\":\"21V002\",\"Component\":\"FUEL SYSTEM\",\"Summary\":\"s\",\"Consequence\":\"c\",\"Remedy\":\"r\",\"ReportReceivedDate\":\"2021-01-02\"}]",
+            RecallsRawJson = "[{\"CampaignNumber\":\"21V001\",\"Component\":\"AIR BAGS\",\"Summary\":\"s\",\"Consequence\":\"c\",\"Remedy\":\"Remedy is not yet available. Please check back for updates.\",\"ReportReceivedDate\":\"2021-01-01\"},{\"CampaignNumber\":\"21V002\",\"Component\":\"FUEL SYSTEM\",\"Summary\":\"s\",\"Consequence\":\"c\",\"Remedy\":\"r\",\"ReportReceivedDate\":\"2021-01-02\"}]",
             ComplaintCount = 4,
             SafetyOverallRating = 3,
             SafetyRawJson = "{\"OverallRating\":3,\"FrontRating\":null,\"SideRating\":null,\"RolloverRating\":null,\"VehicleDescription\":null,\"ErrorText\":null}",
@@ -341,13 +342,14 @@ public class VinResearchServiceTests
         // the persisted OpenRecallCount/RecallsRawJson stay untouched (RefreshAsync_...StillPersists
         // already covers that). What this test proves is the *returned* result: a caller like
         // ShowRenderer or RedFlags must still see the two cached recalls, with the failure reason
-        // layered on top, rather than an empty list that would hide a real red flag.
+        // layered on top, rather than an empty list that would hide the real no-remedy red flag
+        // carried by one of them.
         VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
 
         Assert.NotNull(result.Recalls.CouldNotFetchReason);
         Assert.Equal(2, result.Recalls.Entries.Count);
-        IReadOnlyList<string> redFlags = VinResearchService.RedFlags(result, currentPrice: null);
-        Assert.Contains(redFlags, f => f.Contains("open NHTSA recall"));
+        IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(result, currentPrice: null);
+        Assert.Contains(redFlags, f => f.ShortTag == "no-remedy-recall");
     }
 
     [Fact]
@@ -399,12 +401,36 @@ public class VinResearchServiceTests
     }
 
     [Fact]
-    public void RedFlagsForCached_RecordWithOpenRecall_IncludesRecallFlag()
+    public void RedFlagsForCached_RecordWithRecallAndNoRemedyAvailable_FlagsIt()
     {
-        var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "{}", OpenRecallCount = 1 };
+        var record = new VinRecordEntity
+        {
+            Vin = Vin,
+            DecodedAt = DateTimeOffset.UtcNow,
+            DecodeRawJson = "{}",
+            OpenRecallCount = 1,
+            RecallsRawJson = "[{\"CampaignNumber\":\"21V001\",\"Component\":\"AIR BAGS\",\"Summary\":\"s\",\"Consequence\":\"c\",\"Remedy\":\"\",\"ReportReceivedDate\":\"2021-01-01\"}]",
+        };
 
-        IReadOnlyList<string> flags = VinResearchService.RedFlagsForCached(record, currentPrice: null);
+        IReadOnlyList<RedFlag> flags = VinResearchService.RedFlagsForCached(record, currentPrice: null);
 
-        Assert.Contains(flags, f => f.Contains("open NHTSA recall"));
+        Assert.Contains(flags, f => f.ShortTag == "no-remedy-recall");
+    }
+
+    [Fact]
+    public void RedFlagsForCached_RecordWithRecallAndRemedyAvailable_NoFlag()
+    {
+        var record = new VinRecordEntity
+        {
+            Vin = Vin,
+            DecodedAt = DateTimeOffset.UtcNow,
+            DecodeRawJson = "{}",
+            OpenRecallCount = 1,
+            RecallsRawJson = "[{\"CampaignNumber\":\"21V001\",\"Component\":\"AIR BAGS\",\"Summary\":\"s\",\"Consequence\":\"c\",\"Remedy\":\"dealers will fix it\",\"ReportReceivedDate\":\"2021-01-01\"}]",
+        };
+
+        IReadOnlyList<RedFlag> flags = VinResearchService.RedFlagsForCached(record, currentPrice: null);
+
+        Assert.DoesNotContain(flags, f => f.ShortTag == "no-remedy-recall");
     }
 }

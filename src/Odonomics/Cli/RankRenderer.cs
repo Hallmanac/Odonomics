@@ -74,18 +74,21 @@ public static class RankRenderer
         table.AddColumn("During-loan");
         table.AddColumn("10yr avg");
         table.AddColumn("Research");
+        table.AddColumn("Recalls");
         table.AddColumn("Grade");
 
         foreach (Score score in scores)
         {
             CostBreakdown cost = score.Cost!;
+            ResearchStatus? status = research.GetValueOrDefault(score.Vehicle.Vin);
             table.AddRow(
                 Format.Cell(score.Vehicle.Vin),
                 Format.Cell($"{score.Vehicle.Year} {score.Vehicle.MakeModel}"),
                 Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m),
                 Format.Band(cost.DuringLoanMonthly),
                 Format.Band(cost.TenYearAverageMonthly),
-                ResearchCell(research.GetValueOrDefault(score.Vehicle.Vin)),
+                ResearchCell(status),
+                RecallsCell(status),
                 Format.Cell(score.Vehicle.DealerGrade ?? "-"));
         }
 
@@ -98,6 +101,9 @@ public static class RankRenderer
         { HasRedFlag: true } => "[red]red flag[/]",
         _ => "[green]clean[/]",
     };
+
+    private static string RecallsCell(ResearchStatus? status) =>
+        status is { Researched: true } s ? Format.Cell(s.RecallCount.ToString()) : Format.Cell("-");
 
     private static void RenderInsuranceUnknown(IReadOnlyList<Score> scores)
     {

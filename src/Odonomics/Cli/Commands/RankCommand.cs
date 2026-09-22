@@ -55,11 +55,11 @@ public static class RankCommand
     {
         if (record?.ResearchedAt is not DateTimeOffset researchedAt)
         {
-            return new ResearchStatus(Researched: false, ResearchedAt: null, HasRedFlag: false);
+            return new ResearchStatus(Researched: false, ResearchedAt: null, HasRedFlag: false, RecallCount: 0);
         }
 
-        IReadOnlyList<string> redFlags = VinResearchService.RedFlagsForCached(record, currentPrice);
-        return new ResearchStatus(Researched: true, ResearchedAt: researchedAt, HasRedFlag: redFlags.Count > 0);
+        IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlagsForCached(record, currentPrice);
+        return new ResearchStatus(Researched: true, ResearchedAt: researchedAt, HasRedFlag: redFlags.Count > 0, RecallCount: record.OpenRecallCount);
     }
 
     private static string? DealerGradeSummary(VehicleEntity vehicle)

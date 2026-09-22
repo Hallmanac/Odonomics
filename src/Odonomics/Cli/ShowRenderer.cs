@@ -1,3 +1,4 @@
+using Odonomics.Domain;
 using Odonomics.Ledger;
 using Odonomics.Marketcheck;
 using Odonomics.Nhtsa;
@@ -7,7 +8,7 @@ namespace Odonomics.Cli;
 
 public static class ShowRenderer
 {
-    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<string> redFlags)
+    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags)
     {
         (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
@@ -32,10 +33,17 @@ public static class ShowRenderer
         }
         else
         {
-            AnsiConsole.MarkupLineInterpolated($"[bold]Recalls, remedy status unknown ({recalls.Entries.Count})[/]");
+            AnsiConsole.MarkupLineInterpolated($"[bold]Recalls ({recalls.Entries.Count})[/]");
             foreach (RecallEntry recall in recalls.Entries)
             {
-                AnsiConsole.MarkupLineInterpolated($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component}");
+                if (recall.RemedyAvailable)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component} - remedy available");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLineInterpolated($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component} - [red]no remedy yet[/]");
+                }
             }
         }
 
@@ -112,9 +120,9 @@ public static class ShowRenderer
         }
         else
         {
-            foreach (string flag in redFlags)
+            foreach (RedFlag flag in redFlags)
             {
-                AnsiConsole.MarkupLineInterpolated($"  [red]- {flag}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  [red]- {flag.Detail}[/]");
             }
         }
 

@@ -58,7 +58,7 @@ public static class ResearchCommand
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         var researchService = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient(secrets.MarketcheckApiKey, http));
 
-        var flagged = new List<(VehicleEntity Vehicle, IReadOnlyList<string> Flags)>();
+        var flagged = new List<(VehicleEntity Vehicle, IReadOnlyList<RedFlag> Flags)>();
         int fullyResearched = 0;
         int partiallyResearched = 0;
         int unreachable = 0;
@@ -75,7 +75,7 @@ public static class ResearchCommand
                     : await researchService.RefreshAsync(db, vehicle, refresh, cancellationToken);
 
                 decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-                IReadOnlyList<string> redFlags = VinResearchService.RedFlags(research, currentPrice);
+                IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
                 if (redFlags.Count > 0)
                 {
                     flagged.Add((vehicle, redFlags));
@@ -122,12 +122,12 @@ public static class ResearchCommand
         }
         else
         {
-            foreach ((VehicleEntity vehicle, IReadOnlyList<string> flags) in flagged)
+            foreach ((VehicleEntity vehicle, IReadOnlyList<RedFlag> flags) in flagged)
             {
                 AnsiConsole.MarkupLineInterpolated($"  {vehicle.Vin} ({vehicle.Year} {vehicle.Make} {vehicle.Model}):");
-                foreach (string flag in flags)
+                foreach (RedFlag flag in flags)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"    [red]- {flag}[/]");
+                    AnsiConsole.MarkupLineInterpolated($"    [red]- {flag.Detail}[/]");
                 }
             }
         }
