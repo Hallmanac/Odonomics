@@ -74,31 +74,49 @@ Every command that scores against a scenario defaults to `scenarios/daughter.jso
 
 ## The assisted walk
 
-`odo walk` never launches a browser. It connects over the Chrome DevTools Protocol to a Chrome the operator starts by hand, in its own dedicated profile so it never touches the operator's everyday browsing session. If nothing is listening on the debugging port, `odo walk` prints the exact command for your OS and exits; running `odo walk` again picks it up.
+`odo walk` never launches a browser. It connects over the Chrome DevTools Protocol to a Chrome or Microsoft Edge the operator starts by hand, in a dedicated profile so it never touches the operator's everyday browsing session. Edge speaks the same DevTools Protocol as Chrome and is an equally valid choice; use whichever Chromium browser you actually have installed. Chrome and Edge share that one profile directory rather than each getting their own, so a profile that has already worked through a site's bot-defense challenge in one browser stays warmed up when you switch to the other. If nothing is listening on the debugging port, `odo walk` prints the exact command for your OS and exits; running `odo walk` again picks it up.
 
 Launch line (also printed by `odo walk` itself, with your own data directory filled in):
 
-**macOS**
+**macOS, Chrome**
 
 ```
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir="$HOME/Library/Application Support/Odonomics/chrome-profile"
 ```
 
-**Windows (PowerShell)**
+**macOS, Edge**
+
+```
+/Applications/Microsoft\ Edge.app/Contents/MacOS/Microsoft\ Edge --remote-debugging-port=9222 --user-data-dir="$HOME/Library/Application Support/Odonomics/chrome-profile"
+```
+
+**Windows (PowerShell), Chrome**
 
 ```
 & "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Odonomics\chrome-profile"
 ```
 
-**Windows (cmd)**
+**Windows (PowerShell), Edge**
+
+```
+& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Odonomics\chrome-profile"
+```
+
+**Windows (cmd), Chrome**
 
 ```
 "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%LOCALAPPDATA%\Odonomics\chrome-profile"
 ```
 
-A bare quoted path needs PowerShell's `&` call operator to run at all; cmd runs it either way. `odo walk` itself prints both forms when it can't find Chrome listening.
+**Windows (cmd), Edge**
 
-Leave that Chrome window open; `odo walk cars.com` or `odo walk carvana` then visits one search page, scrolls and dwells like a person, opens a capped number of detail pages with a random gap between each, and beeps and waits for Enter if a page looks like a bot-defense challenge, so you can solve it by hand in the same window before the walk continues.
+```
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="%LOCALAPPDATA%\Odonomics\chrome-profile"
+```
+
+A bare quoted path needs PowerShell's `&` call operator to run at all; cmd runs it either way. `odo walk` itself prints all four forms (Chrome and Edge, PowerShell and cmd) on Windows, and both browsers' lines on macOS and Linux, when it can't find one listening.
+
+Leave that window open; `odo walk cars.com` or `odo walk carvana` then visits one search page, scrolls and dwells like a person, and opens a capped number of detail pages with a random gap between each. Every detail tab opens as a CDP background target and closes the same way, so the browser stays out of the way on your desktop the whole time; it never comes to the front of your other windows. The one exception is a bot-defense challenge: the walk beeps and brings the challenged page to the front so you can solve it by hand, then puts your previous window back in front once you press Enter, and the walk itself goes back to running in the background.
 
 ## Scenario
 
