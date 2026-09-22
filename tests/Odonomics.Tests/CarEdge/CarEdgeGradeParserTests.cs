@@ -68,4 +68,30 @@ public class CarEdgeGradeParserTests
         Assert.Equal(CarEdgeGradeStatus.Unrecognized, result.Status);
         Assert.Null(result.Grade);
     }
+
+    [Fact]
+    public async Task Parse_MultiResultPage_MatchesGradeToTheDealerItsOwnBlockNames()
+    {
+        string pageText = await ReadFixtureAsync("multi-result.txt");
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("F", result.Grade);
+        Assert.NotNull(result.Reason);
+        Assert.Contains("Holler Honda", result.Reason);
+        Assert.DoesNotContain("Bayview Motors", result.Reason ?? "");
+    }
+
+    [Fact]
+    public async Task Parse_MultiResultPage_OtherDealerGetsItsOwnGradeNotTheFirstOnPage()
+    {
+        string pageText = await ReadFixtureAsync("multi-result.txt");
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Bayview Motors");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("A+", result.Grade);
+        Assert.Null(result.Reason);
+    }
 }

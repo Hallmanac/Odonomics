@@ -14,16 +14,26 @@ public static partial class CarEdgeGradeParser
 {
     public static CarEdgeGradeResult Parse(string pageText, string dealerName)
     {
-        Match gradeMatch = GradeLine().Match(pageText);
-        if (gradeMatch.Success)
+        string normalizedDealerName = DealerNormalizer.Normalize(dealerName);
+        MatchCollection gradeMatches = GradeLine().Matches(pageText);
+
+        if (gradeMatches.Count > 0 && normalizedDealerName.Length == 0)
         {
-            string normalizedDealerName = DealerNormalizer.Normalize(dealerName);
-            string normalizedPage = DealerNormalizer.Normalize(pageText);
-            if (normalizedDealerName.Length == 0 || !normalizedPage.Contains(normalizedDealerName, StringComparison.Ordinal))
+            return CarEdgeGradeResult.Unrecognized;
+        }
+
+        for (int i = 0; i < gradeMatches.Count; i++)
+        {
+            Match gradeMatch = gradeMatches[i];
+
+            // Scope the dealer-name check to the text between the previous grade line (or the
+            // start of the page) and this one, so a multi-result search page can't match this
+            // grade to a dealer named lower down in a different result's block.
+            int precedingStart = i == 0 ? 0 : gradeMatches[i - 1].Index;
+            string precedingBlock = pageText[precedingStart..gradeMatch.Index];
+            if (!DealerNormalizer.Normalize(precedingBlock).Contains(normalizedDealerName, StringComparison.Ordinal))
             {
-                // The top grade line on the page isn't for the dealer we searched for (a
-                // multi-result search page, most likely) — don't record someone else's grade.
-                return CarEdgeGradeResult.Unrecognized;
+                continue;
             }
 
             string grade = gradeMatch.Groups[1].Value.ToUpperInvariant();
@@ -32,7 +42,9 @@ public static partial class CarEdgeGradeParser
                 return new CarEdgeGradeResult(CarEdgeGradeStatus.Graded, grade, Reason: null);
             }
 
-            Match reasonMatch = ReasonBlock().Match(pageText);
+            int sectionEnd = i + 1 < gradeMatches.Count ? gradeMatches[i + 1].Index : pageText.Length;
+            string dealerSection = pageText[gradeMatch.Index..sectionEnd];
+            Match reasonMatch = ReasonBlock().Match(dealerSection);
             string? reason = reasonMatch.Success ? reasonMatch.Groups[1].Value.Trim() : null;
             return new CarEdgeGradeResult(CarEdgeGradeStatus.Graded, grade, reason);
         }
