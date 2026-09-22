@@ -30,18 +30,25 @@ public static class WalkCommand
 
         if (!await CdpAvailability.IsListeningAsync(ChromeLaunchLine.DebugPort, cancellationToken))
         {
-            AnsiConsole.MarkupLine("[yellow]nothing is listening on the CDP debugging port. Launch Chrome with this line, then run `odo walk` again:[/]");
+            AnsiConsole.MarkupLine("[yellow]nothing is listening on the CDP debugging port. Launch Chrome or Microsoft Edge with one of these lines, then run `odo walk` again. The walk stays in the background once it's running, so you can keep working in other windows while it visits pages.[/]");
             AnsiConsole.WriteLine();
             if (OperatingSystem.IsWindows())
             {
-                AnsiConsole.MarkupLine("[grey]PowerShell:[/]");
+                AnsiConsole.MarkupLine("[grey]Chrome, PowerShell:[/]");
                 AnsiConsole.WriteLine(ChromeLaunchLine.BuildForPowerShell());
-                AnsiConsole.MarkupLine("[grey]cmd:[/]");
+                AnsiConsole.MarkupLine("[grey]Chrome, cmd:[/]");
                 AnsiConsole.WriteLine(ChromeLaunchLine.Build());
+                AnsiConsole.MarkupLine("[grey]Edge, PowerShell:[/]");
+                AnsiConsole.WriteLine(ChromeLaunchLine.BuildForEdgeForPowerShell());
+                AnsiConsole.MarkupLine("[grey]Edge, cmd:[/]");
+                AnsiConsole.WriteLine(ChromeLaunchLine.BuildForEdge());
             }
             else
             {
+                AnsiConsole.MarkupLine("[grey]Chrome:[/]");
                 AnsiConsole.WriteLine(ChromeLaunchLine.Build());
+                AnsiConsole.MarkupLine("[grey]Edge:[/]");
+                AnsiConsole.WriteLine(ChromeLaunchLine.BuildForEdge());
             }
 
             return 1;

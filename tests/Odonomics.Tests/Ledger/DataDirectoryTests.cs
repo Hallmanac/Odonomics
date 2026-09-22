@@ -2,6 +2,7 @@ using Odonomics.Ledger;
 
 namespace Odonomics.Tests.Ledger;
 
+[Collection(DataDirectoryEnvironmentCollection.Name)]
 public class DataDirectoryTests
 {
     [Fact]
