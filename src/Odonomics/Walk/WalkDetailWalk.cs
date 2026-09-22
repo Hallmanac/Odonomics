@@ -9,9 +9,9 @@ public enum DetailPageOutcome
 
     /// <summary>The page is some other vehicle than the one this pair asked for. This is the one
     /// outcome that never spends any of the per-pair cap: a search page that mixes in other
-    /// models (Carvana's own model filter does not separate a hybrid from its gas counterpart)
-    /// still gets every real candidate visited, up to the pool <see cref="WalkDetailWalk.RunAsync"/>
-    /// was handed.</summary>
+    /// models (neither cars.com's nor Carvana's own model filter separates a hybrid or plug-in
+    /// variant from its base model) still gets every real candidate visited, up to the pool
+    /// <see cref="WalkDetailWalk.RunAsync"/> was handed.</summary>
     NotMatching,
 
     /// <summary>The page matched but had no VIN to key a ledger row on.</summary>
