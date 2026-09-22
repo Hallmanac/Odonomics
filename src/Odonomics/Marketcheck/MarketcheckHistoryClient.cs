@@ -40,7 +40,7 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
             int? daysOnMarket = await FetchCurrentDaysOnMarketAsync(vin, cancellationToken);
             return new VinHistoryResult(priorListings, daysOnMarket, null);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             return new VinHistoryResult([], null, ex.Message);
         }
