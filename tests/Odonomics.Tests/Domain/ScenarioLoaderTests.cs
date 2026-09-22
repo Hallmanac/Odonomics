@@ -69,6 +69,84 @@ public class ScenarioLoaderTests
     }
 
     [Fact]
+    public void Parse_HybridOnlyFromModelYearKeyDifferentCase_MatchesCaseInsensitively()
+    {
+        const string json = """
+            {
+              "name": "test",
+              "zip": "32114",
+              "radiusMiles": 50,
+              "annualMiles": 12000,
+              "gasPricePerGallon": { "min": 3.00, "max": 3.60 },
+              "holdYears": 10,
+              "downPayment": 3000,
+              "apr": { "min": 0.065, "max": 0.095 },
+              "termMonths": 60,
+              "maintenancePerMile": 0.07,
+              "emergencyReservePerMonth": 50,
+              "salesTaxStateRate": 0.06,
+              "countySurtaxRate": 0.005,
+              "countySurtaxSource": "test",
+              "fees": 500,
+              "residualFraction": 0.35,
+              "insuranceMonthlyByModel": {},
+              "mpgByModel": {},
+              "filters": {
+                "minModelYear": 2019,
+                "minModelYearOverrides": {},
+                "maxMileage": 100000,
+                "allowedModels": ["Toyota Camry Hybrid"]
+              },
+              "hybridOnlyFromModelYear": { "toyota camry hybrid": 2025 },
+              "targetMonthlyBudgets": [300]
+            }
+            """;
+
+        Scenario scenario = ScenarioLoader.Parse(json);
+
+        Assert.Equal(2025, scenario.HybridOnlyFromModelYear["Toyota Camry Hybrid"]);
+    }
+
+    [Fact]
+    public void Parse_HybridOnlyFromModelYearExplicitNull_DefaultsToEmpty()
+    {
+        const string json = """
+            {
+              "name": "test",
+              "zip": "32114",
+              "radiusMiles": 50,
+              "annualMiles": 12000,
+              "gasPricePerGallon": { "min": 3.00, "max": 3.60 },
+              "holdYears": 10,
+              "downPayment": 3000,
+              "apr": { "min": 0.065, "max": 0.095 },
+              "termMonths": 60,
+              "maintenancePerMile": 0.07,
+              "emergencyReservePerMonth": 50,
+              "salesTaxStateRate": 0.06,
+              "countySurtaxRate": 0.005,
+              "countySurtaxSource": "test",
+              "fees": 500,
+              "residualFraction": 0.35,
+              "insuranceMonthlyByModel": {},
+              "mpgByModel": {},
+              "filters": {
+                "minModelYear": 2019,
+                "minModelYearOverrides": {},
+                "maxMileage": 100000,
+                "allowedModels": []
+              },
+              "hybridOnlyFromModelYear": null,
+              "targetMonthlyBudgets": [300]
+            }
+            """;
+
+        Scenario scenario = ScenarioLoader.Parse(json);
+
+        Assert.Empty(scenario.HybridOnlyFromModelYear);
+    }
+
+    [Fact]
     public void Parse_HybridOnlyFromModelYearKeyNotAnAllowedModel_Throws()
     {
         const string json = """

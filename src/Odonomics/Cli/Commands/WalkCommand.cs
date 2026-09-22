@@ -217,7 +217,9 @@ public static class WalkCommand
                 {
                     int? gasOnlyBeforeYear = query.GasOnlyBeforeHybridYear(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year);
                     string detail = gasOnlyBeforeYear is int hybridYear
-                        ? $"{outcome.Result.Year} {outcome.Result.Model} {outcome.Result.Trim}, gas-only before {hybridYear}"
+                        ? string.IsNullOrWhiteSpace(outcome.Result.Trim)
+                            ? $"{outcome.Result.Year} {outcome.Result.Model}, gas-only before {hybridYear}"
+                            : $"{outcome.Result.Year} {outcome.Result.Model} {outcome.Result.Trim}, gas-only before {hybridYear}"
                         : $"doesn't match {make} {model}: {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}";
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NotMatching)} ({detail})[/]");
                     return DetailPageOutcome.NotMatching;
