@@ -50,15 +50,33 @@ rankCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(rankCommand);
 
+var refreshOption = new Option<bool>("--refresh") { Description = "re-fetch NHTSA safety ratings and Marketcheck VIN history even if the cached research is under seven days old" };
+
 var showVinArgument = new Argument<string>("vin");
-var showCommand = new Command("show", "NHTSA decode, recalls, complaints, postings, notes, and finalist status for one VIN");
+var showCommand = new Command("show", "NHTSA decode, recalls, complaints, safety ratings, Marketcheck VIN history, red flags, postings, notes, and finalist status for one VIN");
 showCommand.Add(showVinArgument);
+showCommand.Add(refreshOption);
 showCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     string vin = parseResult.GetValue(showVinArgument)!;
-    return await ShowCommand.RunAsync(vin, cancellationToken);
+    bool refresh = parseResult.GetValue(refreshOption);
+    return await ShowCommand.RunAsync(vin, refresh, cancellationToken);
 });
 rootCommand.Add(showCommand);
+
+var researchVinsArgument = new Argument<string[]>("vins") { Description = "specific VINs to research; omit to research every vehicle in the ledger that passes the scenario's filters and hasn't been researched in the last seven days", Arity = ArgumentArity.ZeroOrMore };
+var researchCommand = new Command("research", "NHTSA safety ratings and Marketcheck VIN history for one or more vehicles in one go, with a red-flags summary at the end");
+researchCommand.Add(researchVinsArgument);
+researchCommand.Add(scenarioOption);
+researchCommand.Add(refreshOption);
+researchCommand.SetAction(async (parseResult, cancellationToken) =>
+{
+    string[] vins = parseResult.GetValue(researchVinsArgument) ?? [];
+    string scenarioPath = parseResult.GetValue(scenarioOption)!;
+    bool refresh = parseResult.GetValue(refreshOption);
+    return await ResearchCommand.RunAsync(scenarioPath, vins, refresh, cancellationToken);
+});
+rootCommand.Add(researchCommand);
 
 var noteVinArgument = new Argument<string>("vin");
 var noteTextArgument = new Argument<string>("text");
