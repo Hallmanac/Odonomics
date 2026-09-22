@@ -22,13 +22,28 @@ public static class ScenarioLoader
 
         scenario = scenario with
         {
-            HybridOnlyFromModelYear = new Dictionary<string, int>(
-                scenario.HybridOnlyFromModelYear ?? new Dictionary<string, int>(),
-                StringComparer.OrdinalIgnoreCase),
+            HybridOnlyFromModelYear = BuildCaseInsensitiveHybridOnlyFromModelYear(
+                scenario.HybridOnlyFromModelYear ?? new Dictionary<string, int>()),
         };
 
         ValidateHybridOnlyFromModelYear(scenario);
         return scenario;
+    }
+
+    private static Dictionary<string, int> BuildCaseInsensitiveHybridOnlyFromModelYear(
+        IReadOnlyDictionary<string, int> hybridOnlyFromModelYear)
+    {
+        Dictionary<string, int> result = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string makeModel, int year) in hybridOnlyFromModelYear)
+        {
+            if (!result.TryAdd(makeModel, year))
+            {
+                throw new JsonException(
+                    $"hybridOnlyFromModelYear has \"{makeModel}\" more than once (keys are matched case-insensitively)");
+            }
+        }
+
+        return result;
     }
 
     private static void ValidateHybridOnlyFromModelYear(Scenario scenario)
