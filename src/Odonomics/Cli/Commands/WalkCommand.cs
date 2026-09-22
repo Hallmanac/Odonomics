@@ -15,8 +15,10 @@ namespace Odonomics.Cli.Commands;
 /// hand, never launches one itself. With no site argument it walks cars.com and then carvana; a
 /// site argument narrows it to that one site. With no --model it walks every model in the
 /// scenario's allowed list, in order, on whichever site(s) it's covering; --model narrows it to
-/// that one model exactly, on whichever site(s) it's covering. --max caps detail pages visited per
-/// site-and-model pair, not per run. See the brief for the full pacing spec; this command
+/// that one model exactly, on whichever site(s) it's covering. --max caps matching detail pages
+/// visited per site-and-model pair, not per run or raw page visits: a page rejected for not
+/// matching the model doesn't spend the cap, so the walk can open more candidate links than --max
+/// to fill it. See the brief for the full pacing spec; this command
 /// implements it as literally as an automated agent can, since the actual bot-defense behavior can
 /// only be proven by the operator running it against a real browser.
 /// </summary>
