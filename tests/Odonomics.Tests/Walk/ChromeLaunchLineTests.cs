@@ -27,25 +27,25 @@ public class ChromeLaunchLineTests
     }
 
     [Fact]
-    public void BuildForEdge_IncludesDebugPortAndTheSharedProfileDirectoryAndNamesEdge()
+    public void BuildForEdge_IncludesDebugPortAndItsOwnProfileDirectoryAndNamesEdge()
     {
         string line = ChromeLaunchLine.BuildForEdge();
 
         Assert.Contains("--remote-debugging-port=9222", line);
         Assert.Contains("--user-data-dir=", line);
-        Assert.Contains("chrome-profile", line);
+        Assert.Contains("edge-profile", line);
         Assert.Contains("Edge", line, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void BuildAndBuildForEdge_UseTheSameProfileDirectory()
+    public void BuildAndBuildForEdge_UseDifferentProfileDirectories()
     {
         string chromeLine = ChromeLaunchLine.Build();
         string edgeLine = ChromeLaunchLine.BuildForEdge();
 
         Assert.Contains("--user-data-dir=", chromeLine);
         Assert.Contains("--user-data-dir=", edgeLine);
-        Assert.Equal(
+        Assert.NotEqual(
             chromeLine[chromeLine.IndexOf("--user-data-dir=", StringComparison.Ordinal)..],
             edgeLine[edgeLine.IndexOf("--user-data-dir=", StringComparison.Ordinal)..]);
     }

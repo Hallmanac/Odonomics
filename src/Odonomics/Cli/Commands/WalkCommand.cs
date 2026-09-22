@@ -96,7 +96,8 @@ public static class WalkCommand
         using IPlaywright playwright = await Playwright.CreateAsync();
         await using IBrowser browser = await playwright.Chromium.ConnectOverCDPAsync($"http://localhost:{ChromeLaunchLine.DebugPort}");
         ICDPSession browserCdp = await browser.NewBrowserCDPSessionAsync();
-        IBrowserContext context = browser.Contexts.FirstOrDefault() ?? await browser.NewContextAsync();
+        IBrowserContext context = browser.Contexts.FirstOrDefault()
+            ?? throw new InvalidOperationException("the CDP connection exposed no browser context to attach to; is the browser still running?");
         IPage page = context.Pages.FirstOrDefault() ?? await BackgroundTabs.OpenAsync(browserCdp, context);
 
         string searchUrl = site.BuildSearchUrl(make, model, scenario.Zip, scenario.RadiusMiles);
