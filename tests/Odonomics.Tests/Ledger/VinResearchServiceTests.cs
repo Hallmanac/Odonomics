@@ -89,7 +89,7 @@ public class VinResearchServiceTests
         var http = new HttpClient(handler);
         var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient("test-key", http));
 
-        VinResearchResult result = await service.RefreshAsync(db, vehicle, CancellationToken.None);
+        VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
 
         Assert.Equal(5, result.Safety.OverallRating);
         Assert.Equal(88, result.History.CurrentListingDaysOnMarket);
@@ -139,7 +139,7 @@ public class VinResearchServiceTests
         var http = new HttpClient(handler);
         var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient(apiKey: null, http));
 
-        VinResearchResult result = await service.RefreshAsync(db, vehicle, CancellationToken.None);
+        VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
 
         Assert.NotNull(result.History.CouldNotFetchReason);
 
@@ -147,6 +147,49 @@ public class VinResearchServiceTests
         Assert.NotNull(saved.ResearchedAt);
         Assert.Equal(42, saved.CurrentListingDaysOnMarket);
         Assert.Contains("Old Dealer", saved.HistoryRawJson);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_FreshNhtsaButNoHistory_RetriesOnlyMarketcheck()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        VehicleEntity vehicle = Vehicle();
+        var existingRecord = new VinRecordEntity
+        {
+            Vin = Vin,
+            DecodedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            DecodeRawJson = "{}",
+            ResearchedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            OpenRecallCount = 2,
+            SafetyOverallRating = 5,
+            SafetyRawJson = "{\"OverallRating\":5,\"FrontRating\":null,\"SideRating\":null,\"RolloverRating\":null,\"VehicleDescription\":null,\"ErrorText\":null}",
+            HistoryRawJson = null,
+        };
+        db.Vehicles.Add(vehicle);
+        db.VinRecords.Add(existingRecord);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        string fixtureRoot = Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures");
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            ["https://mc-api.marketcheck.com/v2/history/car/1HGCM82633A004352?api_key=test-key"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "vin-history-19XZE4F52ME000999.json")),
+            ["https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&vin=1HGCM82633A004352"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "active-search-19XZE4F52ME000999.json")),
+        });
+        var http = new HttpClient(handler);
+        var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient("test-key", http));
+
+        VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
+
+        Assert.Equal(5, result.Safety.OverallRating);
+        Assert.Equal(7, result.History.PriorListings.Count);
+
+        VinRecordEntity saved = await db.VinRecords.FindAsync([Vin]) ?? throw new InvalidOperationException();
+        Assert.Equal(existingRecord.ResearchedAt, saved.ResearchedAt);
+        Assert.Equal(2, saved.OpenRecallCount);
+        Assert.NotNull(saved.HistoryRawJson);
     }
 
     [Fact]
