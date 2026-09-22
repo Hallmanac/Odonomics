@@ -4,6 +4,7 @@ using Odonomics.Domain;
 using Odonomics.Extraction;
 using Odonomics.Ledger;
 using Odonomics.Secrets;
+using Odonomics.Sources;
 using Odonomics.Walk;
 using Spectre.Console;
 
@@ -49,9 +50,28 @@ public static class WalkCommand
         Scenario scenario = ScenarioLoader.Load(scenarioPath);
         string makeModel = modelOverride ?? scenario.Filters.AllowedModels.FirstOrDefault()
             ?? throw new InvalidOperationException("the scenario has no allowed models to walk");
+
+        // Normalized to the scenario's own casing when the override matches one of its allowed
+        // models case-insensitively (an operator typing "honda insight" is still asking for the
+        // scenario's "Honda Insight"): every other model value in the ledger — a search run's, or
+        // this run's own coverage token and Vehicle.Model — comes from the scenario's own casing,
+        // and a walk that stored a differently-cased Model would stamp a "source:model" token
+        // nothing else ever matches, silently breaking the rank view's and diff's coverage lookups
+        // for that VIN from then on.
+        makeModel = scenario.Filters.AllowedModels
+            .FirstOrDefault(m => string.Equals(m, makeModel, StringComparison.OrdinalIgnoreCase))
+            ?? makeModel;
+
         int spaceIndex = makeModel.IndexOf(' ');
-        string make = spaceIndex < 0 ? makeModel : makeModel[..spaceIndex];
-        string model = spaceIndex < 0 ? "" : makeModel[(spaceIndex + 1)..];
+        if (spaceIndex < 0)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]--model must be \"Make Model\" (e.g. \"Honda Insight\"), got \"{makeModel}\"[/]");
+            return 1;
+        }
+
+        string make = makeModel[..spaceIndex];
+        string model = makeModel[(spaceIndex + 1)..];
+        var query = new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage);
 
         var secrets = new SecretResolver();
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
@@ -130,6 +150,12 @@ public static class WalkCommand
                     continue;
                 }
 
+                if (!query.MatchesExtractedVehicle(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim))
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, doesn't match {make} {model} ({outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim})[/]");
+                    continue;
+                }
+
                 var candidate = new ListingCandidate
                 {
                     Vin = outcome.Result.Vin,
@@ -137,11 +163,14 @@ public static class WalkCommand
                     Url = detailUrl,
                     Year = outcome.Result.Year.Value,
                     Make = outcome.Result.Make ?? make,
-                    // Always the canonical model this walk was launched for, not the extraction's
-                    // own free-text model field: VehicleEntity.Model has to match the model half of
-                    // the "source:model" token this run stamps on itself (RunSources.Key below), or
-                    // a page whose extracted text reads as a trimmed variant (e.g. "Insight EX")
-                    // would silently break both the rank view's and the diff's coverage lookups.
+                    // The canonical model this walk was launched for, not the extraction's own
+                    // free-text model field: VehicleEntity.Model has to match the model half of the
+                    // "source:model" token this run stamps on itself (RunSources.Key below), and the
+                    // MatchesExtractedVehicle check above has already dropped any candidate that
+                    // isn't actually this walk's model (e.g. a gas Camry on a Camry Hybrid walk),
+                    // so stamping the canonical model here never mislabels a vehicle the page
+                    // showed for a different reason (its own text reading as a trimmed variant like
+                    // "Insight EX").
                     Model = model,
                     Trim = outcome.Result.Trim,
                     Price = outcome.Result.Price.Value,
