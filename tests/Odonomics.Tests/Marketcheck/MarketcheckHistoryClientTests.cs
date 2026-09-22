@@ -64,4 +64,37 @@ public class MarketcheckHistoryClientTests
         Assert.NotNull(result.CouldNotFetchReason);
         Assert.Contains("401", result.CouldNotFetchReason);
     }
+
+    /// <summary>An HttpClient.Timeout expiry surfaces as a TaskCanceledException (an
+    /// OperationCanceledException) even though nobody cancelled the caller's own token: this must
+    /// still degrade to a reason rather than propagate, the same as any other failed call.</summary>
+    [Fact]
+    public async Task GetHistoryAsync_HttpClientTimesOutWithoutCallerCancelling_DegradesToCouldNotFetchReason()
+    {
+        var handler = new ThrowingHttpMessageHandler(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 30 seconds elapsing."));
+        var client = new MarketcheckHistoryClient("test-key", new HttpClient(handler));
+
+        VinHistoryResult result = await client.GetHistoryAsync(Vin, CancellationToken.None);
+
+        Assert.Empty(result.PriorListings);
+        Assert.Null(result.CurrentListingDaysOnMarket);
+        Assert.NotNull(result.CouldNotFetchReason);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_CallerCancels_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        var handler = new ThrowingHttpMessageHandler(new OperationCanceledException(cts.Token));
+        var client = new MarketcheckHistoryClient("test-key", new HttpClient(handler));
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetHistoryAsync(Vin, cts.Token));
+    }
+
+    private sealed class ThrowingHttpMessageHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw exception;
+    }
 }

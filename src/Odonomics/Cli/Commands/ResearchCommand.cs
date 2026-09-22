@@ -70,7 +70,7 @@ public static class ResearchCommand
                 bool usingCache = !VinResearchService.NeedsRefresh(vehicle.VinRecord, refresh);
                 VinResearchResult research = usingCache
                     ? VinResearchService.FromCached(vehicle.VinRecord!)
-                    : await researchService.RefreshAsync(db, vehicle, cancellationToken);
+                    : await researchService.RefreshAsync(db, vehicle, refresh, cancellationToken);
 
                 decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
                 IReadOnlyList<string> redFlags = VinResearchService.RedFlags(research, currentPrice);
@@ -83,7 +83,7 @@ public static class ResearchCommand
                 string flagSummary = redFlags.Count == 0 ? "no red flags" : $"{redFlags.Count} red flag(s)";
                 AnsiConsole.MarkupLineInterpolated($"{label}: {source}, {flagSummary}");
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 failures++;
                 AnsiConsole.MarkupLineInterpolated($"[red]{label}: failed to research ({ex.Message})[/]");
