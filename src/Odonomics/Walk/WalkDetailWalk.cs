@@ -3,9 +3,16 @@ namespace Odonomics.Walk;
 /// <summary>What happened when the walk actually opened one candidate detail link.</summary>
 public enum DetailPageOutcome
 {
-    /// <summary>The page never yielded a usable extraction (a load error, a challenge, an
-    /// extraction API failure).</summary>
+    /// <summary>The page itself never yielded usable text: a load error, a challenge, or some
+    /// other exception opening or reading the tab. See <see cref="ExtractionFailed"/> for the
+    /// page loading fine but the extraction step then failing.</summary>
     Failed,
+
+    /// <summary>The page loaded and its text was captured, but the extraction API call over that
+    /// text failed or returned no result (a rate limit, a bad API key, a malformed response).
+    /// Kept distinct from <see cref="Failed"/> so an operator isn't sent looking at the browser
+    /// or network for what's actually an extraction-service problem.</summary>
+    ExtractionFailed,
 
     /// <summary>The page is some other vehicle than the one this pair asked for. This is the one
     /// outcome that never spends any of the per-pair cap: a search page that mixes in other
@@ -34,6 +41,7 @@ public static class WalkOutcomeWording
         DetailPageOutcome.NoVin => "no VIN",
         DetailPageOutcome.NotMatching => "wrong model",
         DetailPageOutcome.Failed => "failed to load",
+        DetailPageOutcome.ExtractionFailed => "extraction failed",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
 }
@@ -41,9 +49,9 @@ public static class WalkOutcomeWording
 /// <summary>How many candidate detail pages were dropped for each reason. Total, plus whatever
 /// was saved, always equals the number of pages visited: NotMatching is included here (as "wrong
 /// model") even though it never spends the per-pair cap, since the page was still visited.</summary>
-public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatching, int Failed)
+public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatching, int Failed, int ExtractionFailed = 0)
 {
-    public int Total => MissingFields + NoVin + NotMatching + Failed;
+    public int Total => MissingFields + NoVin + NotMatching + Failed + ExtractionFailed;
 
     public int this[DetailPageOutcome outcome] => outcome switch
     {
@@ -51,6 +59,7 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
         DetailPageOutcome.NoVin => NoVin,
         DetailPageOutcome.NotMatching => NotMatching,
         DetailPageOutcome.Failed => Failed,
+        DetailPageOutcome.ExtractionFailed => ExtractionFailed,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
 }
@@ -84,6 +93,7 @@ public static class WalkDetailWalk
         int droppedNoVin = 0;
         int droppedNotMatching = 0;
         int droppedFailed = 0;
+        int droppedExtractionFailed = 0;
         int spentOnCap = 0;
 
         for (int i = 0; i < candidateLinks.Count && spentOnCap < maxDetailPages; i++)
@@ -117,10 +127,13 @@ public static class WalkDetailWalk
                 case DetailPageOutcome.Failed:
                     droppedFailed++;
                     break;
+                case DetailPageOutcome.ExtractionFailed:
+                    droppedExtractionFailed++;
+                    break;
             }
         }
 
-        var dropped = new DroppedBreakdown(droppedMissingFields, droppedNoVin, droppedNotMatching, droppedFailed);
+        var dropped = new DroppedBreakdown(droppedMissingFields, droppedNoVin, droppedNotMatching, droppedFailed, droppedExtractionFailed);
         return new DetailWalkTally(visited, upserted, dropped);
     }
 }
