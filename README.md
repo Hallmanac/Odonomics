@@ -63,6 +63,7 @@ Run from the repo root, either as `dotnet run --project src/Odonomics -- <comman
 odo search                          run Auto.dev and Marketcheck, upsert the ledger, print the diff
 odo walk cars.com|carvana [--model "Make Model"] [--max N]
                                      an operator-assisted walk of one site (see below)
+odo dealer grade [--all | <vin>]    look up each ungraded dealer's CarEdge grade (see below)
 odo rank [--budget N] [--term M]    score every vehicle in the ledger against the scenario
 odo show <vin> [--refresh]          NHTSA decode, recalls, complaints, safety ratings, Marketcheck
                                      VIN history, red flags, postings, notes, finalist status
@@ -161,6 +162,24 @@ Launch line (also printed by `odo walk` itself, with your own data directory fil
 A bare quoted path needs PowerShell's `&` call operator to run at all; cmd runs it either way. `odo walk` itself prints all four forms (Chrome and Edge, PowerShell and cmd) on Windows, and both browsers' lines on macOS and Linux, when it can't find one listening.
 
 Leave that window open; `odo walk cars.com` or `odo walk carvana` then visits one search page, scrolls and dwells like a person, and opens a capped number of detail pages with a random gap between each. Every detail tab opens as a CDP background target and closes the same way, so the browser stays out of the way on your desktop the whole time; it never comes to the front of your other windows. The one exception is a bot-defense challenge: the walk beeps and brings the challenged page to the front so you can solve it by hand, then puts your previous window back in front once you press Enter, and the walk itself goes back to running in the background.
+
+## Dealer grades
+
+`odo search` and `odo walk` link every posting they upsert to a dealer, keyed by the dealer's
+normalized name and location, when the source names one: Auto.dev and Marketcheck carry a dealer
+name and city/state in their API response, and the walk's own extraction reads a dealer name and
+location off the page text the same way it reads the vehicle's own fields.
+
+`odo dealer grade --all` connects over CDP to the same operator-launched browser `odo walk` uses
+(see above); if nothing is listening on the debugging port, it prints the identical launch-line
+message and exits. It then looks up every dealer that has never been checked on CarEdge's Dealer
+Ratings, paced and paused for challenges the same way the walk is. `odo dealer grade <vin>` does the
+same for just that VIN's dealer. Each dealer is checked at most once: a dealer CarEdge has no rating
+for is still stamped as checked, since the fetched-at timestamp is what the cache rule keys off, not
+the grade itself, so it is never looked up again on a later run. `odo show <vin>` prints the grade
+and, for an F grade, the reason beside each posting; `odo rank` shows a Grade column and lists any
+vehicle whose only postings come from F-graded dealers under its own warning heading, still ranked,
+never hidden.
 
 ## Scenario
 
