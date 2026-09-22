@@ -56,10 +56,12 @@ public sealed class RunEntity
     public required DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
 
-    /// <summary>Comma-separated posting sources this run actually queried or walked (e.g.
-    /// "auto.dev,marketcheck" or "cars.com"). A source a run could not reach (a missing API key,
-    /// an unwalked site) is never listed here, so "still active"/"gone" comparisons only ever
-    /// judge a posting against a run that could actually have seen it.</summary>
+    /// <summary>Comma-separated "source:model" tokens (see <see cref="RunSources.Key"/>) this run
+    /// actually got a usable result for, e.g. "auto.dev:Camry Hybrid,marketcheck:Camry Hybrid" or
+    /// "cars.com:Insight". A source/model pair the run could not reach or check successfully (a
+    /// missing API key, a failed query, an unwalked site or model) is never listed here, so "still
+    /// active"/"gone" comparisons only ever judge a posting against a run that could actually have
+    /// seen it.</summary>
     public required string Sources { get; set; }
 }
 
@@ -92,12 +94,30 @@ public sealed class NoteEntity
 
 /// <summary>Reads and writes <see cref="RunEntity.Sources"/>'s comma-separated list, and answers
 /// "as of which run did this source last get checked", the question both the rank view and the
-/// search/walk diff need answered per-source rather than against whichever run happened last.</summary>
+/// search/walk diff need answered per-source rather than against whichever run happened last.
+/// Every token is a "source:model" pair (see <see cref="Key"/>), not a bare source name: a run
+/// only ever confirms one or more specific models for a source (one for a walk, whichever queries
+/// actually succeeded for a search), never the source as a whole, so coverage has to be scoped
+/// that finely or a run that only checked one model would silently vouch for every other model
+/// that happens to share its source too.</summary>
 public static class RunSources
 {
+    /// <summary>The token for one (source, model) pair actually covered by a run, where model is
+    /// the bare model name (e.g. "Insight", "Camry Hybrid"), matching
+    /// <see cref="VehicleEntity.Model"/>.</summary>
+    public static string Key(string source, string model) => $"{source}:{model}";
+
     public static string Join(IEnumerable<string> sources) => string.Join(',', sources);
 
     public static string[] Split(RunEntity run) => run.Sources.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>Splits a <see cref="Key"/> token back into its source and model. Only the first
+    /// colon is significant; a model name is never expected to contain one.</summary>
+    public static (string Source, string Model) SplitKey(string token)
+    {
+        int colonIndex = token.IndexOf(':');
+        return colonIndex < 0 ? (token, "") : (token[..colonIndex], token[(colonIndex + 1)..]);
+    }
 
     /// <summary>For every source covered by any run in <paramref name="runs"/>, the StartedAt of
     /// the most recent one that covered it.</summary>

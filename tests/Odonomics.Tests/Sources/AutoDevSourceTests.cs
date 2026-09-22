@@ -40,6 +40,25 @@ public class AutoDevSourceTests
         Assert.Contains(result.Candidates, c => c.Vin == "19XZE4F52ME000999" && c.Price == 19393m && c.Mileage == 69599);
         Assert.All(result.Candidates, c => Assert.False(string.IsNullOrWhiteSpace(c.Url)));
         Assert.All(result.Candidates, c => Assert.Equal("auto.dev", c.Source));
+        Assert.Equal(["Insight"], result.ModelsCovered);
+    }
+
+    [Fact]
+    public async Task RunAsync_QueryFails_ModelIsNotReportedCovered()
+    {
+        // A query that comes back as an error (a bad key, a rate limit, a timeout) must not be
+        // treated the same as one that ran and legitimately found nothing: the caller uses
+        // ModelsCovered to decide which of this run's postings it can trust as "still active" or
+        // "gone", and a failed query never actually confirmed either.
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        var handler = new StatusCodeHttpMessageHandler(System.Net.HttpStatusCode.TooManyRequests);
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.False(result.CouldNotRun);
+        Assert.Empty(result.ModelsCovered);
+        Assert.Contains(result.Rejections, r => r.Contains("HTTP 429"));
     }
 
     [Fact]

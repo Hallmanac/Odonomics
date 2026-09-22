@@ -46,6 +46,7 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
                     continue;
                 }
 
+                result.ModelsCovered.Add(query.Model);
                 foreach (JsonElement record in records.EnumerateArray())
                 {
                     AddCandidateIfValid(result, query, record);
