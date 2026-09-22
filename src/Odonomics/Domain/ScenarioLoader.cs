@@ -20,6 +20,13 @@ public static class ScenarioLoader
         Scenario scenario = JsonSerializer.Deserialize<Scenario>(json, Options)
             ?? throw new JsonException("scenario file deserialized to null");
 
+        scenario = scenario with
+        {
+            HybridOnlyFromModelYear = new Dictionary<string, int>(
+                scenario.HybridOnlyFromModelYear ?? new Dictionary<string, int>(),
+                StringComparer.OrdinalIgnoreCase),
+        };
+
         ValidateHybridOnlyFromModelYear(scenario);
         return scenario;
     }

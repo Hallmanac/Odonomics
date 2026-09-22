@@ -55,8 +55,9 @@ public sealed record Scenario
     /// went hybrid-only, so a candidate at or above that year matches this scenario's hybrid model
     /// even when the listing text never says "Hybrid" (Toyota dropped the gas-only Camry for model
     /// year 2025). Optional: a model absent here is matched only when its own listing text says
-    /// so, same as before this existed. ScenarioLoader validates every key is an allowed model and
-    /// every value a four-digit year.</summary>
+    /// so, same as before this existed. ScenarioLoader rebuilds this dictionary with a
+    /// case-insensitive comparer and validates every key is an allowed model and every value a
+    /// four-digit year.</summary>
     public IReadOnlyDictionary<string, int> HybridOnlyFromModelYear { get; init; } = new Dictionary<string, int>();
 
     public required HardFilters Filters { get; init; }
