@@ -59,12 +59,14 @@ public static class ResearchCommand
         var researchService = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient(secrets.MarketcheckApiKey, http));
 
         var flagged = new List<(VehicleEntity Vehicle, IReadOnlyList<string> Flags)>();
-        int failures = 0;
+        int fullyResearched = 0;
+        int partiallyResearched = 0;
+        int unreachable = 0;
 
         for (int i = 0; i < vehicles.Count; i++)
         {
             VehicleEntity vehicle = vehicles[i];
-            string label = $"{vehicle.Vin} ({vehicle.Year} {vehicle.Make} {vehicle.Model})";
+            string label = $"{vehicle.Year} {vehicle.Make} {vehicle.Model} ({vehicle.Vin})";
             try
             {
                 bool usingCache = !VinResearchService.NeedsRefresh(vehicle.VinRecord, refresh);
@@ -79,14 +81,28 @@ public static class ResearchCommand
                     flagged.Add((vehicle, redFlags));
                 }
 
-                string source = usingCache ? "cached" : "researched";
-                string flagSummary = redFlags.Count == 0 ? "no red flags" : $"{redFlags.Count} red flag(s)";
-                AnsiConsole.MarkupLineInterpolated($"{label}: {source}, {flagSummary}");
+                bool anyPieceFailed = research.Recalls.CouldNotFetchReason is not null
+                    || research.Complaints.CouldNotFetchReason is not null
+                    || research.Safety.CouldNotFetchReason is not null;
+
+                if (!anyPieceFailed)
+                {
+                    fullyResearched++;
+                    string source = usingCache ? "cached" : "researched";
+                    string flagSummary = redFlags.Count == 0 ? "no red flags" : $"{redFlags.Count} red flag(s)";
+                    AnsiConsole.MarkupLineInterpolated($"{label}: {source}, {flagSummary}");
+                }
+                else
+                {
+                    partiallyResearched++;
+                    string sentence = ComposePartialResultSentence(research.Safety, research.Recalls, research.Complaints);
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]{label}: {sentence}[/]");
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                failures++;
-                AnsiConsole.MarkupLineInterpolated($"[red]{label}: failed to research ({ex.Message})[/]");
+                unreachable++;
+                AnsiConsole.MarkupLineInterpolated($"[red]{label}: could not be reached ({ex.Message})[/]");
             }
 
             if (i < vehicles.Count - 1)
@@ -94,6 +110,9 @@ public static class ResearchCommand
                 await Task.Delay(PauseBetweenVehicles, cancellationToken);
             }
         }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLineInterpolated($"{fullyResearched} fully researched, {partiallyResearched} partially researched, {unreachable} unreachable");
 
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLineInterpolated($"[bold]Red flags ({flagged.Count} of {vehicles.Count} researched)[/]");
@@ -113,8 +132,56 @@ public static class ResearchCommand
             }
         }
 
-        return failures == 0 ? 0 : 1;
+        return fullyResearched + partiallyResearched == 0 ? 1 : 0;
     }
+
+    /// <summary>The sentence for a vehicle whose safety-ratings, recalls, or complaints call could
+    /// not be fetched this run (see NhtsaClient's retry-then-degrade behavior): every failed piece's
+    /// reason, then which of the three still came back and were stored. For example, a safety-ratings
+    /// failure with recalls and complaints intact reads "NHTSA safety ratings could not be fetched,
+    /// HTTP 200 with an HTML error page; recalls and complaints stored".</summary>
+    private static string ComposePartialResultSentence(SafetyRatingsResult safety, RecallsResult recalls, ComplaintsResult complaints)
+    {
+        List<string> failedClauses = [];
+        List<string> succeededNames = [];
+
+        if (safety.CouldNotFetchReason is string safetyReason)
+        {
+            failedClauses.Add(safetyReason);
+        }
+        else
+        {
+            succeededNames.Add("safety ratings");
+        }
+
+        if (recalls.CouldNotFetchReason is string recallsReason)
+        {
+            failedClauses.Add(recallsReason);
+        }
+        else
+        {
+            succeededNames.Add("recalls");
+        }
+
+        if (complaints.CouldNotFetchReason is string complaintsReason)
+        {
+            failedClauses.Add(complaintsReason);
+        }
+        else
+        {
+            succeededNames.Add("complaints");
+        }
+
+        string storedClause = succeededNames.Count == 0 ? "nothing else stored" : $"{JoinWithAnd(succeededNames)} stored";
+        return $"{string.Join("; ", failedClauses)}; {storedClause}";
+    }
+
+    private static string JoinWithAnd(IReadOnlyList<string> items) => items.Count switch
+    {
+        1 => items[0],
+        2 => $"{items[0]} and {items[1]}",
+        _ => $"{string.Join(", ", items.Take(items.Count - 1))}, and {items[^1]}",
+    };
 
     /// <summary>The scenario's non-price hard filters (allowed model, minimum year, maximum mileage,
     /// not new stock). Missing-price is excluded on purpose: a vehicle that has no current asking
