@@ -223,7 +223,9 @@ public static class WalkCommand
     /// bot-defense JS challenge often resolves itself within a few seconds in a real Chrome tab
     /// (the same settle-then-recheck the spike's PageWalkEngine proved out), so checking the
     /// instant navigation completes risks a false positive on a page that just hasn't finished
-    /// rendering yet.</summary>
+    /// rendering yet. Bringing the challenged page to front is the one activation the walk is
+    /// allowed to make; the operator's previously frontmost app goes back in front once they
+    /// press Enter, so the walk returns to the background exactly where it left off.</summary>
     private static async Task HandleChallengeIfPresentAsync(IPage page, CancellationToken cancellationToken)
     {
         await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
@@ -241,9 +243,18 @@ public static class WalkCommand
             return;
         }
 
-        Console.Write('\a');
-        AnsiConsole.MarkupLineInterpolated($"[bold red]challenge on {page.Url}: solve it in the browser, then press Enter[/]");
-        await Console.In.ReadLineAsync(cancellationToken);
-        await page.ReloadAsync();
+        string? frontmostApp = await ForegroundApp.CaptureFrontmostAsync(cancellationToken);
+        await page.BringToFrontAsync();
+        try
+        {
+            Console.Write('\a');
+            AnsiConsole.MarkupLineInterpolated($"[bold red]challenge on {page.Url}: solve it in the browser, then press Enter[/]");
+            await Console.In.ReadLineAsync(cancellationToken);
+            await page.ReloadAsync();
+        }
+        finally
+        {
+            await ForegroundApp.RestoreAsync(frontmostApp, cancellationToken);
+        }
     }
 }
