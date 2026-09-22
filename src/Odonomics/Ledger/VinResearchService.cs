@@ -20,9 +20,10 @@ public sealed record VinResearchResult(
     VinHistoryResult History);
 
 /// <summary>Whether a vehicle has been researched (the safety-ratings/VIN-history lookup, not just
-/// the NHTSA decode `odo show` always ran) and, if so, whether any red flag exists. Purely a display
-/// concern for `odo rank`'s research column; it never feeds the ranking math.</summary>
-public sealed record ResearchStatus(bool Researched, DateTimeOffset? ResearchedAt, bool HasRedFlag);
+/// the NHTSA decode `odo show` always ran), whether any red flag exists, and how many open NHTSA
+/// recalls it carries. Purely a display concern for `odo rank`'s research and recalls columns; none
+/// of it ever feeds the ranking math.</summary>
+public sealed record ResearchStatus(bool Researched, DateTimeOffset? ResearchedAt, bool HasRedFlag, int RecallCount);
 
 /// <summary>Fetches and caches the research lookup `odo show` and `odo research` both run: NHTSA
 /// decode, recalls, complaints, and safety ratings, plus the Marketcheck VIN history. Refreshed on
@@ -200,25 +201,28 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
 
     /// <summary>The red flags for a cached record against a vehicle's current asking price, without
     /// re-fetching anything. Used by `odo rank`'s research column, which never makes a network call.
-    /// Reads <see cref="VinRecordEntity.OpenRecallCount"/> directly rather than going through
-    /// <see cref="FromCached"/>'s parsed recall list, since the recall count is the only part of
-    /// that list red flags actually needs and it's the field the entity treats as authoritative.</summary>
-    public static IReadOnlyList<string> RedFlagsForCached(VinRecordEntity record, decimal? currentPrice)
+    /// Reads <see cref="VinRecordEntity.RecallsRawJson"/> rather than <see cref="FromCached"/>'s full
+    /// rebuild, since only the recall list (for remedy status) and the VIN history are needed
+    /// here.</summary>
+    public static IReadOnlyList<RedFlag> RedFlagsForCached(VinRecordEntity record, decimal? currentPrice)
     {
         IReadOnlyList<VinHistoryListing> priorListings = record.HistoryRawJson is null
             ? []
             : JsonSerializer.Deserialize<List<VinHistoryListing>>(record.HistoryRawJson) ?? [];
+        IReadOnlyList<RecallEntry> recalls = record.RecallsRawJson is null
+            ? []
+            : JsonSerializer.Deserialize<List<RecallEntry>>(record.RecallsRawJson) ?? [];
 
         return RedFlagsEvaluator.Evaluate(
-            record.OpenRecallCount,
+            [.. recalls.Select(r => new RecallForFlagging(r.RemedyAvailable))],
             record.SafetyOverallRating,
             [.. priorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.Price, l.Mileage))],
             currentPrice);
     }
 
-    public static IReadOnlyList<string> RedFlags(VinResearchResult research, decimal? currentPrice) =>
+    public static IReadOnlyList<RedFlag> RedFlags(VinResearchResult research, decimal? currentPrice) =>
         RedFlagsEvaluator.Evaluate(
-            research.Recalls.Entries.Count,
+            [.. research.Recalls.Entries.Select(r => new RecallForFlagging(r.RemedyAvailable))],
             research.Safety.OverallRating,
             [.. research.History.PriorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.Price, l.Mileage))],
             currentPrice);

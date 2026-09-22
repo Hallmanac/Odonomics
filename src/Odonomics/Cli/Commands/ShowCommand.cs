@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Odonomics.Domain;
 using Odonomics.Ledger;
 using Odonomics.Marketcheck;
 using Odonomics.Nhtsa;
@@ -36,7 +37,7 @@ public static class ShowCommand
 
         List<RunEntity> runs = await db.Runs.ToListAsync(cancellationToken);
         decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, RunSources.LatestCoverageBySource(runs));
-        IReadOnlyList<string> redFlags = VinResearchService.RedFlags(research, currentPrice);
+        IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
 
         ShowRenderer.Render(vehicle, research, redFlags);
         return 0;

@@ -22,7 +22,16 @@ public sealed record RecallEntry(
     string Summary,
     string Consequence,
     string Remedy,
-    string ReportReceivedDate);
+    string ReportReceivedDate)
+{
+    /// <summary>True once NHTSA's free-text <see cref="Remedy"/> field actually describes a fix.
+    /// The free recallsByVehicle endpoint has no boolean remedy-status field; a campaign with no
+    /// remedy yet either leaves the field blank or fills it with wording to that effect (e.g.
+    /// "Remedy is not yet available. Please check back for updates."), so that free text is the
+    /// only signal v0 has for whether a fix exists.</summary>
+    public bool RemedyAvailable =>
+        !string.IsNullOrWhiteSpace(Remedy) && !Remedy.Contains("not yet available", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>The recalls for one make/model/model-year, or the reason NHTSA's recallsByVehicle
 /// endpoint could not be fetched after a retry (see NhtsaClient), never a raw JSON exception. Only

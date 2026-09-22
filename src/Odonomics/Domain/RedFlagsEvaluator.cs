@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Odonomics.Domain;
 
 /// <summary>The slice of one VIN-history listing the red-flags evaluator needs, kept independent of
@@ -5,50 +7,77 @@ namespace Odonomics.Domain;
 /// the EF Core entities.</summary>
 public sealed record VinHistoryPoint(string? Dealer, DateTimeOffset? FirstSeen, decimal? Price, int? Mileage);
 
+/// <summary>The one fact the evaluator needs from an NHTSA recall campaign, kept independent of
+/// <c>Odonomics.Nhtsa.RecallEntry</c> the same way <see cref="VinHistoryPoint"/> is kept independent
+/// of the Marketcheck client types. A caller maps its recall data down to this before calling
+/// <see cref="RedFlagsEvaluator.Evaluate"/>.</summary>
+public sealed record RecallForFlagging(bool RemedyAvailable);
+
+/// <summary>One red flag: a short, kebab-case <see cref="ShortTag"/> for a compact one-line-per-vehicle
+/// summary (see the research command), and a full-sentence <see cref="Detail"/> for a per-vehicle
+/// detail view (see `odo show`).</summary>
+public sealed record RedFlag(string ShortTag, string Detail);
+
 /// <summary>
-/// Plain, testable rules over a VIN's research data: mileage that decreased between listings, a
-/// listing history spanning several dealers in a short window, an open recall, a safety rating
-/// below four stars, or a current price well above the listing-history price trajectory. Every
-/// threshold below is a deliberate v0 simplification, not a value NHTSA or Marketcheck hand us.
+/// Plain, testable rules over a VIN's research data: mileage that decreased between listings by more
+/// than rounding or a data-entry blip, a listing history spanning several distinct sellers in a short
+/// window, an open recall with no remedy published yet, a safety rating below four stars, or a
+/// current price well above the listing-history price trajectory. Every threshold below is a
+/// deliberate v0 simplification, not a value NHTSA or Marketcheck hand us.
 /// </summary>
-public static class RedFlagsEvaluator
+public static partial class RedFlagsEvaluator
 {
-    private const int DealerHopMinDealers = 3;
+    public const int DefaultDealerCountThreshold = 3;
+    public const int DefaultMileageDropMinMiles = 500;
+    public const decimal DefaultMileageDropMinPercent = 0.01m;
+
     private const int DealerHopWindowDays = 90;
+    private const int MaxSellerNamesShown = 3;
     private const decimal PriceAboveTrajectoryFactor = 1.15m;
     private const int MinPriorListingsForTrajectory = 2;
     private const int LowSafetyRatingThreshold = 4;
 
-    public static IReadOnlyList<string> Evaluate(
-        int openRecallCount,
+    /// <summary>A later listing's mileage at or below this is treated as a placeholder/reset value
+    /// (a blank field defaulted to 0, or a similarly bogus near-zero scrape) rather than a real
+    /// odometer reading, since a used car that previously showed tens of thousands of miles never
+    /// legitimately drops to single digits in a later listing.</summary>
+    private const int PlaceholderMileageMax = 50;
+
+    public static IReadOnlyList<RedFlag> Evaluate(
+        IReadOnlyList<RecallForFlagging> recalls,
         int? safetyOverallRating,
         IReadOnlyList<VinHistoryPoint> priorListings,
-        decimal? currentPrice)
+        decimal? currentPrice,
+        int dealerCountThreshold = DefaultDealerCountThreshold,
+        int mileageDropMinMiles = DefaultMileageDropMinMiles,
+        decimal mileageDropMinPercent = DefaultMileageDropMinPercent)
     {
-        List<string> flags = [];
+        List<RedFlag> flags = [];
 
-        if (openRecallCount > 0)
+        int noRemedyCount = recalls.Count(r => !r.RemedyAvailable);
+        if (noRemedyCount > 0)
         {
-            flags.Add($"{openRecallCount} open NHTSA recall{(openRecallCount == 1 ? "" : "s")}");
+            flags.Add(new RedFlag(
+                "no-remedy-recall",
+                $"{noRemedyCount} open recall{(noRemedyCount == 1 ? "" : "s")} with no remedy available yet"));
         }
 
         if (safetyOverallRating is int stars && stars < LowSafetyRatingThreshold)
         {
-            flags.Add($"NHTSA overall safety rating is {stars} star{(stars == 1 ? "" : "s")}, below 4");
+            flags.Add(new RedFlag(
+                "low-safety-rating",
+                $"NHTSA overall safety rating is {stars} star{(stars == 1 ? "" : "s")}, below 4"));
         }
 
         List<VinHistoryPoint> ordered = [.. priorListings.Where(p => p.FirstSeen is not null).OrderBy(p => p.FirstSeen)];
 
-        for (int i = 1; i < ordered.Count; i++)
+        RedFlag? mileageFlag = FindMileageDrop(ordered, mileageDropMinMiles, mileageDropMinPercent);
+        if (mileageFlag is not null)
         {
-            if (ordered[i - 1].Mileage is int previousMileage && ordered[i].Mileage is int nextMileage && nextMileage < previousMileage)
-            {
-                flags.Add($"mileage dropped from {previousMileage:N0} to {nextMileage:N0} between listings " +
-                          $"({ordered[i - 1].FirstSeen:yyyy-MM-dd} to {ordered[i].FirstSeen:yyyy-MM-dd})");
-            }
+            flags.Add(mileageFlag);
         }
 
-        string? dealerHopFlag = FindDealerHop(ordered);
+        RedFlag? dealerHopFlag = FindDealerHop(ordered, dealerCountThreshold);
         if (dealerHopFlag is not null)
         {
             flags.Add(dealerHopFlag);
@@ -60,18 +89,65 @@ public static class RedFlagsEvaluator
             decimal average = priorPrices.Average();
             if (price > average * PriceAboveTrajectoryFactor)
             {
-                flags.Add($"current price ${price:N0} is well above the ${average:N0} average of {priorPrices.Length} prior listings");
+                flags.Add(new RedFlag(
+                    "price-spike",
+                    $"current price ${price:N0} is well above the ${average:N0} average of {priorPrices.Length} prior listings"));
             }
         }
 
         return flags;
     }
 
+    /// <summary>The first mileage decrease between consecutive listings that survives three
+    /// deliberate exclusions: a drop to a placeholder value (see <see cref="PlaceholderMileageMax"/>),
+    /// a drop between two listings first seen on the same calendar day (almost always the same
+    /// snapshot re-scraped, not two real odometer readings), and a drop smaller than the larger of
+    /// <paramref name="mileageDropMinMiles"/> and <paramref name="mileageDropMinPercent"/> of the
+    /// prior mileage (rounding and minor re-entry noise, not a rolled-back odometer).</summary>
+    private static RedFlag? FindMileageDrop(IReadOnlyList<VinHistoryPoint> ordered, int mileageDropMinMiles, decimal mileageDropMinPercent)
+    {
+        for (int i = 1; i < ordered.Count; i++)
+        {
+            VinHistoryPoint previous = ordered[i - 1];
+            VinHistoryPoint next = ordered[i];
+            if (previous.Mileage is not int previousMileage || next.Mileage is not int nextMileage || nextMileage >= previousMileage)
+            {
+                continue;
+            }
+
+            if (nextMileage <= PlaceholderMileageMax)
+            {
+                continue;
+            }
+
+            if (previous.FirstSeen!.Value.Date == next.FirstSeen!.Value.Date)
+            {
+                continue;
+            }
+
+            int drop = previousMileage - nextMileage;
+            decimal minimumDrop = Math.Max(mileageDropMinMiles, previousMileage * mileageDropMinPercent);
+            if (drop < minimumDrop)
+            {
+                continue;
+            }
+
+            return new RedFlag(
+                "mileage-drop",
+                $"mileage dropped from {previousMileage:N0} to {nextMileage:N0} between listings " +
+                $"({previous.FirstSeen:yyyy-MM-dd} to {next.FirstSeen:yyyy-MM-dd})");
+        }
+
+        return null;
+    }
+
     /// <summary>Finds the first (earliest-starting) 90-day window across the ordered history that
-    /// touched three or more distinct dealers, rather than requiring the *entire* history to fit in
-    /// one short window: a VIN with a long, ordinary history plus one recent burst of relistings
-    /// still needs to trip this, even though its oldest and newest listings are years apart.</summary>
-    private static string? FindDealerHop(IReadOnlyList<VinHistoryPoint> ordered)
+    /// touched at least <paramref name="dealerCountThreshold"/> distinct sellers (after normalizing
+    /// dealer names, see <see cref="DistinctSellers"/>), rather than requiring the *entire* history to
+    /// fit in one short window: a VIN with a long, ordinary history plus one recent burst of
+    /// relistings still needs to trip this, even though its oldest and newest listings are years
+    /// apart.</summary>
+    private static RedFlag? FindDealerHop(IReadOnlyList<VinHistoryPoint> ordered, int dealerCountThreshold)
     {
         for (int start = 0; start < ordered.Count; start++)
         {
@@ -81,22 +157,83 @@ public static class RedFlagsEvaluator
                 end++;
             }
 
-            List<string> dealersInWindow =
-            [
-                .. ordered.Skip(start).Take(end - start + 1)
-                    .Select(p => p.Dealer)
-                    .OfType<string>()
-                    .Where(d => !string.IsNullOrWhiteSpace(d))
-                    .Distinct(),
-            ];
+            List<string> sellers = DistinctSellers(ordered.Skip(start).Take(end - start + 1).Select(p => p.Dealer));
 
-            if (dealersInWindow.Count >= DealerHopMinDealers)
+            if (sellers.Count >= dealerCountThreshold)
             {
                 int days = (int)(ordered[end].FirstSeen!.Value - ordered[start].FirstSeen!.Value).TotalDays;
-                return $"listed by {dealersInWindow.Count} different dealers within {days} days: {string.Join(", ", dealersInWindow)}";
+                string shown = string.Join(", ", sellers.Take(MaxSellerNamesShown));
+                int remaining = sellers.Count - Math.Min(MaxSellerNamesShown, sellers.Count);
+                string suffix = remaining > 0 ? $" and {remaining} more" : "";
+                return new RedFlag(
+                    $"{sellers.Count}-sellers",
+                    $"listed by {sellers.Count} different sellers within {days} days: {shown}{suffix}");
             }
         }
 
         return null;
     }
+
+    /// <summary>Reduces a window's raw dealer names to distinct sellers: case and punctuation are
+    /// normalized away, and a name that is a word-for-word leading prefix of another (e.g. "Schaller
+    /// Honda" of "Schaller Honda Subaru Mitsubishi") is treated as the same seller listed under two
+    /// spellings rather than two sellers, keeping the shorter spelling as the group's displayed
+    /// name. Order of first appearance is preserved so the printed list reads chronologically.</summary>
+    private static List<string> DistinctSellers(IEnumerable<string?> dealerNames)
+    {
+        List<(string Original, string[] Words)> groups = [];
+
+        foreach (string? raw in dealerNames)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            string[] words = NormalizeToWords(raw);
+            if (words.Length == 0)
+            {
+                continue;
+            }
+
+            int matchIndex = groups.FindIndex(g => IsWordPrefixOfEither(g.Words, words));
+            if (matchIndex < 0)
+            {
+                groups.Add((raw, words));
+            }
+            else if (words.Length < groups[matchIndex].Words.Length)
+            {
+                groups[matchIndex] = (raw, words);
+            }
+        }
+
+        return [.. groups.Select(g => g.Original)];
+    }
+
+    private static bool IsWordPrefixOfEither(string[] a, string[] b)
+    {
+        int length = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < length; i++)
+        {
+            if (a[i] != b[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string[] NormalizeToWords(string value)
+    {
+        string withoutPunctuation = Punctuation().Replace(value, " ");
+        string collapsed = WhitespaceRun().Replace(withoutPunctuation, " ").Trim().ToLowerInvariant();
+        return collapsed.Length == 0 ? [] : collapsed.Split(' ');
+    }
+
+    [GeneratedRegex(@"[^\w\s]")]
+    private static partial Regex Punctuation();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRun();
 }
