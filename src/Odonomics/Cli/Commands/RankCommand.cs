@@ -21,6 +21,7 @@ public static class RankCommand
 
         List<VehicleEntity> vehicles = await db.Vehicles
             .Include(v => v.Postings).ThenInclude(p => p.PriceObservations)
+            .Include(v => v.Postings).ThenInclude(p => p.Dealer)
             .ToListAsync(cancellationToken);
 
         List<VinRecordEntity> vinRecords = await db.VinRecords.ToListAsync(cancellationToken);
@@ -39,6 +40,8 @@ public static class RankCommand
                 Model = vehicle.Model,
                 Mileage = vehicle.Mileage,
                 LowestCurrentPrice = lowestCurrentPrice,
+                DealerGrade = DealerGradeSummary(vehicle),
+                OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade == "F"),
             };
             scores.Add(Scorer.Score(forScoring, scenario));
             research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), lowestCurrentPrice);
@@ -57,5 +60,14 @@ public static class RankCommand
 
         IReadOnlyList<string> redFlags = VinResearchService.RedFlagsForCached(record, currentPrice);
         return new ResearchStatus(Researched: true, ResearchedAt: researchedAt, HasRedFlag: redFlags.Count > 0);
+    }
+
+    private static string? DealerGradeSummary(VehicleEntity vehicle)
+    {
+        List<string> grades = [.. vehicle.Postings
+            .Where(p => p.Dealer?.Grade is not null)
+            .Select(p => p.Dealer!.Grade!)
+            .Distinct()];
+        return grades.Count == 0 ? null : string.Join("/", grades);
     }
 }

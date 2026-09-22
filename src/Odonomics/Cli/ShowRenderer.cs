@@ -106,12 +106,18 @@ public static class ShowRenderer
         table.AddColumn("First");
         table.AddColumn("Last");
         table.AddColumn("Price history");
+        table.AddColumn("Dealer");
         foreach (PostingEntity posting in vehicle.Postings)
         {
             string priceHistory = string.Join(" -> ", posting.PriceObservations
                 .OrderBy(o => o.ObservedAt)
                 .Select(o => Format.Money(o.Price)));
-            table.AddRow(Format.Cell(posting.Source), posting.FirstSeen.ToString("yyyy-MM-dd"), posting.LastSeen.ToString("yyyy-MM-dd"), Format.Cell(priceHistory));
+            table.AddRow(
+                Format.Cell(posting.Source),
+                posting.FirstSeen.ToString("yyyy-MM-dd"),
+                posting.LastSeen.ToString("yyyy-MM-dd"),
+                Format.Cell(priceHistory),
+                Format.Cell(DealerCell(posting.Dealer)));
         }
 
         AnsiConsole.Write(table);
@@ -125,4 +131,23 @@ public static class ShowRenderer
     }
 
     private static string Stars(int? rating) => rating is int stars ? $"{stars}/5" : "(not rated)";
+
+    /// <summary>The dealer name plus grade for one posting's "Dealer" cell: bare name when no
+    /// dealer is known or it hasn't been checked yet, "Name (Grade)" once checked, and the F
+    /// reason appended when the grade is F.</summary>
+    private static string DealerCell(DealerEntity? dealer)
+    {
+        if (dealer is null)
+        {
+            return "-";
+        }
+
+        if (dealer.GradeCheckedAt is null)
+        {
+            return dealer.Name;
+        }
+
+        string label = dealer.Grade is null ? $"{dealer.Name} (ungraded)" : $"{dealer.Name} ({dealer.Grade})";
+        return dealer.Grade == "F" && dealer.GradeReason is not null ? $"{label}: {dealer.GradeReason}" : label;
+    }
 }

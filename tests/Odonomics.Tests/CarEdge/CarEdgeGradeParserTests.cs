@@ -1,0 +1,60 @@
+using Odonomics.CarEdge;
+
+namespace Odonomics.Tests.CarEdge;
+
+/// <summary>Proves the parser against recorded CarEdge dealer-page text
+/// (tests/Odonomics.Tests/fixtures/caredge/), with no live network in the test run.</summary>
+public class CarEdgeGradeParserTests
+{
+    private static string FixturePath(string fileName) =>
+        Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "caredge", fileName);
+
+    private static async Task<string> ReadFixtureAsync(string fileName) =>
+        await File.ReadAllTextAsync(FixturePath(fileName));
+
+    [Fact]
+    public async Task Parse_GradedAPlusNoReason_ReturnsGradeWithNoReason()
+    {
+        string pageText = await ReadFixtureAsync("graded-a-plus.txt");
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText);
+
+        Assert.True(result.Found);
+        Assert.Equal("A+", result.Grade);
+        Assert.Null(result.Reason);
+    }
+
+    [Fact]
+    public async Task Parse_GradedFWithReason_ReturnsGradeAndReason()
+    {
+        string pageText = await ReadFixtureAsync("graded-f-with-reason.txt");
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText);
+
+        Assert.True(result.Found);
+        Assert.Equal("F", result.Grade);
+        Assert.NotNull(result.Reason);
+        Assert.Contains("bait-and-switch", result.Reason);
+        Assert.DoesNotContain("Based on 58 verified transactions", result.Reason);
+    }
+
+    [Fact]
+    public async Task Parse_DealerNotFound_ReturnsNotFoundWithNoGrade()
+    {
+        string pageText = await ReadFixtureAsync("not-found.txt");
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText);
+
+        Assert.False(result.Found);
+        Assert.Null(result.Grade);
+        Assert.Null(result.Reason);
+    }
+
+    [Fact]
+    public void Parse_NoGradeLineOnThePage_ReturnsNotFound()
+    {
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse("Just a moment... checking your browser.");
+
+        Assert.False(result.Found);
+    }
+}
