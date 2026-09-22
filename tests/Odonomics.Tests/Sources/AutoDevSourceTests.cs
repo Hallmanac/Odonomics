@@ -140,6 +140,39 @@ public class AutoDevSourceTests
     }
 
     [Fact]
+    public async Task RunAsync_HybridOnlyFromModelYear_CandidateAtOrAboveYear_AcceptedAsCanonicalHybridModel()
+    {
+        // Toyota dropped the gas-only Camry for model year 2025, so a 2025 Camry SE with no
+        // "Hybrid" anywhere in its text is still the hybrid this query is after.
+        ListingQuery query = new("Toyota", "Camry Hybrid", YearMin: 2018, "32114", 50, MaxMileage: 100000, HybridOnlyFromModelYear: 2025);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        const string body = """
+            {
+              "records": [
+                {
+                  "vin": "4T1G11AK5SU000222",
+                  "vdpUrl": "https://auto.dev/listing/3",
+                  "year": 2025,
+                  "make": "Toyota",
+                  "model": "Camry",
+                  "trim": "SE",
+                  "priceUnformatted": 28000,
+                  "mileageUnformatted": 8000
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("Camry Hybrid", candidate.Model);
+    }
+
+    [Fact]
     public async Task RunAsync_CandidateOutsideMileageRange_IsRejectedNotUpserted()
     {
         // The fixture's third record is a 2022 with 84,595 miles; a max-mileage query of 50,000
