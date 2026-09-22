@@ -90,17 +90,30 @@ VIN, on top of the NHTSA decode/recalls/complaints `odo show` has always fetched
   no key set, this degrades to a "could not fetch" line rather than failing the command.
 
 Both are cached on the vehicle's ledger row with a fetched-at stamp, and are only re-fetched when
-the cached research is more than seven days old, `--refresh` is passed, or the Marketcheck VIN
-history was never successfully fetched (a missing key or a failed call); a `show`/`research` inside
-the window with a fetched history reads the cache and makes no network call.
+the cached research is more than seven days old, `--refresh` is passed, the Marketcheck VIN
+history was never successfully fetched (a missing key or a failed call), or the NHTSA recalls,
+complaints, or safety-ratings call previously could not be fetched (see below: each retries on its
+own, independently of the seven-day window); a `show`/`research` inside the window with a fetched
+history and no outstanding NHTSA failure reads the cache and makes no network call.
+
+api.nhtsa.gov has occasionally been observed answering an otherwise-healthy call with an HTML error
+page, or not responding at all, instead of its usual JSON. Odonomics retries a failed NHTSA call
+once; if it still fails, that piece alone (recalls, complaints, or safety ratings) degrades to a
+"could not fetch" reason shown in place of the data, and the vehicle's last known-good value for
+that piece (if any) stays on display and in `odo rank`'s red-flag math. One bad NHTSA answer never
+fails the whole vehicle, and one bad vehicle never fails the batch.
 
 `odo research` runs that lookup for many vehicles in one go, with a short pause between each so as
-not to hammer either API, printing one line per vehicle as it finishes (`researched` or `cached`,
-and a red-flag count) and a summary of every flagged vehicle at the end. With no VINs given, it
-covers every vehicle in the ledger that passes the scenario's hard filters (allowed model, minimum
-year, maximum mileage, not new stock; a vehicle with no current asking price is still eligible) and
-needs a refresh (see above: stale, never refreshed, or missing its Marketcheck history). A single
-vehicle's failed lookup is reported inline and the rest of the batch continues.
+not to hammer either API, printing one line per vehicle as it finishes: `researched` or `cached`
+with a red-flag count when every piece came back, or a yellow line naming which piece(s) failed and
+which data is still stored when only some did. It ends with a summary line ("N fully researched, M
+partially researched, K unreachable") and a summary of every flagged vehicle. With no VINs given,
+it covers every vehicle in the ledger that passes the scenario's hard filters (allowed model,
+minimum year, maximum mileage, not new stock; a vehicle with no current asking price is still
+eligible) and needs a refresh (see above: stale, never refreshed, missing its Marketcheck history,
+or missing a piece of NHTSA data). A vehicle NHTSA and Marketcheck could not be reached for at all
+is reported inline as unreachable and the rest of the batch continues; the command exits non-zero
+only when every vehicle in the batch was unreachable.
 
 The red-flags section (shown by both `show` and `research`) lists, with a reason, anything the data
 shows:

@@ -157,26 +157,35 @@ public sealed class NhtsaClient(HttpClient http)
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     /// <summary>Runs one GET-then-parse against <paramref name="url"/>, retrying once after
-    /// <see cref="RetryPause"/> when <paramref name="parse"/> throws (a non-JSON body, including an
-    /// Akamai HTML error page, or a non-success status the parse delegate chooses to reject via
-    /// <see cref="HttpResponseMessage.EnsureSuccessStatusCode"/>). A second failure degrades to a
-    /// <see cref="NhtsaCallOutcome{T}.Failure"/> carrying the HTTP status and the body's first line,
-    /// never a raw exception.</summary>
+    /// <see cref="RetryPause"/> when the GET itself fails (a connection error or an
+    /// <see cref="HttpClient.Timeout"/>) or when <paramref name="parse"/> throws (a non-JSON body,
+    /// including an Akamai HTML error page, or a non-success status the parse delegate chooses to
+    /// reject via <see cref="HttpResponseMessage.EnsureSuccessStatusCode"/>). A genuine cancellation
+    /// via <paramref name="cancellationToken"/> (as opposed to the <see cref="TaskCanceledException"/>
+    /// a timeout also raises) is never caught here and propagates immediately. A second failure
+    /// degrades to a <see cref="NhtsaCallOutcome{T}.Failure"/> carrying the HTTP status and the
+    /// body's first line, never a raw exception.</summary>
     private async Task<NhtsaCallOutcome<T>> FetchAsync<T>(string url, Func<HttpResponseMessage, string, T> parse, CancellationToken cancellationToken)
     {
-        HttpStatusCode status = HttpStatusCode.OK;
-        string body = "";
+        NhtsaFailure failure = new(null, null, "the request never completed");
         for (int attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            using HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
-            status = response.StatusCode;
-            body = await response.Content.ReadAsStringAsync(cancellationToken);
+            HttpStatusCode? status = null;
+            string? body = null;
             try
             {
+                using HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
+                status = response.StatusCode;
+                body = await response.Content.ReadAsStringAsync(cancellationToken);
                 return NhtsaCallOutcome<T>.Success(parse(response, body));
             }
-            catch (Exception ex) when (ex is JsonException or HttpRequestException)
+            catch (Exception ex) when (ex is JsonException or HttpRequestException
+                || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
             {
+                failure = status is HttpStatusCode receivedStatus
+                    ? new NhtsaFailure((int)receivedStatus, FirstLine(body ?? ""), null)
+                    : new NhtsaFailure(null, null, DescribeTransportError(ex));
+
                 if (attempt == MaxAttempts)
                 {
                     break;
@@ -186,14 +195,24 @@ public sealed class NhtsaClient(HttpClient http)
             }
         }
 
-        return NhtsaCallOutcome<T>.Failed(new NhtsaFailure((int)status, FirstLine(body)));
+        return NhtsaCallOutcome<T>.Failed(failure);
     }
 
-    private static string Describe(string source, NhtsaFailure failure) =>
-        $"{source} could not be fetched, HTTP {failure.HttpStatus} with {DescribeBody(failure.BodyFirstLine)}";
+    private static string DescribeTransportError(Exception ex) =>
+        ex is TaskCanceledException ? "the request timed out" : ex.Message;
 
-    private static string DescribeBody(string firstLine) =>
-        firstLine.TrimStart().StartsWith('<') ? "an HTML error page" : $"an unexpected response: {firstLine}";
+    private static string Describe(string source, NhtsaFailure failure) => failure.TransportError is string transportError
+        ? $"{source} could not be reached: {transportError}"
+        : $"{source} could not be fetched, HTTP {failure.HttpStatus} with {DescribeBody(failure.BodyFirstLine ?? "")}";
+
+    private const int MaxBodyPreviewLength = 200;
+
+    private static string DescribeBody(string firstLine) => firstLine.TrimStart().StartsWith('<')
+        ? "an HTML error page"
+        : $"an unexpected response: {Truncate(firstLine)}";
+
+    private static string Truncate(string value) =>
+        value.Length <= MaxBodyPreviewLength ? value : value[..MaxBodyPreviewLength] + "...";
 
     private static string FirstLine(string body)
     {
@@ -211,9 +230,13 @@ public sealed class NhtsaClient(HttpClient http)
         public static NhtsaCallOutcome<T> Failed(NhtsaFailure failure) => new(default, failure);
     }
 
-    /// <summary>The HTTP status and the response body's first line from a call's final failed
-    /// attempt, the detail a could-not-fetch reason is built from.</summary>
-    private sealed record NhtsaFailure(int HttpStatus, string BodyFirstLine);
+    /// <summary>The detail a could-not-fetch reason is built from, from a call's final failed
+    /// attempt: either the HTTP status and the response body's first line when a response came back
+    /// but could not be parsed, or <see cref="TransportError"/> when the GET itself never got a
+    /// response (a connection failure or an <see cref="HttpClient.Timeout"/>). Exactly one of
+    /// <see cref="HttpStatus"/>/<see cref="BodyFirstLine"/> and <see cref="TransportError"/> is
+    /// set.</summary>
+    private sealed record NhtsaFailure(int? HttpStatus, string? BodyFirstLine, string? TransportError);
 
     private sealed record SafetyRatingsLookupEnvelope(List<SafetyRatingsVehicleRef>? Results);
 
