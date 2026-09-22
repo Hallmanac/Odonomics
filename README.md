@@ -107,28 +107,49 @@ fails the whole vehicle, and one bad vehicle never fails the batch.
 not to hammer either API, printing one line per vehicle as it finishes: `researched` or `cached`
 with a red-flag count when every piece came back, or a yellow line naming which piece(s) failed and
 which data is still stored when only some did. It ends with a summary line ("N fully researched, M
-partially researched, K unreachable") and a summary of every flagged vehicle. With no VINs given,
-it covers every vehicle in the ledger that passes the scenario's hard filters (allowed model,
-minimum year, maximum mileage, not new stock; a vehicle with no current asking price is still
-eligible) and needs a refresh (see above: stale, never refreshed, missing its Marketcheck history,
-or missing a piece of NHTSA data). A vehicle NHTSA and Marketcheck could not be reached for at all
-is reported inline as unreachable and the rest of the batch continues; the command exits non-zero
-only when every vehicle in the batch was unreachable.
+partially researched, K unreachable") followed by a one-line-per-vehicle summary: year, make,
+model, VIN, and its flags as short tags (`mileage-drop`, `5-sellers`, `no-remedy-recall`, or
+`none`), each line bounded to 80 columns so a batch of dozens of vehicles reads as a compact scan
+rather than a wall of dealer lists and full-text reasons; full detail for any one vehicle is what
+`odo show <vin>` is for. With no VINs given, `odo research` covers every vehicle in the ledger that
+passes the scenario's hard filters (allowed model, minimum year, maximum mileage, not new stock; a
+vehicle with no current asking price is still eligible) and needs a refresh (see above: stale,
+never refreshed, missing its Marketcheck history, or missing a piece of NHTSA data). A vehicle
+NHTSA and Marketcheck could not be reached for at all is reported inline as unreachable (tagged
+`unreachable` in the summary) and the rest of the batch continues; the command exits non-zero only
+when every vehicle in the batch was unreachable.
 
-The red-flags section (shown by both `show` and `research`) lists, with a reason, anything the data
-shows:
+The red-flags section (shown in full by `odo show`, as short tags by `odo research`) lists, with a
+reason, anything the data shows:
 
-- mileage that decreased between two listings of the same VIN
-- three or more distinct dealers within a 90-day window of the listing history
-- one or more open NHTSA recalls
-- an NHTSA overall safety rating below four stars
-- a current price more than 15% above the average of the VIN's prior listing prices
+- **mileage that decreased between two listings of the same VIN** (`mileage-drop`), ignoring a drop
+  to zero or nearly zero (a placeholder/reset value, not a real odometer reading), a drop between
+  two listings first seen on the same calendar day (the same snapshot re-scraped, not two real
+  readings), and a drop smaller than the larger of 500 miles or 1% of the prior mileage (rounding
+  and minor re-entry noise). Both the 500-mile floor and the 1% figure are configurable.
+- **three or more distinct sellers within a 90-day window of the listing history** (`N-sellers`),
+  after normalizing dealer names: case and punctuation are ignored, and a name that is a leading
+  word-for-word prefix of another (e.g. "Schaller Honda" of "Schaller Honda Subaru Mitsubishi") is
+  treated as the same seller under two spellings rather than two sellers. The seller-count threshold
+  (default three) is configurable. The printed list caps at three names followed by "and N more" so
+  a syndication feed's 30-plus rooftop names never dominates the line.
+- **one or more open NHTSA recalls with no remedy published yet** (`no-remedy-recall`). An open
+  recall with a remedy already available does not raise a flag on its own; `odo rank` shows the
+  total open-recall count in its own `Recalls` column instead (see below), and NHTSA's free
+  recallsByVehicle endpoint has no true per-VIN remedy-completed status, so "remedy available" here
+  means the campaign's own remedy text has actually been published, not that this specific VIN's
+  owner already had the fix done.
+- **an NHTSA overall safety rating below four stars** (`low-safety-rating`)
+- **a current price more than 15% above the average of the VIN's prior listing prices**
+  (`price-spike`)
 
-An empty section says so explicitly ("none found") rather than being left blank.
+An empty section says so explicitly (`odo show`: "none found"; `odo research`: `none`) rather than
+being left blank.
 
 `odo rank` gains a `Research` column showing, per vehicle, whether it has been researched yet and
-whether any red flag turned up (`not researched`, `clean`, or `red flag`); this is a display-only
-addition and never changes the ranking math itself.
+whether any red flag turned up (`not researched`, `clean`, or `red flag`), and a `Recalls` column
+showing the total open NHTSA recall count (`-` when not yet researched); both are display-only and
+never change the ranking math itself.
 
 ## The assisted walk
 
