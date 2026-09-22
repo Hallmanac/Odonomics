@@ -122,6 +122,38 @@ public class MarketcheckSourceTests
     }
 
     [Fact]
+    public async Task RunAsync_HybridOnlyFromModelYear_CandidateAtOrAboveYear_AcceptedAsCanonicalHybridModel()
+    {
+        // Toyota dropped the gas-only Camry for model year 2025, so a 2025 Camry SE with no
+        // "Hybrid" anywhere in its build fields is still the hybrid this query is after.
+        ListingQuery query = new("Toyota", "Camry Hybrid", YearMin: 2018, "32114", 50, MaxMileage: 100000, HybridOnlyFromModelYear: 2025);
+        int yearMax = DateTime.UtcNow.Year + 1;
+        string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
+                     $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+        const string body = """
+            {
+              "listings": [
+                {
+                  "vin": "4T1G11AK5SU000222",
+                  "vdp_url": "https://marketcheck.com/listing/3",
+                  "price": 28000,
+                  "miles": 8000,
+                  "build": { "year": 2025, "make": "Toyota", "model": "Camry", "trim": "SE" }
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new MarketcheckSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("Camry Hybrid", candidate.Model);
+    }
+
+    [Fact]
     public async Task RunAsync_QueryFails_ModelIsNotReportedCovered()
     {
         ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);

@@ -94,7 +94,7 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
             return;
         }
 
-        if (!query.MatchesExtractedVehicle(apiMake, apiModel, trim))
+        if (!query.MatchesExtractedVehicle(apiMake, apiModel, trim, year))
         {
             result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, returned vehicle doesn't match the query ({vin}: {apiMake} {apiModel} {trim})");
             return;

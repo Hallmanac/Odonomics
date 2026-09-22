@@ -155,7 +155,8 @@ public static class WalkCommand
         CancellationToken cancellationToken)
     {
         (string make, string model) = MakeModel.Split(makeModel);
-        var query = new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage);
+        int? hybridOnlyFromModelYear = scenario.HybridOnlyFromModelYear.TryGetValue(makeModel, out int hybridYear) ? hybridYear : null;
+        var query = new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage, hybridOnlyFromModelYear);
         var recorder = new WalkRecorder(dataDirectory, site.Name, model, currentRun.StartedAt);
 
         string searchUrl = site.BuildSearchUrl(make, model, scenario.Zip, scenario.RadiusMiles);
@@ -212,9 +213,13 @@ public static class WalkCommand
                     return DetailPageOutcome.MissingFields;
                 }
 
-                if (!query.MatchesExtractedVehicle(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim))
+                if (!query.MatchesExtractedVehicle(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year))
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NotMatching)} (doesn't match {make} {model}: {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim})[/]");
+                    int? gasOnlyBeforeYear = query.GasOnlyBeforeHybridYear(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year);
+                    string detail = gasOnlyBeforeYear is int hybridYear
+                        ? $"{outcome.Result.Year} {outcome.Result.Model} {outcome.Result.Trim}, gas-only before {hybridYear}"
+                        : $"doesn't match {make} {model}: {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}";
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NotMatching)} ({detail})[/]");
                     return DetailPageOutcome.NotMatching;
                 }
 
