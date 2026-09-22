@@ -64,13 +64,56 @@ odo search                          run Auto.dev and Marketcheck, upsert the led
 odo walk cars.com|carvana [--model "Make Model"] [--max N]
                                      an operator-assisted walk of one site (see below)
 odo rank [--budget N] [--term M]    score every vehicle in the ledger against the scenario
-odo show <vin>                      NHTSA decode, recalls, complaints, postings, notes, finalist status
+odo show <vin> [--refresh]          NHTSA decode, recalls, complaints, safety ratings, Marketcheck
+                                     VIN history, red flags, postings, notes, finalist status
+odo research [<vin> ...] [--refresh]
+                                     NHTSA safety ratings and Marketcheck VIN history for every
+                                     vehicle in the ledger that passes the scenario's filters (or
+                                     just the given VINs), with a red-flags summary (see below)
 odo note <vin> "<text>"             attach a free-text note to a vehicle
 odo finalist <vin>                  mark a vehicle a finalist (needs a PPI note and a Carfax/AutoCheck note)
 odo budget                          max purchase price per target monthly budget in the scenario
 ```
 
 Every command that scores against a scenario defaults to `scenarios/daughter.json`; pass `--scenario <path>` to use a different one.
+
+## Background research and red flags
+
+`odo show <vin>` and `odo research` both pull the same two pieces of free background research for a
+VIN, on top of the NHTSA decode/recalls/complaints `odo show` has always fetched:
+
+- **NHTSA safety ratings**: overall and per-category (front crash, side crash, rollover) star
+  ratings for that year, make, and model.
+- **Marketcheck VIN history**: every prior listing recorded for the VIN (dealer, first/last seen
+  dates, price, mileage) and the current listing's days on market. Needs `Marketcheck:ApiKey`; with
+  no key set, this degrades to a "could not fetch" line rather than failing the command.
+
+Both are cached on the vehicle's ledger row with a fetched-at stamp, and are only re-fetched when
+the cached research is more than seven days old or `--refresh` is passed; a `show`/`research` inside
+that window reads the cache and makes no network call.
+
+`odo research` runs that lookup for many vehicles in one go, with a short pause between each so as
+not to hammer either API, printing one line per vehicle as it finishes (`researched` or `cached`,
+and a red-flag count) and a summary of every flagged vehicle at the end. With no VINs given, it
+covers every vehicle in the ledger that passes the scenario's hard filters (allowed model, minimum
+year, maximum mileage, not new stock; a vehicle with no current asking price is still eligible) and
+hasn't been researched in the last seven days. A single vehicle's failed lookup is reported inline
+and the rest of the batch continues.
+
+The red-flags section (shown by both `show` and `research`) lists, with a reason, anything the data
+shows:
+
+- mileage that decreased between two listings of the same VIN
+- three or more distinct dealers within a 90-day window of the listing history
+- one or more open NHTSA recalls
+- an NHTSA overall safety rating below four stars
+- a current price more than 15% above the average of the VIN's prior listing prices
+
+An empty section says so explicitly ("none found") rather than being left blank.
+
+`odo rank` gains a `Research` column showing, per vehicle, whether it has been researched yet and
+whether any red flag turned up (`not researched`, `clean`, or `red flag`); this is a display-only
+addition and never changes the ranking math itself.
 
 ## The assisted walk
 
