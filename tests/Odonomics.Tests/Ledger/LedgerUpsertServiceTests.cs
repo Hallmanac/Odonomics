@@ -4,7 +4,13 @@ namespace Odonomics.Tests.Ledger;
 
 public class LedgerUpsertServiceTests
 {
-    private static ListingCandidate Candidate(string vin, decimal price, string url = "https://example.com/1", string source = "auto.dev") => new()
+    private static ListingCandidate Candidate(
+        string vin,
+        decimal price,
+        string url = "https://example.com/1",
+        string source = "auto.dev",
+        string? dealerName = null,
+        string? dealerLocation = null) => new()
     {
         Vin = vin,
         Source = source,
@@ -15,6 +21,8 @@ public class LedgerUpsertServiceTests
         Trim = "LE",
         Price = price,
         Mileage = 40000,
+        DealerName = dealerName,
+        DealerLocation = dealerLocation,
     };
 
     private static RunEntity Run(DateTimeOffset startedAt, string command = "search") => new()
@@ -111,5 +119,61 @@ public class LedgerUpsertServiceTests
         Assert.True(outcome.PostingIsNew);
         Assert.Single(db.Vehicles);
         Assert.Equal(2, db.Postings.Count());
+    }
+
+    [Fact]
+    public async Task UpsertAsync_CandidateNamesADealer_CreatesAndLinksIt()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, dealerName: "Holler Honda", dealerLocation: "Winter Park, FL"), run, CancellationToken.None);
+
+        DealerEntity dealer = Assert.Single(db.Dealers);
+        Assert.Equal("Holler Honda", dealer.Name);
+        Assert.Equal("Winter Park, FL", dealer.Location);
+        PostingEntity posting = Assert.Single(db.Postings);
+        Assert.Equal(dealer.Id, posting.DealerId);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_SameDealerDifferentCasingAndSpacing_ResolvesToOneDealerRow()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com", "Holler Honda", "Winter Park, FL"), run, CancellationToken.None);
+        await service.UpsertAsync(Candidate("5YJ3E1EA1KF000000", 22000m, "https://cars.com/b", "cars.com", "  holler   honda  ", "winter park, fl"), run, CancellationToken.None);
+
+        Assert.Single(db.Dealers);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_LaterSightingCarriesNoDealer_KeepsThePostingsExistingDealerLink()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, dealerName: "Holler Honda"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m), run2, CancellationToken.None);
+
+        PostingEntity posting = Assert.Single(db.Postings);
+        Assert.NotNull(posting.DealerId);
     }
 }
