@@ -28,29 +28,9 @@ public static class WalkCommand
             return 1;
         }
 
-        if (!await CdpAvailability.IsListeningAsync(ChromeLaunchLine.DebugPort, cancellationToken))
+        if (!await CdpConnection.IsAvailableAsync(cancellationToken))
         {
-            AnsiConsole.MarkupLine("[yellow]nothing is listening on the CDP debugging port. Launch Chrome or Microsoft Edge with one of these lines, then run `odo walk` again. The walk stays in the background once it's running, so you can keep working in other windows while it visits pages.[/]");
-            AnsiConsole.WriteLine();
-            if (OperatingSystem.IsWindows())
-            {
-                AnsiConsole.MarkupLine("[grey]Chrome, PowerShell:[/]");
-                AnsiConsole.WriteLine(ChromeLaunchLine.BuildForPowerShell());
-                AnsiConsole.MarkupLine("[grey]Chrome, cmd:[/]");
-                AnsiConsole.WriteLine(ChromeLaunchLine.Build());
-                AnsiConsole.MarkupLine("[grey]Edge, PowerShell:[/]");
-                AnsiConsole.WriteLine(ChromeLaunchLine.BuildForEdgeForPowerShell());
-                AnsiConsole.MarkupLine("[grey]Edge, cmd:[/]");
-                AnsiConsole.WriteLine(ChromeLaunchLine.BuildForEdge());
-            }
-            else
-            {
-                AnsiConsole.MarkupLine("[grey]Chrome:[/]");
-                AnsiConsole.WriteLine(ChromeLaunchLine.Build());
-                AnsiConsole.MarkupLine("[grey]Edge:[/]");
-                AnsiConsole.WriteLine(ChromeLaunchLine.BuildForEdge());
-            }
-
+            CdpConnection.PrintUnavailableMessage();
             return 1;
         }
 
@@ -103,7 +83,7 @@ public static class WalkCommand
         string searchUrl = site.BuildSearchUrl(make, model, scenario.Zip, scenario.RadiusMiles);
         AnsiConsole.MarkupLineInterpolated($"opening search page for {make} {model} on {site.Name}");
         await page.GotoAsync(searchUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await HandleChallengeIfPresentAsync(page, cancellationToken);
+        await CdpConnection.HandleChallengeIfPresentAsync(page, cancellationToken);
 
         await ScrollInStepsAsync(page, pacing, cancellationToken);
         TimeSpan dwell = pacing.RandomDwell();
@@ -132,7 +112,7 @@ public static class WalkCommand
             try
             {
                 await detailPage.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-                await HandleChallengeIfPresentAsync(detailPage, cancellationToken);
+                await CdpConnection.HandleChallengeIfPresentAsync(detailPage, cancellationToken);
                 await detailPage.EvaluateAsync("() => window.scrollBy(0, window.innerHeight)");
                 await Task.Delay(pacing.RandomScrollPause(), cancellationToken);
 
@@ -222,47 +202,6 @@ public static class WalkCommand
         {
             await page.EvaluateAsync("() => window.scrollBy(0, window.innerHeight * 0.8)");
             await Task.Delay(pacing.RandomScrollPause(), cancellationToken);
-        }
-    }
-
-    /// <summary>Beeps (a terminal bell, which works the same on every platform, unlike
-    /// Console.Beep), prints the prompt, blocks on Enter, then reloads the page once. Settles for
-    /// a few seconds before the first check, then a few more if it still looks blocked: a
-    /// bot-defense JS challenge often resolves itself within a few seconds in a real Chrome tab
-    /// (the same settle-then-recheck the spike's PageWalkEngine proved out), so checking the
-    /// instant navigation completes risks a false positive on a page that just hasn't finished
-    /// rendering yet. Bringing the challenged page to front is the one activation the walk is
-    /// allowed to make; the operator's previously frontmost app goes back in front once they
-    /// press Enter, so the walk returns to the background exactly where it left off.</summary>
-    private static async Task HandleChallengeIfPresentAsync(IPage page, CancellationToken cancellationToken)
-    {
-        await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
-        string title = await page.TitleAsync();
-        string bodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
-        if (ChallengeDetector.IsChallenge(title, bodyText))
-        {
-            await Task.Delay(TimeSpan.FromSeconds(8), cancellationToken);
-            title = await page.TitleAsync();
-            bodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
-        }
-
-        if (!ChallengeDetector.IsChallenge(title, bodyText))
-        {
-            return;
-        }
-
-        string? frontmostApp = await ForegroundApp.CaptureFrontmostAsync(cancellationToken);
-        await page.BringToFrontAsync();
-        try
-        {
-            Console.Write('\a');
-            AnsiConsole.MarkupLineInterpolated($"[bold red]challenge on {page.Url}: solve it in the browser, then press Enter[/]");
-            await Console.In.ReadLineAsync(cancellationToken);
-            await page.ReloadAsync();
-        }
-        finally
-        {
-            await ForegroundApp.RestoreAsync(frontmostApp, cancellationToken);
         }
     }
 }
