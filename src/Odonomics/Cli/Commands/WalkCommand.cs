@@ -179,6 +179,12 @@ public static class WalkCommand
             .Take(linkPoolSize)];
         AnsiConsole.MarkupLineInterpolated($"found {candidateLinks.Count} detail link(s) to consider (cap {maxDetailPages} matching candidate(s))");
 
+        // Distinct detail links can still resolve to the same VIN within one pair (two dealers
+        // cross-listing the same car, or a search page that links one listing twice under
+        // different query strings that CanonicalDetailUrl doesn't fold together); tracked so a
+        // second sighting is recorded as a repeat instead of spending another slot of the cap.
+        var savedVinsThisPair = new HashSet<string>();
+
         async Task<DetailPageOutcome> VisitLinkAsync(string detailUrl, int i, CancellationToken ct)
         {
             IPage? detailPage = null;
@@ -204,6 +210,12 @@ public static class WalkCommand
                 {
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NoVin)} found on the page[/]");
                     return DetailPageOutcome.NoVin;
+                }
+
+                if (savedVinsThisPair.Contains(outcome.Result.Vin))
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.Repeat)} ({outcome.Result.Vin} already saved this pair)[/]");
+                    return DetailPageOutcome.Repeat;
                 }
 
                 if (outcome.Result.Year is null || outcome.Result.Price is null || outcome.Result.Mileage is null)
@@ -245,6 +257,7 @@ public static class WalkCommand
                     DealerLocation = outcome.Result.DealerLocation,
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
+                savedVinsThisPair.Add(candidate.Vin);
                 return DetailPageOutcome.Upserted;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

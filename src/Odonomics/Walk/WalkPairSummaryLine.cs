@@ -20,6 +20,7 @@ public static class WalkPairSummaryLine
         DetailPageOutcome.MissingFields,
         DetailPageOutcome.NoVin,
         DetailPageOutcome.NotMatching,
+        DetailPageOutcome.Repeat,
         DetailPageOutcome.Failed,
         DetailPageOutcome.ExtractionFailed,
     ];

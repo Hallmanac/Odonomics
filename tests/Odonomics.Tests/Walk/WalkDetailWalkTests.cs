@@ -84,9 +84,32 @@ public class WalkDetailWalkTests
     }
 
     [Fact]
+    public async Task RunAsync_RepeatVinDoesNotCountAgainstTheCap()
+    {
+        // The first three links resolve to a VIN this pair already saved (a search page linking
+        // the same listing under two URLs, or two dealers cross-listing the same car); the fourth
+        // through sixth are real, distinct matches. A cap of 3 must still be met by the distinct
+        // matches, skipping past every repeat along the way rather than stopping once 3 links total
+        // have been visited.
+        List<string> links = Links(10);
+
+        DetailWalkTally tally = await WalkDetailWalk.RunAsync(
+            links,
+            maxDetailPages: 3,
+            (link, i, _) => Task.FromResult(i < 3 ? DetailPageOutcome.Repeat : DetailPageOutcome.Upserted),
+            _ => Task.CompletedTask,
+            CancellationToken.None);
+
+        Assert.Equal(6, tally.Visited);
+        Assert.Equal(3, tally.Upserted);
+        Assert.Equal(3, tally.Dropped.Repeat);
+        Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
+    }
+
+    [Fact]
     public async Task RunAsync_EveryOutcomeKind_TalliesEachIntoItsOwnDroppedReason()
     {
-        List<string> links = Links(6);
+        List<string> links = Links(7);
         DetailPageOutcome[] outcomes =
         [
             DetailPageOutcome.MissingFields,
@@ -94,24 +117,26 @@ public class WalkDetailWalkTests
             DetailPageOutcome.NotMatching,
             DetailPageOutcome.Failed,
             DetailPageOutcome.ExtractionFailed,
+            DetailPageOutcome.Repeat,
             DetailPageOutcome.Upserted,
         ];
 
         DetailWalkTally tally = await WalkDetailWalk.RunAsync(
             links,
-            maxDetailPages: 6,
+            maxDetailPages: 7,
             (_, i, _) => Task.FromResult(outcomes[i]),
             _ => Task.CompletedTask,
             CancellationToken.None);
 
-        Assert.Equal(6, tally.Visited);
+        Assert.Equal(7, tally.Visited);
         Assert.Equal(1, tally.Upserted);
         Assert.Equal(1, tally.Dropped.MissingFields);
         Assert.Equal(1, tally.Dropped.NoVin);
         Assert.Equal(1, tally.Dropped.NotMatching);
         Assert.Equal(1, tally.Dropped.Failed);
         Assert.Equal(1, tally.Dropped.ExtractionFailed);
-        Assert.Equal(5, tally.Dropped.Total);
+        Assert.Equal(1, tally.Dropped.Repeat);
+        Assert.Equal(6, tally.Dropped.Total);
         Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
     }
 
