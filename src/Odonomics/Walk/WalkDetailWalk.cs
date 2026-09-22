@@ -24,6 +24,13 @@ public enum DetailPageOutcome
     /// <summary>The page matched but had no VIN to key a ledger row on.</summary>
     NoVin,
 
+    /// <summary>The page's VIN was already saved earlier in this same (site, model) pair's walk,
+    /// via a different detail link. Like <see cref="NotMatching"/>, this never spends the per-pair
+    /// cap: the pool's own links, not the model's real inventory, produced the duplicate, so a
+    /// search page that links one listing twice still lets the walk reach as many distinct
+    /// candidates as the cap allows.</summary>
+    Repeat,
+
     /// <summary>The page matched and had a VIN but was missing year, price, or mileage.</summary>
     MissingFields,
 
@@ -42,16 +49,17 @@ public static class WalkOutcomeWording
         DetailPageOutcome.NotMatching => "wrong model",
         DetailPageOutcome.Failed => "failed to load",
         DetailPageOutcome.ExtractionFailed => "extraction failed",
+        DetailPageOutcome.Repeat => "repeat",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
 }
 
 /// <summary>How many candidate detail pages were dropped for each reason. Total, plus whatever
-/// was saved, always equals the number of pages visited: NotMatching is included here (as "wrong
-/// model") even though it never spends the per-pair cap, since the page was still visited.</summary>
-public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatching, int Failed, int ExtractionFailed = 0)
+/// was saved, always equals the number of pages visited: NotMatching and Repeat are both included
+/// here even though neither spends the per-pair cap, since the page was still visited.</summary>
+public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatching, int Failed, int ExtractionFailed = 0, int Repeat = 0)
 {
-    public int Total => MissingFields + NoVin + NotMatching + Failed + ExtractionFailed;
+    public int Total => MissingFields + NoVin + NotMatching + Failed + ExtractionFailed + Repeat;
 
     public int this[DetailPageOutcome outcome] => outcome switch
     {
@@ -60,6 +68,7 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
         DetailPageOutcome.NotMatching => NotMatching,
         DetailPageOutcome.Failed => Failed,
         DetailPageOutcome.ExtractionFailed => ExtractionFailed,
+        DetailPageOutcome.Repeat => Repeat,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
 }
@@ -73,9 +82,10 @@ public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown
 /// <summary>
 /// Walks a pool of candidate detail links for one (site, model) pair, stopping once
 /// <paramref name="maxDetailPages"/> of them have not been rejected for not matching the
-/// requested model, or the pool runs out, whichever comes first. A page dropped as some other
-/// model never spends a slot of the cap, so a search page that returns other models mixed in with
-/// the one asked for still gets a real chance to fill the cap with actual candidates, up to
+/// requested model or for repeating a VIN this pair already saved, or the pool runs out, whichever
+/// comes first. A page dropped as some other model never spends a slot of the cap, so a search page
+/// that returns other models mixed in with the one asked for still gets a real chance to fill the
+/// cap with actual candidates, up to
 /// however large a pool the caller handed in.
 /// </summary>
 public static class WalkDetailWalk
@@ -94,6 +104,7 @@ public static class WalkDetailWalk
         int droppedNotMatching = 0;
         int droppedFailed = 0;
         int droppedExtractionFailed = 0;
+        int droppedRepeat = 0;
         int spentOnCap = 0;
 
         for (int i = 0; i < candidateLinks.Count && spentOnCap < maxDetailPages; i++)
@@ -105,7 +116,7 @@ public static class WalkDetailWalk
 
             visited++;
             DetailPageOutcome outcome = await visitLinkAsync(candidateLinks[i], i, cancellationToken);
-            if (outcome != DetailPageOutcome.NotMatching)
+            if (outcome != DetailPageOutcome.NotMatching && outcome != DetailPageOutcome.Repeat)
             {
                 spentOnCap++;
             }
@@ -130,10 +141,13 @@ public static class WalkDetailWalk
                 case DetailPageOutcome.ExtractionFailed:
                     droppedExtractionFailed++;
                     break;
+                case DetailPageOutcome.Repeat:
+                    droppedRepeat++;
+                    break;
             }
         }
 
-        var dropped = new DroppedBreakdown(droppedMissingFields, droppedNoVin, droppedNotMatching, droppedFailed, droppedExtractionFailed);
+        var dropped = new DroppedBreakdown(droppedMissingFields, droppedNoVin, droppedNotMatching, droppedFailed, droppedExtractionFailed, droppedRepeat);
         return new DetailWalkTally(visited, upserted, dropped);
     }
 }

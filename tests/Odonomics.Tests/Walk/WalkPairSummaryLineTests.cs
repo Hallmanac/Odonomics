@@ -92,6 +92,14 @@ public class WalkPairSummaryLineTests
     }
 
     [Fact]
+    public void DroppedCell_RepeatReason_IsWordedAsRepeat()
+    {
+        var dropped = new DroppedBreakdown(0, 0, 0, 0, ExtractionFailed: 0, Repeat: 2);
+
+        Assert.Equal("repeat", WalkPairSummaryLine.DroppedCell(dropped));
+    }
+
+    [Fact]
     public void DroppedCell_NoneDropped_IsEmpty()
     {
         Assert.Equal("", WalkPairSummaryLine.DroppedCell(new DroppedBreakdown(0, 0, 0, 0)));
