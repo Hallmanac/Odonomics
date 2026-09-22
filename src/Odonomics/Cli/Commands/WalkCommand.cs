@@ -222,7 +222,11 @@ public static class WalkCommand
                 {
                     Vin = outcome.Result.Vin,
                     Source = site.Name,
-                    Url = detailUrl,
+                    // Not the raw detailUrl: cars.com appends a per-search-session "sid" query
+                    // parameter that's different on every run, and LedgerUpsertService keys a
+                    // posting on (Vin, Source, Url), so storing the raw URL would mint a new
+                    // posting every run instead of recognizing the one already in the ledger.
+                    Url = WalkSites.CanonicalDetailUrl(detailUrl),
                     Year = outcome.Result.Year.Value,
                     Make = outcome.Result.Make ?? make,
                     // The canonical model this pair was walked for, not the extraction's own
