@@ -91,8 +91,12 @@ public sealed class RunEntity
 /// <summary>The NHTSA vPIC decode and safety lookups, and the Marketcheck VIN history, for one VIN,
 /// refreshed by `odo show` and `odo research` (v0 keeps the most recent fetch only; the raw JSON is
 /// kept for anything the typed fields do not carry yet). <see cref="ResearchedAt"/> is the
-/// fetched-at stamp that gates the seven-day refresh rule for the safety ratings and VIN history;
-/// it is null until the first successful research fetch.</summary>
+/// fetched-at stamp that gates the seven-day refresh rule for the whole NHTSA batch (decode,
+/// recalls, complaints, safety ratings) and the VIN history. Recalls, complaints, and safety
+/// ratings each also carry their own FetchedAt stamp and CouldNotFetchReason: when NHTSA answers
+/// one of those calls with a bad response (see NhtsaClient's retry-then-degrade behavior), that
+/// piece alone is marked could-not-fetch and the next research run retries only it, rather than
+/// waiting out the seven-day rule or re-fetching pieces that already succeeded.</summary>
 public sealed class VinRecordEntity
 {
     public required string Vin { get; set; }
@@ -100,7 +104,11 @@ public sealed class VinRecordEntity
     public required string DecodeRawJson { get; set; }
     public int OpenRecallCount { get; set; }
     public string? RecallsRawJson { get; set; }
+    public DateTimeOffset? RecallsFetchedAt { get; set; }
+    public string? RecallsCouldNotFetchReason { get; set; }
     public int ComplaintCount { get; set; }
+    public DateTimeOffset? ComplaintsFetchedAt { get; set; }
+    public string? ComplaintsCouldNotFetchReason { get; set; }
 
     public DateTimeOffset? ResearchedAt { get; set; }
     public int? SafetyOverallRating { get; set; }
@@ -108,6 +116,8 @@ public sealed class VinRecordEntity
     public int? SafetySideRating { get; set; }
     public int? SafetyRolloverRating { get; set; }
     public string? SafetyRawJson { get; set; }
+    public DateTimeOffset? SafetyFetchedAt { get; set; }
+    public string? SafetyCouldNotFetchReason { get; set; }
     public string? HistoryRawJson { get; set; }
     public int? CurrentListingDaysOnMarket { get; set; }
 

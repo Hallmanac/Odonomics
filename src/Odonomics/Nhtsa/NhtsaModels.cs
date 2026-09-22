@@ -24,15 +24,32 @@ public sealed record RecallEntry(
     string Remedy,
     string ReportReceivedDate);
 
+/// <summary>The recalls for one make/model/model-year, or the reason NHTSA's recallsByVehicle
+/// endpoint could not be fetched after a retry (see NhtsaClient), never a raw JSON exception. Only
+/// one of the two is meaningful: <see cref="Entries"/> is empty when
+/// <see cref="CouldNotFetchReason"/> is set.</summary>
+public sealed record RecallsResult(IReadOnlyList<RecallEntry> Entries, string? CouldNotFetchReason);
+
+/// <summary>The complaint count for one make/model/model-year, or the reason NHTSA's
+/// complaintsByVehicle endpoint could not be fetched after a retry (see NhtsaClient). Only one of
+/// the two is meaningful: <see cref="Count"/> is 0 when <see cref="CouldNotFetchReason"/> is
+/// set.</summary>
+public sealed record ComplaintsResult(int Count, string? CouldNotFetchReason);
+
 /// <summary>NHTSA's five-star safety ratings for one year/make/model. A rating is null when NHTSA
 /// has not tested that category ("Not Rated" in the raw response) rather than 0, so a caller never
-/// mistakes "untested" for "tested and failed." <see cref="ErrorText"/> is set instead of throwing
-/// when NHTSA has no vehicle on file at all for this year/make/model; a category NHTSA simply never
-/// rated on an otherwise-found vehicle is not an error, just a null star count.</summary>
+/// mistakes "untested" for "tested and failed." <see cref="ErrorText"/> is set, never thrown, when
+/// NHTSA has no vehicle or no rating detail on file at all for this year/make/model: a permanent,
+/// legitimate absence that the seven-day refresh rule alone is fine to re-check on.
+/// <see cref="CouldNotFetchReason"/> is set instead, also never thrown, when the SafetyRatings
+/// endpoint itself could not be fetched after a retry (see NhtsaClient): a transient failure that
+/// should be retried on the very next research run rather than waiting out that rule. At most one
+/// of <see cref="ErrorText"/> and <see cref="CouldNotFetchReason"/> is ever set.</summary>
 public sealed record SafetyRatingsResult(
     int? OverallRating,
     int? FrontRating,
     int? SideRating,
     int? RolloverRating,
     string? VehicleDescription,
-    string? ErrorText);
+    string? ErrorText,
+    string? CouldNotFetchReason);

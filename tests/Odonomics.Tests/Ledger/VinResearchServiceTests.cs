@@ -193,6 +193,107 @@ public class VinResearchServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_SafetyRatingsCallFails_StillPersistsRecallsAndComplaints()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        VehicleEntity vehicle = Vehicle();
+        db.Vehicles.Add(vehicle);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        string fixtureRoot = Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures");
+        string htmlError = await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "akamai-error.html"));
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            [$"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{Vin}?format=json"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "decode-1HGCM82633A004352.json")),
+            ["https://api.nhtsa.gov/recalls/recallsByVehicle?make=Honda&model=Insight&modelYear=2020"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "recalls-honda-insight-2020.json")),
+            ["https://api.nhtsa.gov/complaints/complaintsByVehicle?make=Honda&model=Insight&modelYear=2020"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "complaints-honda-insight-2020.json")),
+            ["https://api.nhtsa.gov/SafetyRatings/modelyear/2020/make/Honda/model/Insight"] = htmlError,
+            ["https://mc-api.marketcheck.com/v2/history/car/1HGCM82633A004352?api_key=test-key"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "vin-history-19XZE4F52ME000999.json")),
+            ["https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&vin=1HGCM82633A004352"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "active-search-19XZE4F52ME000999.json")),
+        });
+        var http = new HttpClient(handler);
+        var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient("test-key", http));
+
+        VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
+
+        Assert.Null(result.Recalls.CouldNotFetchReason);
+        Assert.NotEmpty(result.Recalls.Entries);
+        Assert.Null(result.Complaints.CouldNotFetchReason);
+        Assert.Equal(31, result.Complaints.Count);
+        Assert.NotNull(result.Safety.CouldNotFetchReason);
+        Assert.Contains("NHTSA safety ratings", result.Safety.CouldNotFetchReason);
+
+        VinRecordEntity saved = await db.VinRecords.FindAsync([Vin]) ?? throw new InvalidOperationException();
+        Assert.True(saved.OpenRecallCount > 0);
+        Assert.Equal(31, saved.ComplaintCount);
+        Assert.Null(saved.RecallsCouldNotFetchReason);
+        Assert.Null(saved.ComplaintsCouldNotFetchReason);
+        Assert.NotNull(saved.SafetyCouldNotFetchReason);
+        Assert.NotNull(saved.SafetyFetchedAt);
+        Assert.Null(saved.SafetyRawJson);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_PreviousSafetyCouldNotFetch_RetriesOnlySafety()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        VehicleEntity vehicle = Vehicle();
+        var existingRecord = new VinRecordEntity
+        {
+            Vin = Vin,
+            DecodedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            DecodeRawJson = "{}",
+            ResearchedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            OpenRecallCount = 2,
+            RecallsRawJson = "[]",
+            ComplaintCount = 4,
+            SafetyCouldNotFetchReason = "NHTSA safety ratings could not be fetched, HTTP 200 with an HTML error page",
+            SafetyFetchedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            HistoryRawJson = "[]",
+        };
+        db.Vehicles.Add(vehicle);
+        db.VinRecords.Add(existingRecord);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        string fixtureRoot = Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures");
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            ["https://api.nhtsa.gov/SafetyRatings/modelyear/2020/make/Honda/model/Insight"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "safety-ratings-lookup-honda-insight-2020.json")),
+            ["https://api.nhtsa.gov/SafetyRatings/VehicleId/14485"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "safety-ratings-detail-14485.json")),
+            ["https://mc-api.marketcheck.com/v2/history/car/1HGCM82633A004352?api_key=test-key"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "vin-history-19XZE4F52ME000999.json")),
+            ["https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&vin=1HGCM82633A004352"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "marketcheck", "active-search-19XZE4F52ME000999.json")),
+        });
+        var http = new HttpClient(handler);
+        var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient("test-key", http));
+
+        // No recalls or complaints fixture is registered: if RefreshAsync tried to re-fetch either
+        // one, FixtureHttpMessageHandler would throw "no fixture registered", failing this test.
+        VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
+
+        Assert.Null(result.Safety.CouldNotFetchReason);
+        Assert.Equal(5, result.Safety.OverallRating);
+        Assert.Empty(result.Recalls.Entries);
+        Assert.Equal(4, result.Complaints.Count);
+
+        VinRecordEntity saved = await db.VinRecords.FindAsync([Vin]) ?? throw new InvalidOperationException();
+        Assert.Null(saved.SafetyCouldNotFetchReason);
+        Assert.Equal(5, saved.SafetyOverallRating);
+        Assert.Equal(2, saved.OpenRecallCount);
+        Assert.Equal(4, saved.ComplaintCount);
+    }
+
+    [Fact]
     public void FromCached_NeverResearched_ReturnsPlaceholderNotesWithoutThrowing()
     {
         var record = new VinRecordEntity { Vin = Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "{}" };
