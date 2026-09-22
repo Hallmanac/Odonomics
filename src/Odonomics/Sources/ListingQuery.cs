@@ -19,10 +19,10 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
     /// <summary>Whether a candidate a source (an API response or a walked detail page) actually is
     /// the model this query asked for, rather than generic make inventory the source fell back to
     /// for an unrecognized or compound model facet. The spike found exactly this on cars.com and
-    /// Carvana: a "Camry Hybrid" or "Corolla Hybrid" walk came back with gas trims mixed in. Cars.com's
-    /// own search URL now asks for the exact model (see WalkSites.CarsComModelSlug), but Carvana's
-    /// still asks for the base model only (see WalkSites.Carvana), so a candidate is never trusted
-    /// as this query's own model just because it came back for this query; it has to actually say
+    /// Carvana: a "Camry Hybrid" or "Corolla Hybrid" walk came back with gas trims mixed in.
+    /// Neither site's search URL has a confirmed model facet that isolates a hybrid or plug-in
+    /// variant from its base model (see WalkSites), so a candidate is never trusted as this
+    /// query's own model just because it came back for this query; it has to actually say
     /// so.</summary>
     public bool MatchesExtractedVehicle(string? make, string? model, string? trim)
     {
