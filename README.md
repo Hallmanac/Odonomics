@@ -174,12 +174,14 @@ location off the page text the same way it reads the vehicle's own fields.
 (see above); if nothing is listening on the debugging port, it prints the identical launch-line
 message and exits. It then looks up every dealer that has never been checked on CarEdge's Dealer
 Ratings, paced and paused for challenges the same way the walk is. `odo dealer grade <vin>` does the
-same for just that VIN's dealer. Each dealer is checked at most once: a dealer CarEdge has no rating
-for is still stamped as checked, since the fetched-at timestamp is what the cache rule keys off, not
-the grade itself, so it is never looked up again on a later run. `odo show <vin>` prints the grade
-and, for an F grade, the reason beside each posting; `odo rank` shows a Grade column and lists any
-vehicle whose only postings come from F-graded dealers under its own warning heading, still ranked,
-never hidden.
+same for every distinct dealer behind that VIN's postings. Each dealer is checked at most once: a
+dealer CarEdge positively says it has no rating for is stamped as checked, since the fetched-at
+timestamp is what the cache rule keys off, not the grade itself, so it is never looked up again on a
+later run. A page that merely failed to parse, a slow render, a challenge, a layout change, or a
+search result for a different dealer, is left unstamped and retried on the next run rather than
+recorded as either outcome. `odo show <vin>` prints the grade and, for an F-range grade, the reason
+beside each posting; `odo rank` shows a Grade column and lists any vehicle whose only postings come
+from F-range-graded dealers under its own warning heading, still ranked, never hidden.
 
 ## Scenario
 
