@@ -53,9 +53,20 @@ public static class WalkCoverage
                 {
                     WalkPairOutcome outcome = await walkPairAsync(site, model, cancellationToken);
                     (_, string bareModel) = MakeModel.Split(model);
+                    string sourcesBeforePair = currentRun.Sources;
                     coveredTokens.Add(RunSources.Key(site.Name, bareModel));
                     currentRun.Sources = RunSources.Join(coveredTokens);
-                    await persistCoverageAsync(cancellationToken);
+                    try
+                    {
+                        await persistCoverageAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        coveredTokens.RemoveAt(coveredTokens.Count - 1);
+                        currentRun.Sources = sourcesBeforePair;
+                        throw;
+                    }
+
                     summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.DroppedNoVin, Completed: true));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
