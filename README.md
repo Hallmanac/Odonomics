@@ -74,7 +74,7 @@ Every command that scores against a scenario defaults to `scenarios/daughter.jso
 
 ## The assisted walk
 
-`odo walk` never launches a browser. It connects over the Chrome DevTools Protocol to a Chrome or Microsoft Edge the operator starts by hand, in a dedicated profile so it never touches the operator's everyday browsing session. Edge speaks the same DevTools Protocol as Chrome and is an equally valid choice; use whichever Chromium browser you actually have installed. Chrome and Edge share that one profile directory rather than each getting their own, so a profile that has already worked through a site's bot-defense challenge in one browser stays warmed up when you switch to the other. If nothing is listening on the debugging port, `odo walk` prints the exact command for your OS and exits; running `odo walk` again picks it up.
+`odo walk` never launches a browser. It connects over the Chrome DevTools Protocol to a Chrome or Microsoft Edge the operator starts by hand, in a dedicated profile so it never touches the operator's everyday browsing session. Edge speaks the same DevTools Protocol as Chrome and is an equally valid choice; use whichever Chromium browser you actually have installed. Chrome and Edge each get their own profile directory rather than sharing one, since each browser encrypts its stored cookies with a key only it can read; a bot-defense challenge you clear in one browser still has to be cleared again the first time you switch to the other. If nothing is listening on the debugging port, `odo walk` prints the exact command for your OS and exits; running `odo walk` again picks it up.
 
 Launch line (also printed by `odo walk` itself, with your own data directory filled in):
 
@@ -87,7 +87,7 @@ Launch line (also printed by `odo walk` itself, with your own data directory fil
 **macOS, Edge**
 
 ```
-/Applications/Microsoft\ Edge.app/Contents/MacOS/Microsoft\ Edge --remote-debugging-port=9222 --user-data-dir="$HOME/Library/Application Support/Odonomics/chrome-profile"
+/Applications/Microsoft\ Edge.app/Contents/MacOS/Microsoft\ Edge --remote-debugging-port=9222 --user-data-dir="$HOME/Library/Application Support/Odonomics/edge-profile"
 ```
 
 **Windows (PowerShell), Chrome**
@@ -99,7 +99,7 @@ Launch line (also printed by `odo walk` itself, with your own data directory fil
 **Windows (PowerShell), Edge**
 
 ```
-& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Odonomics\chrome-profile"
+& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Odonomics\edge-profile"
 ```
 
 **Windows (cmd), Chrome**
@@ -111,7 +111,7 @@ Launch line (also printed by `odo walk` itself, with your own data directory fil
 **Windows (cmd), Edge**
 
 ```
-"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="%LOCALAPPDATA%\Odonomics\chrome-profile"
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="%LOCALAPPDATA%\Odonomics\edge-profile"
 ```
 
 A bare quoted path needs PowerShell's `&` call operator to run at all; cmd runs it either way. `odo walk` itself prints all four forms (Chrome and Edge, PowerShell and cmd) on Windows, and both browsers' lines on macOS and Linux, when it can't find one listening.

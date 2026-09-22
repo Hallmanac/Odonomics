@@ -18,7 +18,7 @@ public static class ForegroundApp
     /// AppleScript string literal, and a bundle identifier never needs escaping this way regardless.
     /// Restoring by application name also fails for apps whose System Events process name differs
     /// from the name AppleScript's `tell application` expects (VS Code's process is `Code`, for
-    /// example) — the bundle identifier is the one name both sides agree on.</summary>
+    /// example); the bundle identifier is the one name both sides agree on.</summary>
     public const string RestoreScript =
         "on run argv\n" +
         "\ttell application id (item 1 of argv) to activate\n" +
