@@ -101,6 +101,21 @@ finalistCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(finalistCommand);
 
+var dealerGradeAllOption = new Option<bool>("--all") { Description = "grade every ungraded dealer in the ledger" };
+var dealerGradeVinArgument = new Argument<string?>("vin") { Description = "grade only this VIN's dealer", Arity = ArgumentArity.ZeroOrOne };
+var dealerGradeCommand = new Command("grade", "look up each ungraded dealer's CarEdge grade over the browser you already launched");
+dealerGradeCommand.Add(dealerGradeAllOption);
+dealerGradeCommand.Add(dealerGradeVinArgument);
+dealerGradeCommand.SetAction(async (parseResult, cancellationToken) =>
+{
+    bool all = parseResult.GetValue(dealerGradeAllOption);
+    string? vin = parseResult.GetValue(dealerGradeVinArgument);
+    return await DealerGradeCommand.RunAsync(all, vin, cancellationToken);
+});
+var dealerCommand = new Command("dealer", "dealer-grade commands");
+dealerCommand.Add(dealerGradeCommand);
+rootCommand.Add(dealerCommand);
+
 var budgetCommand = new Command("budget", "the max purchase price under the scenario for each target monthly budget");
 budgetCommand.Add(scenarioOption);
 budgetCommand.SetAction(async (parseResult, cancellationToken) =>

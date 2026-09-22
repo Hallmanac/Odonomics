@@ -54,6 +54,7 @@ public static class RankRenderer
 
         RenderInsuranceUnknown(insuranceUnknown);
         RenderExcluded(excluded);
+        RenderFGradedOnly(scores);
     }
 
     private static void RenderRanked(string heading, IReadOnlyList<Score> scores, IReadOnlyDictionary<string, ResearchStatus> research)
@@ -73,6 +74,7 @@ public static class RankRenderer
         table.AddColumn("During-loan");
         table.AddColumn("10yr avg");
         table.AddColumn("Research");
+        table.AddColumn("Grade");
 
         foreach (Score score in scores)
         {
@@ -83,7 +85,8 @@ public static class RankRenderer
                 Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m),
                 Format.Band(cost.DuringLoanMonthly),
                 Format.Band(cost.TenYearAverageMonthly),
-                ResearchCell(research.GetValueOrDefault(score.Vehicle.Vin)));
+                ResearchCell(research.GetValueOrDefault(score.Vehicle.Vin)),
+                Format.Cell(score.Vehicle.DealerGrade ?? "-"));
         }
 
         AnsiConsole.Write(table);
@@ -111,10 +114,55 @@ public static class RankRenderer
         table.AddColumn("VIN");
         table.AddColumn("Vehicle");
         table.AddColumn("Price");
+        table.AddColumn("Grade");
 
         foreach (Score score in scores)
         {
-            table.AddRow(Format.Cell(score.Vehicle.Vin), Format.Cell($"{score.Vehicle.Year} {score.Vehicle.MakeModel}"), Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m));
+            table.AddRow(
+                Format.Cell(score.Vehicle.Vin),
+                Format.Cell($"{score.Vehicle.Year} {score.Vehicle.MakeModel}"),
+                Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m),
+                Format.Cell(score.Vehicle.DealerGrade ?? "-"));
+        }
+
+        AnsiConsole.Write(table);
+    }
+
+    /// <summary>A vehicle whose every posting comes from an F-graded dealer, surfaced under its
+    /// own heading regardless of which other section (if any) it also appears in above: this is a
+    /// warning lens on top of the ranking, not another filter, so nothing here is ever hidden.</summary>
+    private static void RenderFGradedOnly(IReadOnlyList<Score> scores)
+    {
+        List<Score> flagged = [.. scores.Where(s => s.Vehicle.OnlyFGradedDealers)];
+        if (flagged.Count == 0)
+        {
+            return;
+        }
+
+        flagged.Sort((a, b) => (a.Cost, b.Cost) switch
+        {
+            (null, null) => 0,
+            (null, _) => 1,
+            (_, null) => -1,
+            _ => a.Cost!.TenYearAverageMonthly.Expected.CompareTo(b.Cost!.TenYearAverageMonthly.Expected),
+        });
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold red]F-graded dealer only, verify before contact ({flagged.Count})[/]");
+        var table = new Table { Border = TableBorder.Minimal };
+        table.Width(80);
+        table.AddColumn("VIN");
+        table.AddColumn("Vehicle");
+        table.AddColumn("Price");
+        table.AddColumn("Grade");
+
+        foreach (Score score in flagged)
+        {
+            table.AddRow(
+                Format.Cell(score.Vehicle.Vin),
+                Format.Cell($"{score.Vehicle.Year} {score.Vehicle.MakeModel}"),
+                Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m),
+                Format.Cell(score.Vehicle.DealerGrade ?? "F"));
         }
 
         AnsiConsole.Write(table);

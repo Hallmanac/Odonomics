@@ -15,6 +15,7 @@ public static class ShowCommand
 
         VehicleEntity? vehicle = await db.Vehicles
             .Include(v => v.Postings).ThenInclude(p => p.PriceObservations)
+            .Include(v => v.Postings).ThenInclude(p => p.Dealer)
             .Include(v => v.Notes)
             .Include(v => v.VinRecord)
             .FirstOrDefaultAsync(v => v.Vin == vin, cancellationToken);
