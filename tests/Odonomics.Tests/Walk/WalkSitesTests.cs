@@ -66,6 +66,32 @@ public class WalkSitesTests
     }
 
     [Theory]
+    [InlineData(
+        "https://www.cars.com/vehicledetail/84da298f-4e73-4ea4-98d6-d1007f21ffb5/?attribution_type=p_one&sid=41a85986-4b8e-4bfc-ae1a-9925e046534a",
+        "https://www.cars.com/vehicledetail/84da298f-4e73-4ea4-98d6-d1007f21ffb5/")]
+    [InlineData(
+        "https://www.cars.com/vehicledetail/84da298f-4e73-4ea4-98d6-d1007f21ffb5/?openLeadForm=true&sid=41a85986-4b8e-4bfc-ae1a-9925e046534a",
+        "https://www.cars.com/vehicledetail/84da298f-4e73-4ea4-98d6-d1007f21ffb5/")]
+    [InlineData(
+        "https://www.carvana.com/vehicle/4754913?refSource=srp",
+        "https://www.carvana.com/vehicle/4754913")]
+    public void CanonicalDetailUrl_StripsQueryString(string href, string expected)
+    {
+        Assert.Equal(expected, WalkSites.CanonicalDetailUrl(href));
+    }
+
+    [Fact]
+    public void CanonicalDetailUrl_SameVehicleDifferentQueryVariants_ProduceSameCanonicalUrl()
+    {
+        string withSidOnly = WalkSites.CanonicalDetailUrl(
+            "https://www.cars.com/vehicledetail/84da298f-4e73-4ea4-98d6-d1007f21ffb5/?sid=41a85986-4b8e-4bfc-ae1a-9925e046534a");
+        string withOpenLeadForm = WalkSites.CanonicalDetailUrl(
+            "https://www.cars.com/vehicledetail/84da298f-4e73-4ea4-98d6-d1007f21ffb5/?openLeadForm=true&sid=c963e20c-ed97-4844-97ec-3483c73cda34");
+
+        Assert.Equal(withSidOnly, withOpenLeadForm);
+    }
+
+    [Theory]
     [InlineData("cars.com")]
     [InlineData("carvana")]
     [InlineData("CARS.COM")]

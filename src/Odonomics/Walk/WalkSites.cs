@@ -27,6 +27,16 @@ public static class WalkSites
 {
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");
 
+    /// <summary>Strips a detail link down to scheme, host, and path, dropping every query
+    /// parameter. Both walk targets append a per-search-session id (cars.com's "sid", carried on
+    /// every "/vehicledetail/" href on the page) and cars.com additionally emits more than one
+    /// query-string variant of the same card's link ("?sid=…" and
+    /// "?openLeadForm=true&amp;sid=…"). Canonicalizing before the walk dedupes those variants
+    /// into one candidate and gives <c>ListingCandidate.Url</c> a value that is stable across
+    /// runs, so <c>LedgerUpsertService</c>'s (Vin, Source, Url) lookup can actually recognize the
+    /// same posting again instead of minting a new one every time the session id changes.</summary>
+    public static string CanonicalDetailUrl(string href) => new Uri(href).GetLeftPart(UriPartial.Path);
+
     private static string BaseModelSlug(string model)
     {
         int hybridIndex = model.IndexOf(" Hybrid", StringComparison.OrdinalIgnoreCase);
