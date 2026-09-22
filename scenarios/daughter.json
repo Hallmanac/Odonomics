@@ -40,5 +40,8 @@
       "Toyota Prius"
     ]
   },
+  "hybridOnlyFromModelYear": {
+    "Toyota Camry Hybrid": 2025
+  },
   "targetMonthlyBudgets": [300, 350, 400]
 }
