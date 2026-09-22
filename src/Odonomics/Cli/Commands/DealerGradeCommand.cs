@@ -76,7 +76,7 @@ public static class DealerGradeCommand
         IBrowserContext context = browser.Contexts.FirstOrDefault()
             ?? throw new InvalidOperationException("the CDP connection exposed no browser context to attach to; is the browser still running?");
 
-        var recorder = new WalkRecorder(DataDirectory.Resolve(), "caredge", DateTimeOffset.UtcNow);
+        var recorder = new WalkRecorder(DataDirectory.Resolve(), "caredge", "dealers", DateTimeOffset.UtcNow);
         var pacing = new WalkPacing(Random.Shared);
 
         int graded = 0;

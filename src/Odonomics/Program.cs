@@ -17,17 +17,17 @@ searchCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(searchCommand);
 
-var walkSiteArgument = new Argument<string>("site") { Description = "cars.com or carvana" };
-var walkModelOption = new Option<string?>("--model") { Description = "which target model to visit this run (\"Make Model\"); defaults to the scenario's first allowed model" };
-var walkMaxOption = new Option<int>("--max") { Description = "maximum number of detail pages to visit", DefaultValueFactory = _ => Odonomics.Walk.WalkPacing.DefaultMaxDetailPages };
-var walkCommand = new Command("walk", "an operator-assisted walk of one site, connected over CDP to a browser you already launched");
+var walkSiteArgument = new Argument<string?>("site") { Description = "cars.com or carvana; omit to walk both", Arity = ArgumentArity.ZeroOrOne };
+var walkModelOption = new Option<string?>("--model") { Description = "which target model to visit this run (\"Make Model\"); defaults to every model in the scenario's allowed list" };
+var walkMaxOption = new Option<int>("--max") { Description = "maximum number of detail pages to visit per site-and-model pair", DefaultValueFactory = _ => Odonomics.Walk.WalkPacing.DefaultMaxDetailPages };
+var walkCommand = new Command("walk", "an operator-assisted walk, connected over CDP to a browser you already launched, of every site and model in the scenario (or a narrower slice via the site argument and --model)");
 walkCommand.Add(walkSiteArgument);
 walkCommand.Add(scenarioOption);
 walkCommand.Add(walkModelOption);
 walkCommand.Add(walkMaxOption);
 walkCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    string site = parseResult.GetValue(walkSiteArgument)!;
+    string? site = parseResult.GetValue(walkSiteArgument);
     string scenarioPath = parseResult.GetValue(scenarioOption)!;
     string? model = parseResult.GetValue(walkModelOption);
     int max = parseResult.GetValue(walkMaxOption);
