@@ -39,38 +39,65 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
 
     /// <summary>Fetches fresh data from NHTSA and Marketcheck and persists it onto
     /// <paramref name="vehicle"/>'s <see cref="VinRecordEntity"/>, creating one if this is the
-    /// vehicle's first research. A Marketcheck fetch failure (including a missing key) never throws
-    /// here: <see cref="MarketcheckHistoryClient"/> already degrades that to
+    /// vehicle's first research. The NHTSA decode/recalls/complaints/safety calls are skipped, and
+    /// the previously cached values reused, when that half is neither stale nor force-refreshed and
+    /// only the Marketcheck history needs retrying: otherwise every retry of a missing history (the
+    /// common case with no Marketcheck key) would re-fetch all four NHTSA endpoints for no reason. A
+    /// Marketcheck fetch failure (including a missing key) never throws here:
+    /// <see cref="MarketcheckHistoryClient"/> already degrades that to
     /// <see cref="VinHistoryResult.CouldNotFetchReason"/>, and the vehicle's previously cached
     /// history (if any) is left untouched rather than being overwritten with nothing. An NHTSA
     /// failure does throw, since v0 has no key to be missing there and a genuine outage is the
     /// caller's to report as this vehicle's own failed lookup.</summary>
-    public async Task<VinResearchResult> RefreshAsync(OdonomicsDbContext db, VehicleEntity vehicle, CancellationToken cancellationToken)
+    public async Task<VinResearchResult> RefreshAsync(OdonomicsDbContext db, VehicleEntity vehicle, bool refresh, CancellationToken cancellationToken)
     {
-        VinDecodeResult decode = await nhtsa.DecodeVinAsync(vehicle.Vin, cancellationToken);
-        IReadOnlyList<RecallEntry> recalls = await nhtsa.GetRecallsAsync(vehicle.Make, vehicle.Model, vehicle.Year, cancellationToken);
-        int complaintCount = await nhtsa.GetComplaintCountAsync(vehicle.Make, vehicle.Model, vehicle.Year, cancellationToken);
-        SafetyRatingsResult safety = await nhtsa.GetSafetyRatingsAsync(vehicle.Make, vehicle.Model, vehicle.Year, cancellationToken);
+        VinRecordEntity? record = vehicle.VinRecord;
+        bool refreshNhtsa = refresh
+            || record?.ResearchedAt is not DateTimeOffset researchedAt
+            || DateTimeOffset.UtcNow - researchedAt > RefreshInterval;
+
+        VinDecodeResult decode;
+        IReadOnlyList<RecallEntry> recalls;
+        int complaintCount;
+        SafetyRatingsResult safety;
+        if (refreshNhtsa)
+        {
+            decode = await nhtsa.DecodeVinAsync(vehicle.Vin, cancellationToken);
+            recalls = await nhtsa.GetRecallsAsync(vehicle.Make, vehicle.Model, vehicle.Year, cancellationToken);
+            complaintCount = await nhtsa.GetComplaintCountAsync(vehicle.Make, vehicle.Model, vehicle.Year, cancellationToken);
+            safety = await nhtsa.GetSafetyRatingsAsync(vehicle.Make, vehicle.Model, vehicle.Year, cancellationToken);
+        }
+        else
+        {
+            VinResearchResult cached = FromCached(record!);
+            decode = cached.Decode;
+            recalls = cached.Recalls;
+            complaintCount = cached.ComplaintCount;
+            safety = cached.Safety;
+        }
+
         VinHistoryResult history = await marketcheck.GetHistoryAsync(vehicle.Vin, cancellationToken);
 
-        VinRecordEntity? record = vehicle.VinRecord;
         if (record is null)
         {
             record = new VinRecordEntity { Vin = vehicle.Vin, DecodedAt = DateTimeOffset.UtcNow, DecodeRawJson = "" };
             db.VinRecords.Add(record);
         }
 
-        record.DecodedAt = DateTimeOffset.UtcNow;
-        record.DecodeRawJson = JsonSerializer.Serialize(decode);
-        record.OpenRecallCount = recalls.Count;
-        record.RecallsRawJson = JsonSerializer.Serialize(recalls);
-        record.ComplaintCount = complaintCount;
-        record.ResearchedAt = DateTimeOffset.UtcNow;
-        record.SafetyOverallRating = safety.OverallRating;
-        record.SafetyFrontRating = safety.FrontRating;
-        record.SafetySideRating = safety.SideRating;
-        record.SafetyRolloverRating = safety.RolloverRating;
-        record.SafetyRawJson = JsonSerializer.Serialize(safety);
+        if (refreshNhtsa)
+        {
+            record.DecodedAt = DateTimeOffset.UtcNow;
+            record.DecodeRawJson = JsonSerializer.Serialize(decode);
+            record.OpenRecallCount = recalls.Count;
+            record.RecallsRawJson = JsonSerializer.Serialize(recalls);
+            record.ComplaintCount = complaintCount;
+            record.ResearchedAt = DateTimeOffset.UtcNow;
+            record.SafetyOverallRating = safety.OverallRating;
+            record.SafetyFrontRating = safety.FrontRating;
+            record.SafetySideRating = safety.SideRating;
+            record.SafetyRolloverRating = safety.RolloverRating;
+            record.SafetyRawJson = JsonSerializer.Serialize(safety);
+        }
 
         if (history.CouldNotFetchReason is null)
         {

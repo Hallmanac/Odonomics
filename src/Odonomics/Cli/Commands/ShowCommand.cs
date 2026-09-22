@@ -30,7 +30,7 @@ public static class ShowCommand
         var researchService = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient(secrets.MarketcheckApiKey, http));
 
         VinResearchResult research = VinResearchService.NeedsRefresh(vehicle.VinRecord, refresh)
-            ? await researchService.RefreshAsync(db, vehicle, cancellationToken)
+            ? await researchService.RefreshAsync(db, vehicle, refresh, cancellationToken)
             : VinResearchService.FromCached(vehicle.VinRecord!);
 
         List<RunEntity> runs = await db.Runs.ToListAsync(cancellationToken);
