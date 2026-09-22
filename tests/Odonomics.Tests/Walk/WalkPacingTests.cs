@@ -29,6 +29,18 @@ public class WalkPacingTests
     }
 
     [Fact]
+    public void RandomPairGap_AlwaysWithinFifteenToFortyFiveSeconds()
+    {
+        var pacing = new WalkPacing(new Random(42));
+
+        for (int i = 0; i < 100; i++)
+        {
+            TimeSpan gap = pacing.RandomPairGap();
+            Assert.InRange(gap, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(45));
+        }
+    }
+
+    [Fact]
     public void RandomScrollPause_AlwaysWithinTwoToFourSeconds()
     {
         var pacing = new WalkPacing(new Random(42));
