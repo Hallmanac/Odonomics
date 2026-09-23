@@ -13,12 +13,12 @@ namespace Odonomics.Cli.Commands;
 /// positively says it has no rating for is stamped as checked, so it is never looked up again on a
 /// later run; a page that merely failed to parse is left unstamped so a later run retries it, and
 /// so is one whose name-matched cards were all in another city or state, or that matched several
-/// same-named cards its location (partial, or absent as on the "Carvana" fallback dealer) could
-/// not tell apart. Three consecutive CarEdge 404 pages
-/// mean the search URL itself is dead, not that three dealers in a row are unrateable, so the run
-/// stops there and exits non-zero rather than burning through the rest of the list against a URL
-/// that will keep failing; every dealer it never got to stays ungraded and eligible for the next
-/// run.</summary>
+/// same-named cards its partial or absent location could not tell apart. The bare "Carvana" dealer
+/// is never looked up (see <see cref="ChainSkipReason"/>); Carvana's hubs are graded by their own
+/// names like any other dealer. Three consecutive CarEdge 404 pages mean the search URL itself is
+/// dead, not that three dealers in a row are unrateable, so the run stops there and exits non-zero
+/// rather than burning through the rest of the list against a URL that will keep failing; every
+/// dealer it never got to stays ungraded and eligible for the next run.</summary>
 public static class DealerGradeCommand
 {
     public static async Task<int> RunAsync(bool all, string? vin, CancellationToken cancellationToken)
@@ -91,14 +91,25 @@ public static class DealerGradeCommand
         int unmatched = 0;
         int failed = 0;
         var deadSearchUrlGate = new ConsecutiveDeadSearchUrlGate();
+        bool visitedAny = false;
         for (int i = 0; i < targets.Count; i++)
         {
-            if (i > 0)
+            DealerEntity dealer = targets[i];
+            if (ChainSkipReason(dealer) is string skipReason)
+            {
+                DealerGradeOutcome skipped = ApplyChainSkip(dealer, skipReason, DateTimeOffset.UtcNow);
+                ungraded++;
+                AnsiConsole.Write(new Text(skipped.Line + Environment.NewLine, new Style(skipped.Color)));
+                await db.SaveChangesAsync(cancellationToken);
+                continue;
+            }
+
+            if (visitedAny)
             {
                 await Task.Delay(pacing.RandomDetailGap(), cancellationToken);
             }
 
-            DealerEntity dealer = targets[i];
+            visitedAny = true;
             IPage page = await BackgroundTabs.OpenAsync(browserCdp, context);
             try
             {
@@ -165,6 +176,28 @@ public static class DealerGradeCommand
         return deadSearchUrlGate.ShouldStop ? 1 : 0;
     }
 
+    /// <summary>Why a dealer is never looked up on CarEdge, or null when it is. The bare "Carvana"
+    /// dealer is the chain, not a seller: CarEdge lists Carvana as a card per hub ("Carvana Winder"), so
+    /// a search for the bare name returns hub cards, and taking one would grade the chain by an
+    /// arbitrary hub. Every carvana posting a hub is known for is linked to that hub's own
+    /// dealer, and those are graded by their hub name; the bare dealer keeps the postings no hub is
+    /// known for, which therefore show no grade.</summary>
+    public static string? ChainSkipReason(DealerEntity dealer) =>
+        CarvanaDealers.IsChain(dealer)
+            ? "Carvana is a chain and CarEdge lists it by hub; each Carvana hub is graded under its own name"
+            : null;
+
+    /// <summary>Records that a dealer was deliberately not looked up: stamps it checked, with
+    /// <paramref name="reason"/> and no grade, so it is neither retried on every run nor mistaken for
+    /// a dealer CarEdge reported unrated.</summary>
+    public static DealerGradeOutcome ApplyChainSkip(DealerEntity dealer, string reason, DateTimeOffset checkedAt)
+    {
+        dealer.Grade = null;
+        dealer.GradeReason = reason;
+        dealer.GradeCheckedAt = checkedAt;
+        return new DealerGradeOutcome($"{dealer.Name}: skipped, {reason}", Color.Grey, DealerGradeTally.Ungraded, Stamped: true);
+    }
+
     /// <summary>Applies what the parser made of a dealer's CarEdge page to that dealer, and says how
     /// to report it. <see cref="DealerEntity.GradeCheckedAt"/> is stamped only for the two outcomes
     /// that are final, a grade or CarEdge positively having none; every other outcome leaves the
@@ -210,7 +243,11 @@ public static class DealerGradeCommand
 
     private static void PrintGrade(DealerEntity dealer)
     {
-        if (dealer.Grade is null)
+        if (dealer.Grade is null && dealer.GradeReason is not null)
+        {
+            AnsiConsole.MarkupLineInterpolated($"{dealer.Name}: skipped, {dealer.GradeReason}");
+        }
+        else if (dealer.Grade is null)
         {
             AnsiConsole.MarkupLineInterpolated($"{dealer.Name}: already checked, CarEdge has no rating for this dealer");
         }

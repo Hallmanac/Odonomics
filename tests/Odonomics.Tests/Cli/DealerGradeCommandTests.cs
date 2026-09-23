@@ -87,16 +87,55 @@ public class DealerGradeCommandTests
         }
     }
 
-    [Fact]
-    public void ApplyResult_CarvanaFallbackDealerWithNoLocation_IsGradedLikeAnyOtherDealerAndNeverCountsAsFailed()
+    [Theory]
+    [InlineData("Carvana", "", null)]
+    [InlineData("Carvana", "ORLANDO FL", "Orlando, FL")]
+    public void ChainSkipReason_BareOrLegacyLocatedCarvana_IsSkippedWithAReason(string name, string normalizedLocation, string? location)
     {
-        // The walk stamps carvana postings with a name-only "Carvana" dealer (see
-        // WalkSites.CarvanaDealerName). The grade pass deliberately has no special case for it:
-        // a name with no location goes through the same parser and the same outcomes as any other
-        // dealer. Here CarEdge's results page (a recorded page for a different dealer) has no card
-        // for it, which stamps it checked with no grade rather than counting it as a failed grade.
+        var dealer = new DealerEntity { Name = name, NormalizedName = "CARVANA", NormalizedLocation = normalizedLocation, Location = location };
+
+        string? reason = DealerGradeCommand.ChainSkipReason(dealer);
+
+        Assert.NotNull(reason);
+        Assert.Contains("each Carvana hub is graded under its own name", reason);
+    }
+
+    [Theory]
+    [InlineData("Carvana Winder", "CARVANA WINDER")]
+    [InlineData("Holler Honda", "HOLLER HONDA")]
+    public void ChainSkipReason_ACarvanaHubOrAnyOtherDealer_IsLookedUp(string name, string normalizedName)
+    {
+        var dealer = new DealerEntity { Name = name, NormalizedName = normalizedName, NormalizedLocation = "" };
+
+        Assert.Null(DealerGradeCommand.ChainSkipReason(dealer));
+    }
+
+    [Fact]
+    public void ApplyChainSkip_StampsTheBareCarvanaRowCheckedWithItsReasonAndNoGrade()
+    {
+        // A row a previous grader run had wrongly graded is cleared too: the bare chain never
+        // carries a hub's grade.
+        var dealer = new DealerEntity { Name = "Carvana", NormalizedName = "CARVANA", NormalizedLocation = "", Grade = "A" };
+        string reason = DealerGradeCommand.ChainSkipReason(dealer) ?? throw new InvalidOperationException("expected a skip reason");
+
+        DealerGradeOutcome outcome = DealerGradeCommand.ApplyChainSkip(dealer, reason, CheckedAt);
+
+        Assert.Null(dealer.Grade);
+        Assert.Equal(reason, dealer.GradeReason);
+        Assert.Equal(CheckedAt, dealer.GradeCheckedAt);
+        Assert.True(outcome.Stamped);
+        Assert.Equal(DealerGradeTally.Ungraded, outcome.Tally);
+        Assert.StartsWith("Carvana: skipped, ", outcome.Line);
+    }
+
+    [Fact]
+    public void ApplyResult_CarvanaHubDealerWithNoCardOnThePage_IsStampedCheckedNotCountedFailed()
+    {
+        // A hub goes through the same parser and outcomes as any other dealer. Here CarEdge's
+        // results page (a recorded page for a different dealer) has no card for it, which stamps it
+        // checked with no grade rather than counting it as a failed lookup.
         string pageText = File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "caredge", "dealers-q-daytona-toyota.txt"));
-        var dealer = new DealerEntity { Name = "Carvana", NormalizedName = "CARVANA", NormalizedLocation = "" };
+        var dealer = new DealerEntity { Name = "Carvana Winder", NormalizedName = "CARVANA WINDER", NormalizedLocation = "" };
 
         CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, dealer.Name, dealer.Location);
         DealerGradeOutcome outcome = DealerGradeCommand.ApplyResult(dealer, result, CheckedAt, SearchUrl);
