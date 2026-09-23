@@ -265,6 +265,33 @@ public class RedFlagsEvaluatorTests
     }
 
     [Fact]
+    public void Evaluate_SameSellerGroupHeavilyOverlappingWindowsLargeRollback_StillFlagsIt()
+    {
+        // Two same-dealer listings whose windows overlap by weeks, not the "next day's window"
+        // shape MileageNoteMaxGapDays exists to catch: previous.LastSeen (Apr 20) falls well after
+        // next.FirstSeen (Mar 10), so the raw signed gap is a large negative number that must not
+        // satisfy the same-seller "consecutive or barely apart" note gate just because a negative
+        // number compares as "<=" a small positive threshold. A 43,000-mile rollback across windows
+        // this far apart in actual elapsed time is a real red flag, not a same-listing correction.
+        DateTimeOffset firstSeenA = new(2026, 1, 5, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset lastSeenA = new(2026, 4, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset firstSeenB = new(2026, 3, 10, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset lastSeenB = new(2026, 5, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Gary Yeomans Ford", firstSeenA, lastSeenA, 20000m, 85000),
+            new("Gary Yeomans Ford", firstSeenB, lastSeenB, 20000m, 42000),
+        ];
+
+        EvaluationResult result = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        RedFlag flag = Assert.Single(result.Flags);
+        Assert.Equal("mileage-drop", flag.ShortTag);
+        Assert.Contains("mileage dropped from 85,000 to 42,000", flag.Detail);
+        Assert.Empty(result.Notes);
+    }
+
+    [Fact]
     public void Evaluate_ThreeDealersWithinNinetyDays_FlagsDealerHopping()
     {
         DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -388,10 +415,11 @@ public class RedFlagsEvaluatorTests
         // 16 ALM-group and affiliated rooftops, all at 36,005 miles, all with overlapping listing
         // windows between Jan 24 and Mar 5 (synthesized here as one shared window per rooftop, since
         // the recorded run captured the rooftop list and the shared window bounds but not each row's
-        // exact first/last dates). The old dealer-name-stem rule missed this because "Alm" and "ALM"
-        // differ only in casing, and because Carrollton Hyundai, Genesis of Macon, and Five Star
-        // Hyundai share no name with the group at all; the window-and-mileage rule catches it because
-        // every rooftop's window overlaps every other rooftop's, at the identical mileage.
+        // exact first/last dates). The old dealer-name-stem rule missed this because the ALM rooftops
+        // diverge at their second or third word (e.g. "Alm Hyundai Florence" vs. "ALM Chevrolet
+        // South"), and because Carrollton Hyundai, Genesis of Macon, and Five Star Hyundai share no
+        // name with the group at all; the window-and-mileage rule catches it because every rooftop's
+        // window overlaps every other rooftop's, at the identical mileage.
         DateTimeOffset windowStart = new(2026, 1, 24, 0, 0, 0, TimeSpan.Zero);
         DateTimeOffset windowEnd = new(2026, 3, 5, 0, 0, 0, TimeSpan.Zero);
         string[] rooftops =
@@ -452,8 +480,9 @@ public class RedFlagsEvaluatorTests
         // The literal recorded reading from manual verification of this feature: three dealers
         // within days of each other, all at one unchanged 69,599 miles (Driver's Mart Usa Sep 13
         // 01:58, Driver's Mart Sanford Sep 13 02:36, Holler Classic Sep 17). Under the window/mileage
-        // rule, Driver's Mart Usa and Sanford merge into one seller group (touching windows,
-        // identical real mileage, and a shared name stem besides), and Holler Classic then resumes
+        // rule, Driver's Mart Usa and Sanford merge into one seller group (touching windows and
+        // identical real mileage; their names diverge at "Usa" vs. "Sanford" so the name-stem rule
+        // alone would not have merged them), and Holler Classic then resumes
         // at that same unchanged mileage, so it is folded in rather than counted as a third seller:
         // this reads as syndication, not a genuine dealer-to-dealer hop, so it must not flag, unlike
         // the (deliberately modified) mileage-rising version above.

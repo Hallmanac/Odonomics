@@ -145,7 +145,8 @@ public static partial class RedFlagsEvaluator
         return [.. groups.Select(g =>
         {
             (decimal? minPrice, decimal? maxPrice) = MinMax(g.Points.Select(p => p.Price));
-            (int? minMileage, int? maxMileage) = MinMax(g.Points.Select(p => p.Mileage));
+            (int? minMileage, int? maxMileage) = MinMax(g.Points
+                .Select(p => p.Mileage is int mileage && mileage > PlaceholderMileageMax ? mileage : (int?)null));
             return new SellerGroupSummary(g.WindowStart, g.WindowEnd, g.DealerNames, minPrice, maxPrice, minMileage, maxMileage);
         })];
     }
@@ -190,7 +191,7 @@ public static partial class RedFlagsEvaluator
             bool sameSellerGroup = previousGroup is not null && ReferenceEquals(previousGroup, nextGroup);
             double gapDays = ((next.FirstSeen!.Value) - (previous.LastSeen ?? previous.FirstSeen!.Value)).TotalDays;
 
-            if (sameSellerGroup && gapDays <= MileageNoteMaxGapDays)
+            if (sameSellerGroup && Math.Abs(gapDays) <= MileageNoteMaxGapDays)
             {
                 notes.Add(
                     $"mileage corrected {previousMileage:N0} to {nextMileage:N0} at {nextGroup!.RepresentativeName} on {next.FirstSeen:MMM d}");
