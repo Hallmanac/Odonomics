@@ -163,10 +163,11 @@ public static partial class RedFlagsEvaluator
     /// two points in the same <see cref="SellerGroup"/> (see <paramref name="sellerGroups"/>) whose
     /// windows are on consecutive or overlapping days is a same-seller correction, not a real flag: it
     /// becomes a note instead, and scanning continues for a genuine flag-worthy drop elsewhere in the
-    /// history. When a reading precedes the higher one, the flag names it and the lower one as the
-    /// readings either side of the higher one, so a single mistyped odometer value in an otherwise
-    /// steady sequence reads as the outlier it probably is; with no earlier reading it just states the
-    /// drop.</summary>
+    /// history. When the higher reading is a spike, meaning an earlier reading no higher than the lower
+    /// one precedes it, the flag names those two as the readings either side of it, each with its
+    /// date, so a single mistyped odometer value in an otherwise steady sequence reads as the outlier
+    /// it probably is; otherwise (no earlier reading, or the odometer was already falling) it just
+    /// states the drop.</summary>
     private static (RedFlag? Flag, List<string> Notes) FindMileageDrop(
         IReadOnlyList<VinHistoryPoint> ordered, List<SellerGroup> sellerGroups, int mileageDropMinMiles, decimal mileageDropMinPercent)
     {
@@ -201,10 +202,12 @@ public static partial class RedFlagsEvaluator
                 continue;
             }
 
-            string dates = $"({previous.FirstSeen:yyyy-MM-dd} to {next.FirstSeen:yyyy-MM-dd})";
-            string detail = i >= 2 && filtered[i - 2].Mileage is int readingBefore
-                ? $"one listing showed {previousMileage:N0} miles between readings of {readingBefore:N0} and {nextMileage:N0} {dates}"
-                : $"mileage dropped from {previousMileage:N0} to {nextMileage:N0} between listings {dates}";
+            // A spike: the higher reading sits above a reading on each side of it that are themselves
+            // in order (the earlier no higher than the later), so one mistyped value is the likelier
+            // story. Anything else (a steady decline, a rollback after a small dip) is a plain drop.
+            string detail = i >= 2 && filtered[i - 2] is { Mileage: int readingBefore } before && readingBefore <= nextMileage
+                ? $"one listing showed {previousMileage:N0} miles on {previous.FirstSeen:yyyy-MM-dd} between readings of {readingBefore:N0} on {before.FirstSeen:yyyy-MM-dd} and {nextMileage:N0} on {next.FirstSeen:yyyy-MM-dd}"
+                : $"mileage dropped from {previousMileage:N0} to {nextMileage:N0} between listings ({previous.FirstSeen:yyyy-MM-dd} to {next.FirstSeen:yyyy-MM-dd})";
 
             return (new RedFlag("mileage-drop", detail), notes);
         }

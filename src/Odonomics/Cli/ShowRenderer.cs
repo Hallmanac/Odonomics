@@ -1,8 +1,8 @@
+using System.Globalization;
 using Odonomics.Domain;
 using Odonomics.Ledger;
 using Odonomics.Marketcheck;
 using Odonomics.Nhtsa;
-using System.Globalization;
 using Spectre.Console;
 
 namespace Odonomics.Cli;
@@ -19,9 +19,10 @@ public static class ShowRenderer
     // readable, of space it needs far more. So price and mileage width are computed per render call
     // from what the actual groups need (floored at their short header's own length so the header
     // itself is never truncated, capped at the six-digit worst case so a wide range still survives),
-    // and whatever they don't use goes to Dealer. The price, mileage, and date cells are truncated to
-    // their column's width before they reach the table, since Spectre wraps a cell that overflows its
-    // declared width onto a second line rather than cropping it. The Dealer cell is the one exception:
+    // and whatever they don't use goes to Dealer. The price and mileage cells are truncated to their
+    // column's width before they reach the table, since Spectre wraps a cell that overflows its
+    // declared width onto a second line rather than cropping it; the date cells need no truncation
+    // because an ISO date is always exactly the width they reserve. The Dealer cell is the exception:
     // it is never truncated, because cutting a seller group's names short hides the very thing the
     // grouping exists to show. It wraps instead, so a long name list continues on lines under the
     // group's row while the other columns stay on the first line; DealerNamesCell still leads with the
@@ -33,6 +34,7 @@ public static class ShowRenderer
     private const int PriceColumnMaxWidth = 16;
     private const int MileageColumnMaxWidth = 14;
     private const int MaxDealerNamesShown = 3;
+    private const int CurrentListingMaxIdleDays = 14;
 
     public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory, TimeProvider? timeProvider = null)
     {
@@ -217,7 +219,10 @@ public static class ShowRenderer
 
     /// <summary>Days on market for the current listing: Marketcheck's own figure when it reported one,
     /// otherwise the days since the current seller group (the group whose window ends last) was first
-    /// seen, and "(unknown)" only when neither exists.</summary>
+    /// seen, and "(unknown)" when neither exists. Marketcheck reports no figure both for a listing
+    /// that carries no days on market and for a VIN that is not listed at all, so the fallback only
+    /// applies when that group was last seen within <see cref="CurrentListingMaxIdleDays"/> days of
+    /// <paramref name="now"/>; a group last seen longer ago is a past listing, not the current one.</summary>
     public static string DaysOnMarket(int? reportedDays, IReadOnlyList<SellerGroupSummary> groups, DateTimeOffset now)
     {
         if (reportedDays is int reported)
@@ -226,7 +231,7 @@ public static class ShowRenderer
         }
 
         SellerGroupSummary? current = groups.MaxBy(g => g.LastSeen);
-        return current is null
+        return current is null || (now.UtcDateTime.Date - current.LastSeen.UtcDateTime.Date).Days > CurrentListingMaxIdleDays
             ? "(unknown)"
             : Math.Max(0, (now.UtcDateTime.Date - current.FirstSeen.UtcDateTime.Date).Days).ToString("N0");
     }

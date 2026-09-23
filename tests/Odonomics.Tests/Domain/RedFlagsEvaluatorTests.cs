@@ -105,7 +105,30 @@ public class RedFlagsEvaluatorTests
 
         RedFlag flag = Assert.Single(result.Flags);
         Assert.Equal("mileage-drop", flag.ShortTag);
-        Assert.Contains("one listing showed 181,407 miles between readings of 85,960 and 86,663", flag.Detail);
+        Assert.Contains("one listing showed 181,407 miles on 2026-02-01 between readings of 85,960 on 2025-10-16 and 86,663 on 2026-06-01", flag.Detail);
+    }
+
+    [Theory]
+    [InlineData(85960, 86663, 50000)]
+    [InlineData(100000, 99800, 60000)]
+    [InlineData(86663, 86663, 40000)]
+    public void Evaluate_MileageDropAfterAnEarlierReadingThatIsNotLower_KeepsTheDroppedFromWording(int first, int second, int third)
+    {
+        DateTimeOffset day1 = new(2025, 10, 16, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Dealer A", day1, day1, 20000m, first),
+            new("Dealer B", day2, day2, 20000m, second),
+            new("Dealer C", day3, day3, 20000m, third),
+        ];
+
+        EvaluationResult result = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        RedFlag flag = Assert.Single(result.Flags);
+        Assert.Contains($"mileage dropped from {second:N0} to {third:N0} between listings (2026-02-01 to 2026-06-01)", flag.Detail);
+        Assert.DoesNotContain("one listing showed", flag.Detail);
     }
 
     [Fact]
