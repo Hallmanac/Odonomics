@@ -275,7 +275,15 @@ has no rating for (no card names it at all, or its own card is marked "Not rated
 checked, since the fetched-at timestamp is what the cache rule keys off, not the grade itself, so it
 is never looked up again on a later run. A page that merely failed to parse, a slow render, a
 challenge, or a layout change, is left unstamped and retried on the next run rather than recorded as
-either outcome. A page that is CarEdge's own 404 means the search URL itself is dead, not that this
+either outcome. A card is only taken for a dealer when the dealer's location agrees with the card's
+"City, ST" line one part at a time: both are split into a city and a state, lowercased, stripped of
+punctuation and any trailing zip code, and "Ft.", "Mt." and "St." are read as Fort, Mount and Saint,
+so the walk's "Winter Park, FL 32792" still finds its own "Winter Park, FL" card while a bare "Palm
+Beach" never matches "West Palm Beach, FL". Two more outcomes leave the dealer unstamped and
+retried, so they are never recorded as "not on CarEdge": a card carried the dealer's name but every
+such card was in another city or state (the run prints "name matched, location did not"), and a
+dealer whose location is only a city or only a state matched more than one same-named card, which
+leaves it ungraded until a fuller location is known. A page that is CarEdge's own 404 means the search URL itself is dead, not that this
 one dealer is unrateable: the run prints the dead URL and keeps going, but stops and exits non-zero
 after three such pages in a row, leaving every dealer it never got to ungraded for the next run.
 `odo show <vin>` prints the grade beside each posting; on the graded pages recorded so far, the
