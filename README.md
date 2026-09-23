@@ -191,10 +191,9 @@ moved between them.
   followed by "and N more" so a syndication feed's 30-plus rooftop names never dominates the line.
 - **one or more open NHTSA recalls with no remedy published yet** (`no-remedy-recall`). An open
   recall with a remedy already available does not raise a flag on its own; `odo rank` shows the
-  total open-recall count in its own `Recalls` column instead (see below), and NHTSA's free
-  recallsByVehicle endpoint has no true per-VIN remedy-completed status, so "remedy available" here
-  means the campaign's own remedy text has actually been published, not that this specific VIN's
-  owner already had the fix done.
+  total open-recall count instead (see below), and NHTSA's free recallsByVehicle endpoint has no
+  true per-VIN remedy-completed status, so "remedy available" here means the campaign's own remedy
+  text has actually been published, not that this specific VIN's owner already had the fix done.
 - **an NHTSA overall safety rating below four stars** (`low-safety-rating`)
 - **a current price more than 15% above the average of the VIN's prior listing prices**
   (`price-spike`)
@@ -202,10 +201,10 @@ moved between them.
 An empty section says so explicitly (`odo show`: "none found"; `odo research`: `none`) rather than
 being left blank.
 
-`odo rank` gains a `Research` column showing, per vehicle, whether it has been researched yet and
-whether any red flag turned up (`not researched`, `clean`, or `red flag`), and a `Recalls` column
-showing the total open NHTSA recall count (`-` when not yet researched, or when recalls have never
-been successfully fetched for that vehicle even though other research pieces have); both are
+`odo rank` marks each vehicle's row with whether it has been researched yet and whether any red
+flag turned up (`-` for not yet researched, `clean`, or `flag`), and a `rc` figure showing the
+total open NHTSA recall count (`-` when not yet researched, or when recalls have never been
+successfully fetched for that vehicle even though other research pieces have); both are
 display-only and never change the ranking math itself.
 
 ## The assisted walk
@@ -281,9 +280,10 @@ one dealer is unrateable: the run prints the dead URL and keeps going, but stops
 after three such pages in a row, leaving every dealer it never got to ungraded for the next run.
 `odo show <vin>` prints the grade beside each posting; on the graded pages recorded so far, the
 current dealer card carries no "why this grade" text, so no reason is shown alongside it. No F-grade
-page has been recorded, so whether an F still carries one is unknown. `odo rank` shows a Grade column and lists any
-vehicle whose only postings come from F-range-graded dealers under its own warning heading, still
-ranked, never hidden.
+page has been recorded, so whether an F still carries one is unknown. `odo rank` shows each
+vehicle's grade when at least one vehicle in that table has one, and lists any vehicle whose only
+postings come from F-range-graded dealers under its own warning heading, still ranked, never
+hidden.
 
 ## Scenario
 
