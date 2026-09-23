@@ -103,7 +103,9 @@ public static class RankRenderer
     };
 
     private static string RecallsCell(ResearchStatus? status) =>
-        status is { Researched: true } s ? Format.Cell(s.RecallCount.ToString()) : Format.Cell("-");
+        status is { Researched: true, RecallsKnown: true } s
+            ? Format.Cell(s.RecallCount.ToString())
+            : Format.Cell("-");
 
     private static void RenderInsuranceUnknown(IReadOnlyList<Score> scores)
     {
