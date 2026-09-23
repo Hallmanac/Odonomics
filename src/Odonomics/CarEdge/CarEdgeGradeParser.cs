@@ -28,7 +28,8 @@ public static partial class CarEdgeGradeParser
             return CarEdgeGradeResult.Unrecognized;
         }
 
-        if (resultsFound.Groups["count"].Value == "0")
+        int declaredCount = int.Parse(resultsFound.Groups["count"].Value);
+        if (declaredCount == 0)
         {
             return CarEdgeGradeResult.NotFound;
         }
@@ -57,11 +58,18 @@ public static partial class CarEdgeGradeParser
         signals.Sort((a, b) => a.Start.CompareTo(b.Start));
 
         // Scope the dealer-name check to the text between the previous card's own signal (or the
-        // end of the results-found line) and this one, so a multi-result page can't match this
+        // page chrome above the first card) and this one, so a multi-result page can't match this
         // card's letter to a dealer named lower down in a different result's card, and so the
-        // first card isn't matched against the page's own "Search: "<query>"" echo above the
-        // results-found line, which always contains the searched dealer's name.
+        // first card isn't matched against the page's own "Search: "<query>"" echo, disclaimer,
+        // grade/make filter rows, or sort options, all of which sit between the results-found line
+        // and the first card and can themselves contain a dealer's bare name (a make like "Tesla").
         int precedingStart = resultsFound.Index + resultsFound.Length;
+        Match sortOptionsLine = SortOptionsLine().Match(pageText, precedingStart);
+        if (sortOptionsLine.Success)
+        {
+            precedingStart = sortOptionsLine.Index + sortOptionsLine.Length;
+        }
+
         foreach ((int start, int end, Match match, bool graded) in signals)
         {
             string precedingBlock = pageText[precedingStart..start];
@@ -87,9 +95,15 @@ public static partial class CarEdgeGradeParser
             return new CarEdgeGradeResult(CarEdgeGradeStatus.Graded, grade, score, verifiedQuoteCount, docFee, addOnsNote, Reason: null);
         }
 
-        // The page recognizably rendered CarEdge's results layout, and at least one card on it
-        // parsed cleanly, but none of them named this dealer: CarEdge's search just doesn't have it.
-        return CarEdgeGradeResult.NotFound;
+        // The page recognizably rendered CarEdge's results layout and none of the cards that parsed
+        // named this dealer. That's only trustworthy as "CarEdge's search doesn't have it" when every
+        // card the page itself declares actually parsed; if fewer cards parsed than the page's own
+        // count, the searched dealer's own card may be a render variant the regexes above don't cover,
+        // so come back Unrecognized and let the caller retry instead of recording a permanent (and
+        // possibly wrong) "not on CarEdge".
+        return signals.Count >= declaredCount
+            ? CarEdgeGradeResult.NotFound
+            : CarEdgeGradeResult.Unrecognized;
     }
 
     [GeneratedRegex(@"^\s*404\s*$", RegexOptions.Multiline)]
@@ -100,6 +114,9 @@ public static partial class CarEdgeGradeParser
 
     [GeneratedRegex(@"(?<count>\d+)\s+dealers?\s+found", RegexOptions.IgnoreCase)]
     private static partial Regex ResultsFoundLine();
+
+    [GeneratedRegex(@"Sort:\s*\r?\n[^\r\n]*\r?\n")]
+    private static partial Regex SortOptionsLine();
 
     [GeneratedRegex(
         @"(?:·\s*(?<quotes>\d+)\s*verified quotes\s*\r?\n\s*)?" +
