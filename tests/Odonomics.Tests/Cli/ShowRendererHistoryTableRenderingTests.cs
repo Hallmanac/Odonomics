@@ -60,6 +60,29 @@ public class ShowRendererHistoryTableRenderingTests
     }
 
     [Fact]
+    public void BuildGroupedHistoryTable_MileageRangeWithSixDigitHighEnd_RendersBothInFull()
+    {
+        // A dealer-name-stem-merged group spanning the 100k-mile mark (the README's own documented
+        // case: "even when the mileage moved between them") must not have its six-digit high end
+        // ellipsized away, the same defect shape as the five-digit case above, just one digit up.
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 12, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> points =
+        [
+            new("Dealer A", day1, day1, 19394m, 95000),
+            new("Dealer A", day2, day2, 27995m, 150000),
+        ];
+
+        IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
+        Assert.Single(groups);
+
+        string[] lines = Render(groups);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Contains(lines, line => line.Contains("95,000-150,000"));
+    }
+
+    [Fact]
     public void BuildGroupedHistoryTable_ManyRooftopGroup_ShowsSellerCountEvenWhenNamesAreTruncated()
     {
         // The dealer cell for a multi-seller group must lead with the seller count, so the one fact
