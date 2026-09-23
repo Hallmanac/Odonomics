@@ -93,12 +93,13 @@ VIN, on top of the NHTSA decode/recalls/complaints `odo show` has always fetched
   no key set, this degrades to a "could not fetch" line rather than failing the command. `odo show`
   renders this history grouped by seller (see the seller-group rule below): one row per group with
   its first/last seen dates, dealer name(s) (a multi-seller group's cell leads with its seller
-  count, e.g. "16 sellers: ...", and whose names cap at three plus "and N more"; the cell is never
+  count, e.g. "16 sellers: ...", and lists at most three names, then "and N more"; the cell is never
   cut short, so a long name list wraps onto lines under the group's row), price range, and mileage
   range, so a syndicated 50-row history still reads as a handful of lines. When Marketcheck reports
   no days on market for the current listing, `odo show` counts the days since the current seller
-  group (the one seen most recently) was first seen, provided that group was last seen within the
-  past 14 days; otherwise the car is treated as not currently listed and it prints `(unknown)`. Pass `--all-history` to also print the raw,
+  group (the one seen most recently) began its latest unbroken run of sightings, provided that
+  group was last seen within the past 14 days; otherwise the car is treated as not currently
+  listed and it prints `(unknown)`. Pass `--all-history` to also print the raw,
   one-row-per-sighting list underneath.
 
 Both are cached on the vehicle's ledger row with a fetched-at stamp, and are only re-fetched when
