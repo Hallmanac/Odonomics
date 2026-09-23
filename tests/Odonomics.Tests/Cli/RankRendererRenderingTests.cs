@@ -254,12 +254,19 @@ public class RankRendererRenderingTests
         CostBreakdown cost = BuildCost(new Band(1590m, 1608m, 1626m), new Band(612m, 696m, 780m));
         Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Prius", 17897m, cost: cost);
 
-        string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
-
-        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
-        foreach (string figure in new[] { "$300,", "$350,", "$400", "$1,590-$1,626" })
+        // Each extra leading target shifts the rest of the sentence by six columns, so the band
+        // and the target figures take turns landing on the 80-column wrap boundary.
+        for (int extraTargets = 0; extraTargets < 10; extraTargets++)
         {
-            Assert.Contains(lines, line => line.Contains(figure));
+            List<decimal> targets = [.. Enumerable.Range(0, extraTargets).Select(i => 100m + i), 300m, 350m, 400m];
+
+            string[] lines = Render([score], budget: null, targets: targets);
+
+            Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+            foreach (string figure in new[] { "$1,590-$1,626" }.Concat(targets.Select(t => $"${t:N0}")))
+            {
+                Assert.Contains(lines, line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(word => word.TrimEnd(',', ';', '.') == figure));
+            }
         }
     }
 
@@ -307,5 +314,19 @@ public class RankRendererRenderingTests
         string[] lines = Render([], budget: null, targets: [300m, 350m, 400m]);
 
         Assert.DoesNotContain(lines, line => line.Contains("No ranked vehicle meets"));
+    }
+
+    [Fact]
+    public void Render_BudgetFlagMovesEveryVehicleOverBudget_StillPrintsTheTargetLine()
+    {
+        Score cheap = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Prius", 17897m, cost: BuildCost(new Band(590m, 608m, 626m), new Band(500m, 500m, 500m)));
+        Score pricey = BuildScore("1HGCM82633A004352", 2019, "Honda", "Insight", 18000m, cost: BuildCost(new Band(700m, 720m, 740m), new Band(400m, 400m, 400m)));
+
+        string[] lines = Render([pricey, cheap], budget: 400m, targets: [300m, 350m, 400m]);
+
+        Assert.Contains(lines, line => line.StartsWith("Ranked (0)"));
+        Assert.Equal(
+            "No ranked vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
+            UnmetTargetsText(lines));
     }
 }

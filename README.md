@@ -286,11 +286,9 @@ ranked and over-budget lines, and as a Grade column in the insurance-unknown and
 tables. It also lists any vehicle whose only postings come from F-range-graded dealers under its
 own warning heading, still ranked, never hidden.
 
-`odo rank` also says so, in one line above the Ranked section, when no ranked vehicle's expected
-during-loan monthly cost meets one or more of the scenario's target monthly budgets. The line names
-only the unmet targets and the cheapest ranked vehicle's during-loan range, then points at
-`odo budget` for the purchase price each target allows. It reads the targets from the scenario, not
-from `--budget`, and it is not printed when every target is met.
+## Unmet target budgets
+
+`odo rank` says plainly, in one line above the Ranked section, when no vehicle's expected during-loan monthly cost meets one or more of the scenario's target monthly budgets. The line names only the unmet targets and the cheapest vehicle's during-loan range, then points at `odo budget` for the purchase price each target allows. It reads the targets from the scenario rather than from `--budget`, and it still counts vehicles that `--budget` moved into the over-budget section, so a tight `--budget` does not hide it. It is not printed when every target is met or when there is no vehicle to name.
 
 ## Scenario
 
