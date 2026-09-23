@@ -35,7 +35,7 @@ walkCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(walkCommand);
 
-var rankBudgetOption = new Option<decimal?>("--budget") { Description = "hide vehicles whose during-loan monthly cost exceeds this" };
+var rankBudgetOption = new Option<decimal?>("--budget") { Description = "list vehicles whose during-loan monthly cost exceeds this under a separate over-budget heading instead of the ranked list" };
 var rankTermOption = new Option<int?>("--term") { Description = "override the scenario's loan term in months (e.g. 48, 60, 72)" };
 var rankCommand = new Command("rank", "score every vehicle in the ledger against the scenario");
 rankCommand.Add(scenarioOption);
