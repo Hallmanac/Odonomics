@@ -93,10 +93,12 @@ VIN, on top of the NHTSA decode/recalls/complaints `odo show` has always fetched
   no key set, this degrades to a "could not fetch" line rather than failing the command. `odo show`
   renders this history grouped by seller (see the seller-group rule below): one row per group with
   its first/last seen dates, dealer name(s) (a multi-seller group's cell leads with its seller
-  count, e.g. "16 sellers: ...", so that count survives even where the column is too narrow for
-  the full name list; names themselves cap at three plus "and N more"), price range, and mileage
-  range, so a syndicated 50-row history still reads as a handful of lines. Pass `--all-history` to
-  also print the raw, one-row-per-sighting list underneath.
+  count, e.g. "16 sellers: ...", and whose names cap at three plus "and N more"; the cell is never
+  cut short, so a long name list wraps onto lines under the group's row), price range, and mileage
+  range, so a syndicated 50-row history still reads as a handful of lines. When Marketcheck reports
+  no days on market for the current listing, `odo show` counts the days since the current seller
+  group (the one seen most recently) was first seen. Pass `--all-history` to also print the raw,
+  one-row-per-sighting list underneath.
 
 Both are cached on the vehicle's ledger row with a fetched-at stamp, and are only re-fetched when
 the cached research is more than seven days old, `--refresh` is passed, the Marketcheck VIN
@@ -173,6 +175,9 @@ moved between them.
   car): it's recorded as a note on the vehicle instead (`mileage corrected 4,703 to 3,852 at Daytona
   Toyota on Sep 10`), the same as an operator's own `odo note` would, and does not raise a flag. A
   drop across two different seller groups, or across a real gap even at the same seller, still flags.
+  When a reading precedes the higher one, the flag names the readings on either side of it (`one
+  listing showed 181,407 miles between readings of 85,960 and 86,663`), since that shape is usually
+  one mistyped odometer value; with no earlier reading it reads `mileage dropped from X to Y`.
 - **three or more distinct sellers within a 90-day window of the listing history** (`N-sellers`). A
   group with no dealer name at all is never counted, the same as a nameless listing was ignored
   before this rule existed: there's no evidence at all to tell it apart from a repeat of the seller
