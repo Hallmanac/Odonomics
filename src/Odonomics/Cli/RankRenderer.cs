@@ -13,7 +13,12 @@ namespace Odonomics.Cli;
 /// replaces.</summary>
 public static class RankRenderer
 {
-    public static void Render(IAnsiConsole console, IReadOnlyList<Score> scores, decimal? budget, IReadOnlyDictionary<string, ResearchStatus> research)
+    public static void Render(
+        IAnsiConsole console,
+        IReadOnlyList<Score> scores,
+        decimal? budget,
+        IReadOnlyDictionary<string, ResearchStatus> research,
+        IReadOnlyList<decimal> targetMonthlyBudgets)
     {
         List<Score> ranked = [];
         List<Score> overBudget = [];
@@ -51,6 +56,7 @@ public static class RankRenderer
         int ByTenYearAverage(Score a, Score b) => a.Cost!.TenYearAverageMonthly.Expected.CompareTo(b.Cost!.TenYearAverageMonthly.Expected);
         ranked.Sort(ByTenYearAverage);
 
+        RenderUnmetTargets(console, ranked, targetMonthlyBudgets);
         RenderRanked(console, $"Ranked ({ranked.Count})", ranked, research);
 
         if (budget is decimal budgetValue && overBudget.Count > 0)
@@ -63,6 +69,38 @@ public static class RankRenderer
         RenderExcluded(console, excluded);
         RenderFGradedOnly(console, scores);
     }
+
+    /// <summary>Says plainly, above the Ranked section, which of the scenario's target monthly
+    /// budgets no ranked vehicle meets during the loan, and points at <c>odo budget</c> for the
+    /// purchase price each target allows. Deliberately driven by the scenario's own targets and
+    /// not by rank's optional --budget flag. Printed as markup so Spectre wraps it at word
+    /// boundaries: a "$590-$626" band has no space in it, so a dollar figure is never split.</summary>
+    private static void RenderUnmetTargets(IAnsiConsole console, IReadOnlyList<Score> ranked, IReadOnlyList<decimal> targetMonthlyBudgets)
+    {
+        if (ranked.Count == 0)
+        {
+            return;
+        }
+
+        Band cheapest = ranked.Select(s => s.Cost!.DuringLoanMonthly).OrderBy(band => band.Expected).First();
+        List<decimal> unmet = [.. targetMonthlyBudgets
+            .Where(target => cheapest.Expected > target)
+            .Distinct()
+            .Order()];
+        if (unmet.Count == 0)
+        {
+            return;
+        }
+
+        console.MarkupLine($"[yellow]No ranked vehicle meets a target budget of {JoinTargets(unmet)} during the loan; the cheapest is {Format.Band(cheapest)} a month. Run odo budget for the purchase price each target allows.[/]");
+    }
+
+    private static string JoinTargets(IReadOnlyList<decimal> targets) => targets switch
+    {
+        [decimal only] => Format.Money(only),
+        [decimal first, decimal second] => $"{Format.Money(first)} or {Format.Money(second)}",
+        _ => $"{string.Join(", ", targets.Take(targets.Count - 1).Select(Format.Money))}, or {Format.Money(targets[^1])}",
+    };
 
     private const int VehicleNameMaxWidth = 40;
 

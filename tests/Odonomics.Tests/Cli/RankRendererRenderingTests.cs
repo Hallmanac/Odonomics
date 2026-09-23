@@ -64,7 +64,7 @@ public class RankRendererRenderingTests
         };
     }
 
-    private static string[] Render(IReadOnlyList<Score> scores, decimal? budget, IReadOnlyDictionary<string, ResearchStatus>? research = null)
+    private static string[] Render(IReadOnlyList<Score> scores, decimal? budget, IReadOnlyDictionary<string, ResearchStatus>? research = null, IReadOnlyList<decimal>? targets = null)
     {
         string? original = Environment.GetEnvironmentVariable("NO_COLOR");
         try
@@ -75,7 +75,7 @@ public class RankRendererRenderingTests
             console.Profile.Width = 80;
             console.Profile.Capabilities.Ansi = false;
 
-            RankRenderer.Render(console, scores, budget, research ?? new Dictionary<string, ResearchStatus>());
+            RankRenderer.Render(console, scores, budget, research ?? new Dictionary<string, ResearchStatus>(), targets ?? []);
 
             return console.Output.Replace("\r\n", "\n").Split('\n');
         }
@@ -217,5 +217,95 @@ public class RankRendererRenderingTests
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.Contains(lines, line => line.Contains("F-graded dealer only"));
         Assert.Contains(lines, line => line.Contains("4T1G11AK0LU123456") && line.Contains("F"));
+    }
+
+    private static string UnmetTargetsText(string[] lines)
+    {
+        int start = Array.FindIndex(lines, line => line.StartsWith("No ranked vehicle meets"));
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        int end = Array.FindIndex(lines, start, line => line.StartsWith("Ranked ("));
+        return string.Join(' ', lines[start..end].Select(line => line.Trim()));
+    }
+
+    [Fact]
+    public void Render_NoRankedVehicleMeetsAnyTarget_PrintsOneLineAboveRankedNamingTargetsAndCheapest()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Equal(
+            "No ranked vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
+            UnmetTargetsText(lines));
+        Assert.True(
+            Array.FindIndex(lines, line => line.StartsWith("No ranked vehicle meets")) < Array.FindIndex(lines, line => line.StartsWith("Ranked (")),
+            "the line should print above the Ranked heading");
+    }
+
+    [Fact]
+    public void Render_NoRankedVehicleMeetsAnyTarget_NeverBreaksADollarFigureAcrossLines()
+    {
+        CostBreakdown cost = BuildCost(new Band(1590m, 1608m, 1626m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        foreach (string figure in new[] { "$300,", "$350,", "$400", "$1,590-$1,626" })
+        {
+            Assert.Contains(lines, line => line.Contains(figure));
+        }
+    }
+
+    [Fact]
+    public void Render_RankedVehicleMeetsEveryTarget_PrintsNoTargetLine()
+    {
+        CostBreakdown cost = BuildCost(new Band(250m, 260m, 270m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
+
+        Assert.DoesNotContain(lines, line => line.Contains("No ranked vehicle meets"));
+        Assert.DoesNotContain(lines, line => line.Contains("odo budget"));
+        Assert.Equal("Ranked (1)", lines[0]);
+    }
+
+    [Fact]
+    public void Render_RankedVehicleMeetsSomeTargets_NamesOnlyTheUnmetOnes()
+    {
+        CostBreakdown cost = BuildCost(new Band(310m, 320m, 330m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
+
+        Assert.StartsWith("No ranked vehicle meets a target budget of $300 during the loan;", UnmetTargetsText(lines));
+        Assert.DoesNotContain(lines, line => line.Contains("$350") || line.Contains("$400"));
+    }
+
+    [Fact]
+    public void Render_TargetLineIgnoresTheBudgetFlagAndUsesTheCheapestRankedVehicle()
+    {
+        Score cheap = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Prius", 17897m, cost: BuildCost(new Band(410m, 420m, 430m), new Band(500m, 500m, 500m)));
+        Score pricey = BuildScore("1HGCM82633A004352", 2019, "Honda", "Insight", 18000m, cost: BuildCost(new Band(590m, 600m, 610m), new Band(400m, 400m, 400m)));
+
+        string[] lines = Render([pricey, cheap], budget: 1000m, targets: [300m, 350m, 400m]);
+
+        Assert.Equal(
+            "No ranked vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $410-$430 a month. Run odo budget for the purchase price each target allows.",
+            UnmetTargetsText(lines));
+    }
+
+    [Fact]
+    public void Render_NoRankedVehicles_PrintsNoTargetLine()
+    {
+        string[] lines = Render([], budget: null, targets: [300m, 350m, 400m]);
+
+        Assert.DoesNotContain(lines, line => line.Contains("No ranked vehicle meets"));
     }
 }
