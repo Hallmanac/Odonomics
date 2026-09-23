@@ -82,6 +82,9 @@ public static class RankRenderer
         }
 
         console.MarkupLine("  Research: clean, flag, or - for not yet researched.");
+        console.MarkupLine(anyGraded
+            ? "  rc: open recall count. gr: CarEdge dealer grade(s)."
+            : "  rc: open recall count.");
 
         foreach (Score score in scores)
         {
@@ -98,7 +101,9 @@ public static class RankRenderer
     {
         CostBreakdown cost = score.Cost!;
         string line = $"  {Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m)}  during {Format.Band(cost.DuringLoanMonthly)}  10yr avg {Format.Band(cost.TenYearAverageMonthly)}  {ResearchMarker(status)}  rc {RecallsText(status)}";
-        return anyGraded ? $"{line}  gr {Format.Cell(score.Vehicle.DealerGrade ?? "-")}" : line;
+        return anyGraded
+            ? $"{line}  gr {Format.Cell(Format.Truncate(score.Vehicle.DealerGrade ?? "-", GradeColumnWidth))}"
+            : line;
     }
 
     private static string ResearchMarker(ResearchStatus? status) => status switch
@@ -109,12 +114,28 @@ public static class RankRenderer
     };
 
     private static string RecallsText(ResearchStatus? status) =>
-        status is { Researched: true, RecallsKnown: true } s ? s.RecallCount.ToString() : "-";
+        status is { Researched: true, RecallsKnown: true } s
+            ? s.RecallCount.ToString()
+            : "-";
 
     private const int VinColumnWidth = 17;
-    private const int VehicleColumnWidth = 24;
     private const int PriceColumnWidth = 9;
     private const int GradeColumnWidth = 6;
+    private const int ExcludedVehicleColumnWidth = 24;
+
+    /// <summary>The Vehicle column takes whatever's left of 80 after the fixed columns and
+    /// Border.Minimal's own per-column padding and separators (3 chars per column plus 1 for the
+    /// table's own edges, the same math <c>WalkCommand</c>'s summary table uses): unlike the
+    /// Excluded table, neither the insurance-unknown nor the F-graded-only table has a flexible
+    /// column competing for width, so leaving Vehicle at a narrower fixed width than that would
+    /// truncate names for no reason.</summary>
+    private static int VehicleColumnWidth(bool includeGrade)
+    {
+        int columnCount = includeGrade ? 4 : 3;
+        int overhead = (3 * columnCount) + 1;
+        int fixedWidth = VinColumnWidth + PriceColumnWidth + (includeGrade ? GradeColumnWidth : 0);
+        return 80 - fixedWidth - overhead;
+    }
 
     private static void RenderInsuranceUnknown(IAnsiConsole console, IReadOnlyList<Score> scores)
     {
@@ -178,7 +199,7 @@ public static class RankRenderer
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
         table.AddColumn(new TableColumn("VIN") { Width = VinColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Vehicle") { Width = VehicleColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Vehicle") { Width = VehicleColumnWidth(includeGrade), NoWrap = true });
         table.AddColumn(new TableColumn("Price") { Width = PriceColumnWidth, NoWrap = true });
         if (includeGrade)
         {
@@ -190,11 +211,12 @@ public static class RankRenderer
 
     private static void AddVehiclePriceRow(Table table, Score score, bool includeGrade, string defaultGrade)
     {
-        string vehicle = Format.Cell(Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", VehicleColumnWidth));
-        string price = Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m);
+        string vehicle = Format.Cell(Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", VehicleColumnWidth(includeGrade)));
+        string price = Format.Cell(Format.Truncate(Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m), PriceColumnWidth));
         if (includeGrade)
         {
-            table.AddRow(Format.Cell(score.Vehicle.Vin), vehicle, price, Format.Cell(score.Vehicle.DealerGrade ?? defaultGrade));
+            string grade = Format.Truncate(score.Vehicle.DealerGrade ?? defaultGrade, GradeColumnWidth);
+            table.AddRow(Format.Cell(score.Vehicle.Vin), vehicle, price, Format.Cell(grade));
         }
         else
         {
@@ -214,14 +236,14 @@ public static class RankRenderer
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
         table.AddColumn(new TableColumn("VIN") { Width = VinColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Vehicle") { Width = VehicleColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Vehicle") { Width = ExcludedVehicleColumnWidth, NoWrap = true });
         table.AddColumn("Reasons");
 
         foreach (Score score in scores)
         {
             table.AddRow(
                 Format.Cell(score.Vehicle.Vin),
-                Format.Cell(Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", VehicleColumnWidth)),
+                Format.Cell(Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", ExcludedVehicleColumnWidth)),
                 Format.Cell(string.Join("; ", score.FailureReasons)));
         }
 
