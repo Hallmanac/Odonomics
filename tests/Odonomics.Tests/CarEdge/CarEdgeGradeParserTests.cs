@@ -348,7 +348,7 @@ public class CarEdgeGradeParserTests
     public void Parse_DealerLocationIsCityOnlyAndDisagreesWithTheCard_ReturnsLocationMismatch()
     {
         // The partial-location match must still reject a genuinely different city: a bare city
-        // that isn't a whole-word match against the card's "City, ST" line is not this dealer.
+        // that doesn't equal the card's city part is not this dealer.
         const string pageText = """
             Search: "Holler Honda Orlando"
             1 dealers found
