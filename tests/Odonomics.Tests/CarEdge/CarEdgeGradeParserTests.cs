@@ -71,6 +71,35 @@ public class CarEdgeGradeParserTests
     }
 
     [Fact]
+    public void Parse_MultiResultPageFirstCardIsGradedButNamesADifferentDealer_ReturnsNotFound()
+    {
+        // Every recorded results page echoes the search query back as `Search: "<name> <location>"`
+        // above the results themselves, which always contains the searched dealer's own name. This
+        // pins that the searched dealer's name check is scoped to the card bodies, not that echo, so
+        // a fuzzy first result graded for some other dealer is never mistaken for the searched one.
+        const string pageText = """
+            Search: "Holler Hyundai Winter Park, FL"
+            2 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Graded Motors
+            Orlando, FL · 5 verified quotes
+            $500
+            doc fee
+            No add-ons
+            D
+            62/100
+            Below average
+            See 5 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Hyundai");
+
+        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+        Assert.Null(result.Grade);
+    }
+
+    [Fact]
     public async Task Parse_CarEdgeOwn404Page_ReturnsSearchUrlInvalid()
     {
         string pageText = await ReadFixtureAsync("search-url-invalid-404.txt");
