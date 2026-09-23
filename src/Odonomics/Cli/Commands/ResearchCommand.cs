@@ -76,12 +76,21 @@ public static class ResearchCommand
 
                 decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
                 IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
-                summaryEntries.Add(new ResearchSummaryEntry(
-                    vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Vin, [.. redFlags.Select(f => f.ShortTag)]));
 
                 bool anyPieceFailed = research.Recalls.CouldNotFetchReason is not null
                     || research.Complaints.CouldNotFetchReason is not null
                     || research.Safety.CouldNotFetchReason is not null;
+
+                // A "partial" tag alongside the real flags so a vehicle whose recalls, complaints, or
+                // safety-ratings fetch failed this run never reads as indistinguishable from one that
+                // was actually checked and came back clean.
+                List<string> tags = [.. redFlags.Select(f => f.ShortTag)];
+                if (anyPieceFailed)
+                {
+                    tags.Add("partial");
+                }
+
+                summaryEntries.Add(new ResearchSummaryEntry(vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Vin, tags));
 
                 if (!anyPieceFailed)
                 {
