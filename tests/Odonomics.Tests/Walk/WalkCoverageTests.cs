@@ -6,8 +6,8 @@ namespace Odonomics.Tests.Walk;
 
 public class WalkCoverageTests
 {
-    private static readonly WalkSite SiteA = new("site-a", (_, _, _, _) => "", new System.Text.RegularExpressions.Regex(".*"));
-    private static readonly WalkSite SiteB = new("site-b", (_, _, _, _) => "", new System.Text.RegularExpressions.Regex(".*"));
+    private static readonly WalkSite SiteA = new("site-a", (_, _, _, _, _) => "", new System.Text.RegularExpressions.Regex(".*"));
+    private static readonly WalkSite SiteB = new("site-b", (_, _, _, _, _) => "", new System.Text.RegularExpressions.Regex(".*"));
 
     private static RunEntity Run(DateTimeOffset startedAt) => new() { Command = "walk", Sources = "", StartedAt = startedAt };
 

@@ -159,7 +159,7 @@ public static class WalkCommand
         var query = new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage, hybridOnlyFromModelYear);
         var recorder = new WalkRecorder(dataDirectory, site.Name, model, currentRun.StartedAt);
 
-        string searchUrl = site.BuildSearchUrl(make, model, scenario.Zip, scenario.RadiusMiles);
+        string searchUrl = site.BuildSearchUrl(make, model, scenario.Zip, scenario.RadiusMiles, hybridOnlyFromModelYear.HasValue);
         AnsiConsole.MarkupLineInterpolated($"opening search page for {make} {model} on {site.Name}");
         await page.GotoAsync(searchUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await CdpConnection.HandleChallengeIfPresentAsync(page, cancellationToken);
