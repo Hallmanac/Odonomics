@@ -75,4 +75,34 @@ public class CarvanaDealerNameTests
     {
         Assert.Equal("Holler Honda", WalkSites.CarsCom.ResolveDealerName("  Holler Honda "));
     }
+
+    [Fact]
+    public void ResolveDealer_PageNamesNoHubButPrintsAPickupLocation_StoresBareCarvanaWithNoLocationAsTheFallback()
+    {
+        ResolvedDealer dealer = WalkSites.Carvana.ResolveDealer(null, "Orlando, FL");
+
+        Assert.Equal("Carvana", dealer.Name);
+        Assert.Null(dealer.Location);
+        Assert.True(dealer.IsFallback);
+    }
+
+    [Fact]
+    public void ResolveDealer_PageNamesAHub_KeepsTheHubAndItsLocationAndIsNotTheFallback()
+    {
+        ResolvedDealer dealer = WalkSites.Carvana.ResolveDealer(" Carvana Winder ", "Winder, GA");
+
+        Assert.Equal("Carvana Winder", dealer.Name);
+        Assert.Equal("Winder, GA", dealer.Location);
+        Assert.False(dealer.IsFallback);
+    }
+
+    [Fact]
+    public void ResolveDealer_CarsComPageNamesNoDealer_IsNotAFallbackAndPassesTheLocationThrough()
+    {
+        ResolvedDealer dealer = WalkSites.CarsCom.ResolveDealer(null, "Orlando, FL");
+
+        Assert.Null(dealer.Name);
+        Assert.Equal("Orlando, FL", dealer.Location);
+        Assert.False(dealer.IsFallback);
+    }
 }

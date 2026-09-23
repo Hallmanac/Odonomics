@@ -77,7 +77,8 @@ public static class LedgerDataMigrations
     /// walk now stamps when a detail page names no hub (see <see cref="WalkSite.ResolveDealerName"/>),
     /// so a ledger walked before that change shows a dealer without a fresh walk. A posting that
     /// already has a dealer, such as a named hub, is left alone. The dealer is the one with no
-    /// location, matching what the walk creates; an existing "Carvana" dealer that does have a
+    /// location, which is also the only one the walk stamps as the fallback (it drops any location the
+    /// page printed); an existing "Carvana" dealer that does have a
     /// location is a different dealer row and is not reused.</summary>
     private static void StampCarvanaFallbackDealer(OdonomicsDbContext db)
     {

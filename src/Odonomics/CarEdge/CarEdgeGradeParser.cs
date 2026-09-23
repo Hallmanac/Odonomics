@@ -101,8 +101,10 @@ public static partial class CarEdgeGradeParser
         // state-only dealer gets a same-state check, and a city-only dealer a same-city check, so
         // neither can tell two same-named stores in that state or city apart: when more than one
         // card still matches, the result is Ambiguous rather than the first card in document order.
-        // Skipped entirely when the dealer has no location on record, so that case still falls back
-        // to the name-only check below exactly as before.
+        // Skipped when the dealer has no location on record, so that case falls back to the name-only
+        // check below; with no location to tell same-named cards apart, more than one match is
+        // Ambiguous too, so a chain's bare name (carvana's "Carvana") can't take whichever store's
+        // card comes first on the page.
         bool LocationMatches(string cardLocationLine)
         {
             if (dealerParts.IsEmpty)
@@ -148,7 +150,7 @@ public static partial class CarEdgeGradeParser
         }
 
         List<Card> nameMatches = exactNameCards.Count > 0 ? exactNameCards : containingNameCards;
-        if (nameMatches.Count > 1 && dealerParts.IsPartial)
+        if (nameMatches.Count > 1 && (dealerParts.IsPartial || dealerParts.IsEmpty))
         {
             return CarEdgeGradeResult.Ambiguous;
         }

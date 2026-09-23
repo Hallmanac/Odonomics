@@ -176,4 +176,46 @@ public class LedgerUpsertServiceTests
         PostingEntity posting = Assert.Single(db.Postings);
         Assert.NotNull(posting.DealerId);
     }
+
+    [Fact]
+    public async Task UpsertAsync_FallbackDealerSightingOfAPostingLinkedToANamedHub_KeepsTheHubLinkAndMintsNoFallbackRow()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carvana", dealerName: "Carvana Winder"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        ListingCandidate fallbackSighting = Candidate("1HGCM82633A004352", 18000m, source: "carvana", dealerName: "Carvana") with { DealerNameIsFallback = true };
+        await service.UpsertAsync(fallbackSighting, run2, CancellationToken.None);
+
+        DealerEntity dealer = Assert.Single(db.Dealers);
+        Assert.Equal("Carvana Winder", dealer.Name);
+        Assert.Equal(dealer.Id, Assert.Single(db.Postings).DealerId);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_FallbackDealerSightingOfAPostingWithNoDealer_LinksTheFallbackDealer()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        ListingCandidate fallbackSighting = Candidate("1HGCM82633A004352", 18000m, source: "carvana", dealerName: "Carvana") with { DealerNameIsFallback = true };
+        await service.UpsertAsync(fallbackSighting, run, CancellationToken.None);
+
+        DealerEntity dealer = Assert.Single(db.Dealers);
+        Assert.Equal("Carvana", dealer.Name);
+        Assert.Null(dealer.Location);
+        Assert.Equal(dealer.Id, Assert.Single(db.Postings).DealerId);
+    }
 }
