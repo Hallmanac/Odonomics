@@ -3,13 +3,14 @@ using Spectre.Console;
 
 namespace Odonomics.Cli;
 
-/// <summary>Renders a search/walk diff as three narrow tables (new, price-dropped, gone), each
-/// column-limited to still read at 80 columns.</summary>
+/// <summary>Renders a search/walk diff as four narrow tables (new, moved, price-dropped, gone),
+/// each column-limited to still read at 80 columns.</summary>
 public static class DiffRenderer
 {
     public static void Render(SearchDiff diff)
     {
         RenderNew(diff.New);
+        RenderMoved(diff.Moved);
         RenderPriceDrops(diff.PriceDrops);
         RenderGone(diff.Gone);
     }
@@ -27,6 +28,24 @@ public static class DiffRenderer
         foreach (NewPostingEntry entry in entries)
         {
             table.AddRow(Format.Cell(entry.Vin), entry.Year.ToString(), Format.Cell($"{entry.Make} {entry.Model}"), Format.Money(entry.Price), Format.Cell(entry.Source));
+        }
+
+        AnsiConsole.Write(table);
+    }
+
+    private static void RenderMoved(IReadOnlyList<MovedPostingEntry> entries)
+    {
+        AnsiConsole.MarkupLine($"[bold]Moved ({entries.Count})[/]");
+        if (entries.Count == 0)
+        {
+            AnsiConsole.MarkupLine("  none");
+            return;
+        }
+
+        Table table = NarrowTable("VIN", "Model", "Source", "Old URL", "New URL");
+        foreach (MovedPostingEntry entry in entries)
+        {
+            table.AddRow(Format.Cell(entry.Vin), Format.Cell($"{entry.Make} {entry.Model}"), Format.Cell(entry.Source), Format.Cell(entry.OldUrl), Format.Cell(entry.NewUrl));
         }
 
         AnsiConsole.Write(table);
