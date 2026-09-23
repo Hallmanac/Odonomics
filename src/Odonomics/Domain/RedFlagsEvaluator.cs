@@ -271,16 +271,27 @@ public static partial class RedFlagsEvaluator
     }
 
     /// <summary>Walks the chronologically-ordered seller groups and keeps only the ones that mark a
-    /// genuine seller change: the first group always counts, and every later group counts only when
-    /// its window starts after the previous counted group's last window ended AND the mileage moved
-    /// between them. A group that overlaps the previous one, or picks up again at the same mileage, is
+    /// genuine seller change: a group with no known dealer name at all is skipped entirely, the same
+    /// as the raw-dealer-name rule this replaced skipped a listing with no name, since there is no
+    /// evidence at all to tell it apart from a repeat of the seller before or after it. Of what
+    /// remains, the first group always counts, and every later group counts only when its window
+    /// starts after the previous counted group's last window ended AND the mileage moved between
+    /// them. A group that overlaps the previous one, or picks up again at the same mileage, is
     /// folded away rather than counted as a new seller, since neither shape distinguishes it from the
-    /// same car sitting with the same owner.</summary>
+    /// same car sitting with the same owner; an absent or placeholder reading on either side is never
+    /// treated as evidence the mileage stayed put; only two real, equal readings are (the same
+    /// distrust <see cref="BuildSellerGroups"/> already applies to a placeholder reading two methods
+    /// away), so a group counts as a change whenever the mileage comparison is inconclusive.</summary>
     private static List<SellerGroup> CountSellers(List<SellerGroup> sellerGroups)
     {
         List<SellerGroup> counted = [];
         foreach (SellerGroup group in sellerGroups)
         {
+            if (group.DealerNames.Count == 0)
+            {
+                continue;
+            }
+
             if (counted.Count == 0)
             {
                 counted.Add(group);
@@ -289,8 +300,10 @@ public static partial class RedFlagsEvaluator
 
             SellerGroup previous = counted[^1];
             bool sequential = group.WindowStart > previous.WindowEnd;
-            bool mileageMoved = previous.ExitMileage is int previousMileage && group.EntryMileage is int nextMileage && previousMileage != nextMileage;
-            if (sequential && mileageMoved)
+            bool mileageUnchanged = previous.ExitMileage is int previousMileage && group.EntryMileage is int nextMileage
+                && previousMileage > PlaceholderMileageMax && nextMileage > PlaceholderMileageMax
+                && previousMileage == nextMileage;
+            if (sequential && !mileageUnchanged)
             {
                 counted.Add(group);
             }
