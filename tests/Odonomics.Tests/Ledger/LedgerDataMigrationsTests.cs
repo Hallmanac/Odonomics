@@ -476,4 +476,107 @@ public class LedgerDataMigrationsTests
 
         Assert.Equal("Carvana", db.Postings.Include(p => p.Dealer).Single().Dealer!.Name);
     }
+
+    private static PostingEntity DealerPosting(string vin, DealerEntity dealer, DateTimeOffset at) => new()
+    {
+        VehicleVin = vin,
+        Source = "cars.com",
+        Url = $"https://www.cars.com/vehicledetail/{vin}/",
+        FirstSeen = at,
+        LastSeen = at,
+        Dealer = dealer,
+    };
+
+    [Fact]
+    public async Task ApplyAll_SameDealerStoredUnderSaintAndStCity_MergesIntoTheOldestRowKeepingBothPostingsAndTheDuplicatesGrade()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        DateTimeOffset gradedAt = new(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
+        // The live-ledger shape: one dealer, two rows, one posting on each; only the newer was graded.
+        DealerEntity saint = new() { Name = "Jack Hanania Chevrolet", Location = "SAINT AUGUSTINE FL", NormalizedName = "JACK HANANIA CHEVROLET", NormalizedLocation = "SAINT AUGUSTINE FL" };
+        DealerEntity st = new() { Name = "Jack Hanania Chevrolet", Location = "ST AUGUSTINE FL", NormalizedName = "JACK HANANIA CHEVROLET", NormalizedLocation = "ST AUGUSTINE FL", Grade = "B", GradeReason = "4.1 stars", GradeCheckedAt = gradedAt };
+        DealerEntity other = new() { Name = "Holler Honda", Location = "Winter Park, FL", NormalizedName = "HOLLER HONDA", NormalizedLocation = "WINTER PARK FL" };
+        db.Dealers.AddRange(saint, st, other);
+        db.Vehicles.AddRange(
+            new VehicleEntity { Vin = "1HGCM82633A004352", Year = 2020, Make = "Toyota", Model = "Prius", Mileage = 40000, FirstSeen = gradedAt, LastSeen = gradedAt },
+            new VehicleEntity { Vin = "5YJ3E1EA1KF000000", Year = 2020, Make = "Toyota", Model = "Prius", Mileage = 40000, FirstSeen = gradedAt, LastSeen = gradedAt });
+        db.Postings.AddRange(
+            DealerPosting("1HGCM82633A004352", saint, gradedAt),
+            DealerPosting("5YJ3E1EA1KF000000", st, gradedAt));
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        DealerEntity survivor = Assert.Single(db.Dealers.Where(d => d.NormalizedName == "JACK HANANIA CHEVROLET"));
+        Assert.Equal(saint.Id, survivor.Id);
+        Assert.Equal("SAINT AUGUSTINE FL", survivor.NormalizedLocation);
+        Assert.Equal("B", survivor.Grade);
+        Assert.Equal("4.1 stars", survivor.GradeReason);
+        Assert.Equal(gradedAt, survivor.GradeCheckedAt);
+        Assert.Equal(2, db.Postings.Count(p => p.DealerId == survivor.Id));
+        Assert.Equal(2, db.Dealers.Count());
+        Assert.Single(db.LedgerMigrations, m => m.Name == "MergeDealersByExpandedLocation");
+    }
+
+    [Fact]
+    public async Task ApplyAll_TheStRowIsOlderAndBothAreGraded_KeepsTheSurvivorsOwnGradeAndRewritesItsKeyToTheExpandedForm()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        DateTimeOffset gradedAt = new(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
+        DealerEntity st = new() { Name = "Jack Hanania Chevrolet", Location = "St. Augustine, FL", NormalizedName = "JACK HANANIA CHEVROLET", NormalizedLocation = "ST AUGUSTINE FL", Grade = "A", GradeReason = "own", GradeCheckedAt = gradedAt };
+        DealerEntity saint = new() { Name = "Jack Hanania Chevrolet", Location = "Saint Augustine, FL", NormalizedName = "JACK HANANIA CHEVROLET", NormalizedLocation = "SAINT AUGUSTINE FL", Grade = "F", GradeReason = "removed", GradeCheckedAt = gradedAt.AddDays(1) };
+        db.Dealers.AddRange(st, saint);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        DealerEntity survivor = Assert.Single(db.Dealers);
+        Assert.Equal(st.Id, survivor.Id);
+        Assert.Equal("SAINT AUGUSTINE FL", survivor.NormalizedLocation);
+        Assert.Equal("St. Augustine, FL", survivor.Location);
+        Assert.Equal(("A", "own"), (survivor.Grade, survivor.GradeReason));
+    }
+
+    [Fact]
+    public async Task ApplyAll_SurvivorWasCheckedWithNoRatingAndTheDuplicateHasAGrade_TakesTheGradeAndAnUncheckedSurvivorTakesTheStamp()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        DateTimeOffset checkedAt = new(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
+        DealerEntity checkedNoRating = new() { Name = "Sunrise Ford", Location = "Ft. Myers, FL", NormalizedName = "SUNRISE FORD", NormalizedLocation = "FT MYERS FL", GradeReason = "no rating", GradeCheckedAt = checkedAt };
+        DealerEntity graded = new() { Name = "Sunrise Ford", Location = "Fort Myers, FL", NormalizedName = "SUNRISE FORD", NormalizedLocation = "FORT MYERS FL", Grade = "C", GradeReason = "3 stars", GradeCheckedAt = checkedAt.AddHours(1) };
+        DealerEntity neverChecked = new() { Name = "Mountain Motors", Location = "Mt. Dora, FL", NormalizedName = "MOUNTAIN MOTORS", NormalizedLocation = "MT DORA FL" };
+        DealerEntity checkedDuplicate = new() { Name = "Mountain Motors", Location = "Mount Dora, FL", NormalizedName = "MOUNTAIN MOTORS", NormalizedLocation = "MOUNT DORA FL", GradeReason = "no rating", GradeCheckedAt = checkedAt };
+        db.Dealers.AddRange(checkedNoRating, graded, neverChecked, checkedDuplicate);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        DealerEntity sunrise = Assert.Single(db.Dealers.Where(d => d.Name == "Sunrise Ford"));
+        Assert.Equal(("C", "3 stars", checkedAt.AddHours(1)), (sunrise.Grade, sunrise.GradeReason, sunrise.GradeCheckedAt));
+        DealerEntity mountain = Assert.Single(db.Dealers.Where(d => d.Name == "Mountain Motors"));
+        Assert.Null(mountain.Grade);
+        Assert.Equal(checkedAt, mountain.GradeCheckedAt);
+        Assert.Equal("MOUNT DORA FL", mountain.NormalizedLocation);
+    }
+
+    [Fact]
+    public async Task ApplyAll_LoneStRowIsFoundByTheUpsertsExpandedKeyAfterTheMigration()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        db.Dealers.Add(new DealerEntity { Name = "Jack Hanania Chevrolet", Location = "St. Augustine, FL", NormalizedName = "JACK HANANIA CHEVROLET", NormalizedLocation = "ST AUGUSTINE FL" });
+        var run = Run(WalkedAt);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+        await new LedgerUpsertService(db).UpsertAsync(
+            Candidate("1HGCM82633A004352", 18000m, "https://www.cars.com/vehicledetail/abc123/") with { DealerName = "Jack Hanania Chevrolet", DealerLocation = "Saint Augustine, FL" },
+            run, CancellationToken.None);
+
+        Assert.Single(db.Dealers);
+    }
 }
