@@ -161,7 +161,8 @@ public static partial class RedFlagsEvaluator
     /// all, is dropped from the sequence entirely rather than merely skipped as an endpoint, so it can
     /// never become the baseline for the next comparison and mask a real rollback that straddles it;
     /// and listings first seen on the same calendar day (almost always the same snapshot re-scraped,
-    /// not two real odometer readings) collapse to that day's first reading, for the same reason. What survives still needs a drop of at least the larger of
+    /// not two real odometer readings) collapse to that day's first reading, for the same reason.
+    /// What survives still needs a drop of at least the larger of
     /// <paramref name="mileageDropMinMiles"/> and <paramref name="mileageDropMinPercent"/> of the
     /// prior mileage (rounding and minor re-entry noise, not a rolled-back odometer). A drop between
     /// two points in the same <see cref="SellerGroup"/> (see <paramref name="sellerGroups"/>) whose
