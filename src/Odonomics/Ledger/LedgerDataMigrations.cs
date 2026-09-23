@@ -10,11 +10,13 @@ namespace Odonomics.Ledger;
 /// skips it instead of re-scanning the whole ledger every time the CLI runs.</summary>
 public static class LedgerDataMigrations
 {
-    private const string CanonicalizeCarsComPostingUrlsName = "CanonicalizeCarsComPostingUrls";
+    private const string CanonicalizeWalkedPostingUrlsName = "CanonicalizeWalkedPostingUrls";
+
+    private static readonly string[] WalkedSources = [WalkSites.CarsCom.Name, WalkSites.Carvana.Name];
 
     public static void ApplyAll(OdonomicsDbContext db)
     {
-        ApplyOnce(db, CanonicalizeCarsComPostingUrlsName, CanonicalizeCarsComPostingUrls);
+        ApplyOnce(db, CanonicalizeWalkedPostingUrlsName, CanonicalizeWalkedPostingUrls);
     }
 
     private static void ApplyOnce(OdonomicsDbContext db, string name, Action<OdonomicsDbContext> migration)
@@ -29,20 +31,27 @@ public static class LedgerDataMigrations
         db.SaveChanges();
     }
 
-    /// <summary>Rewrites every stored cars.com posting URL to its canonical form (see
+    /// <summary>Rewrites every stored cars.com or carvana posting URL to its canonical form (see
     /// <see cref="WalkSites.CanonicalDetailUrl"/>), the same transform the walk itself now applies
-    /// before ever upserting a posting. Rows written before that fix still carry a sid-bearing URL,
-    /// so two postings for the same VIN can collapse to the same canonical URL; those are merged
-    /// into one row, keeping the earliest FirstSeen, the latest LastSeen, whichever row already had
-    /// a dealer linked, and every price observation from both rows.</summary>
-    private static void CanonicalizeCarsComPostingUrls(OdonomicsDbContext db)
+    /// before ever upserting a posting for either walk target. Rows written before that fix still
+    /// carry a session-id-bearing URL, so two postings for the same VIN can collapse to the same
+    /// canonical URL; those are merged into one row, keeping the earliest FirstSeen, the latest
+    /// LastSeen, whichever row already had a dealer linked, and every price observation from both
+    /// rows. A stored URL that isn't a valid absolute URI is left untouched rather than aborting
+    /// the whole migration: this runs on every CLI startup until it commits, so one bad historical
+    /// row would otherwise block every `odo` command permanently.</summary>
+    private static void CanonicalizeWalkedPostingUrls(OdonomicsDbContext db)
     {
-        List<PostingEntity> carsComPostings = [.. db.Postings
+        List<PostingEntity> walkedPostings = [.. db.Postings
             .Include(p => p.PriceObservations)
-            .Where(p => p.Source == "cars.com")];
+            .Where(p => WalkedSources.Contains(p.Source))];
 
-        foreach (IGrouping<(string Vin, string CanonicalUrl), PostingEntity> group in carsComPostings
-            .GroupBy(p => (Vin: p.VehicleVin, CanonicalUrl: WalkSites.CanonicalDetailUrl(p.Url))))
+        IEnumerable<IGrouping<(string Vin, string CanonicalUrl), PostingEntity>> groups = walkedPostings
+            .Select(p => (Posting: p, CanonicalUrl: TryCanonicalize(p.Url)))
+            .Where(t => t.CanonicalUrl is not null)
+            .GroupBy(t => (Vin: t.Posting.VehicleVin, CanonicalUrl: t.CanonicalUrl!), t => t.Posting);
+
+        foreach (IGrouping<(string Vin, string CanonicalUrl), PostingEntity> group in groups)
         {
             List<PostingEntity> rows = [.. group.OrderBy(p => p.FirstSeen).ThenBy(p => p.Id)];
             PostingEntity survivor = rows[0];
@@ -59,6 +68,18 @@ public static class LedgerDataMigrations
 
                 db.Postings.Remove(duplicate);
             }
+        }
+    }
+
+    private static string? TryCanonicalize(string url)
+    {
+        try
+        {
+            return WalkSites.CanonicalDetailUrl(url);
+        }
+        catch (UriFormatException)
+        {
+            return null;
         }
     }
 }
