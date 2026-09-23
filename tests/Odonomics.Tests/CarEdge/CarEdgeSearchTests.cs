@@ -9,7 +9,7 @@ public class CarEdgeSearchTests
     {
         string url = CarEdgeSearch.BuildSearchUrl("Holler Honda", "Winter Park, FL");
 
-        Assert.StartsWith("https://caredge.com/dealer-reviews?search=", url);
+        Assert.StartsWith("https://caredge.com/dealers?q=", url);
         Assert.Contains(Uri.EscapeDataString("Holler Honda Winter Park, FL"), url);
     }
 
