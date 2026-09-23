@@ -83,6 +83,28 @@ public class ShowRendererHistoryTableRenderingTests
     }
 
     [Fact]
+    public void BuildGroupedHistoryTable_PriceRangeWithSixDigitHighEnd_RendersBothInFull()
+    {
+        // The same defect shape as the mileage six-digit case above, one field over: a price range
+        // reaching six figures must not have its high end ellipsized away by Format.Truncate.
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 12, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> points =
+        [
+            new("Dealer A", day1, day1, 95000m, 40000),
+            new("Dealer A", day2, day2, 150000m, 40000),
+        ];
+
+        IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
+        Assert.Single(groups);
+
+        string[] lines = Render(groups);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Contains(lines, line => line.Contains("$95,000-$150,000"));
+    }
+
+    [Fact]
     public void BuildGroupedHistoryTable_ManyRooftopGroup_ShowsSellerCountEvenWhenNamesAreTruncated()
     {
         // The dealer cell for a multi-seller group must lead with the seller count, so the one fact
