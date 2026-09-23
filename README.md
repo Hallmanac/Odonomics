@@ -274,7 +274,7 @@ Both cars.com and Carvana do have a working hybrid facet: an earlier build read 
 `odo search` and `odo walk` link every posting they upsert to a dealer, keyed by the dealer's
 normalized name and location, when the source names one: Auto.dev and Marketcheck carry a dealer
 name and city/state in their API response, and the walk's own extraction reads a dealer name and
-location off the page text the same way it reads the vehicle's own fields. A carvana detail page
+location off the page text the same way it reads the vehicle's own fields. The location key expands a city's "Ft.", "Mt." and "St." to Fort, Mount and Saint and drops a trailing zip code, so "St. Augustine, FL" and "Saint Augustine, FL" are one dealer. A carvana detail page
 usually names no dealer, so the walk stores such a posting with the dealer "Carvana" rather than
 none; a page that does name a hub, such as "Carvana Winder", keeps that name. Carvana is one dealer
 row per name and never per city: a Carvana page prints the buyer's pickup city, not where the hub
