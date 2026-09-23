@@ -21,9 +21,11 @@ public sealed record VinResearchResult(
 
 /// <summary>Whether a vehicle has been researched (the safety-ratings/VIN-history lookup, not just
 /// the NHTSA decode `odo show` always ran), whether any red flag exists, and how many open NHTSA
-/// recalls it carries. Purely a display concern for `odo rank`'s research and recalls columns; none
-/// of it ever feeds the ranking math.</summary>
-public sealed record ResearchStatus(bool Researched, DateTimeOffset? ResearchedAt, bool HasRedFlag, int RecallCount);
+/// recalls it carries. <see cref="RecallsKnown"/> is false when the recalls piece has never once
+/// succeeded (e.g. every attempt hit NHTSA's HTML-error-page failure mode), so <see cref="RecallCount"/>'s
+/// default 0 is never mistaken for a confirmed "no open recalls" by a caller. Purely a display concern
+/// for `odo rank`'s research and recalls columns; none of it ever feeds the ranking math.</summary>
+public sealed record ResearchStatus(bool Researched, DateTimeOffset? ResearchedAt, bool HasRedFlag, bool RecallsKnown, int RecallCount);
 
 /// <summary>Fetches and caches the research lookup `odo show` and `odo research` both run: NHTSA
 /// decode, recalls, complaints, and safety ratings, plus the Marketcheck VIN history. Refreshed on
