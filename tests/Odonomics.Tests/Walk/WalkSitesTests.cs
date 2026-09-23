@@ -50,7 +50,7 @@ public class WalkSitesTests
         // cars.com's own model-facet JSON carries "honda-cr_v_hybrid"
         // (spike/recorded/cars.com/day1/Honda-Insight-search.html) and, for the same
         // hyphen-collapsing rule, "toyota-c_hr"
-        // (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html) — not the hyphenated
+        // (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html), not the hyphenated
         // "honda-cr-v_hybrid" a plain space-to-underscore replace would produce.
         string url = WalkSites.CarsCom.BuildSearchUrl("Honda", "CR-V Hybrid", "32114", 50, false);
 

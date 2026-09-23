@@ -39,7 +39,7 @@ public sealed record WalkSite(
 /// model: a scenario's HybridOnlyFromModelYear rule exists because a base model can go
 /// hybrid-only from some year on without cars.com ever moving those listings into the hybrid
 /// bucket (Toyota's 2025+ Camry is filed under plain "camry", not "camry_hybrid"; the operator's
-/// own recorded run confirms it — the base-model query's search.txt, under the walk data
+/// own recorded run confirms it: the base-model query's search.txt, under the walk data
 /// directory outside this repo at
 /// "walks/cars.com/20260922-184927/camry-hybrid/search.txt", lists gas-titled Camrys with zero
 /// case-insensitive "hybrid" occurrences). For a model with that rule set, cars.com's search URL
