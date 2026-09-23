@@ -293,6 +293,70 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_KnownVinRelistedOnTwoSourcesInTheSameRun_BothAreReportedMoved()
+    {
+        // Same sibling shape as the two-new-sources case: a bare `odo walk` covers cars.com and
+        // carvana in one RunEntity, and if the same already-known VIN's posting URL changed on both
+        // sites in that one run, both are their own "moved" sighting and neither should be dropped
+        // just because the other sorts first.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius,carvana.com:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://carvana.com/a", "carvana.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius,carvana.com:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/b", "cars.com"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://carvana.com/b", "carvana.com"), run2, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+
+        Assert.Equal(2, diff.Moved.Count);
+        Assert.Contains(diff.Moved, e => e.Source == "cars.com" && e.OldUrl == "https://cars.com/a" && e.NewUrl == "https://cars.com/b");
+        Assert.Contains(diff.Moved, e => e.Source == "carvana.com" && e.OldUrl == "https://carvana.com/a" && e.NewUrl == "https://carvana.com/b");
+        Assert.Empty(diff.New);
+        Assert.Empty(diff.Gone);
+        Assert.Empty(diff.PriceDrops);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_KnownVinRelistedWithALowerPriceOnTwoSourcesInTheSameRun_BothAreReportedAsPriceDrops()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius,carvana.com:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://carvana.com/a", "carvana.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius,carvana.com:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://cars.com/b", "cars.com"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 16000m, "https://carvana.com/b", "carvana.com"), run2, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+
+        Assert.Equal(2, diff.PriceDrops.Count);
+        Assert.Contains(diff.PriceDrops, e => e.Source == "cars.com" && e.PreviousPrice == 18000m && e.CurrentPrice == 17000m);
+        Assert.Contains(diff.PriceDrops, e => e.Source == "carvana.com" && e.PreviousPrice == 18000m && e.CurrentPrice == 16000m);
+        Assert.Empty(diff.New);
+        Assert.Empty(diff.Moved);
+        Assert.Empty(diff.Gone);
+    }
+
+    [Fact]
     public async Task ComputeAsync_MovedPostingWhosePriceAlsoDropped_IsFoldedIntoPriceDropsNotMoved()
     {
         using var testDb = new LedgerTestDatabase();
@@ -351,6 +415,40 @@ public class LedgerDiffServiceTests
         Assert.Equal("1HGCM82633A004352", entry.Vin);
         Assert.Equal("cars.com", entry.Source);
         Assert.Equal("https://cars.com/a", entry.Url);
+        Assert.Empty(diff.Moved);
+        Assert.Empty(diff.Gone);
+        Assert.Empty(diff.PriceDrops);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_KnownVinFirstSeenOnTwoNewSourcesInTheSameRun_BothAreReportedNew()
+    {
+        // A bare `odo walk` covers cars.com and carvana together in one RunEntity. If a VIN the
+        // ledger already knows (from an earlier search) is dealer-cross-listed and this walk is the
+        // first to spot it on either site, both sightings are genuinely new information about where
+        // the car is listed and both must be reported, not just whichever posting sorts first.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://autodev.com/a"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev:Prius,cars.com:Prius,carvana.com:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://autodev.com/a"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://carvana.com/a", "carvana.com"), run2, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+
+        Assert.Equal(2, diff.New.Count);
+        Assert.Contains(diff.New, e => e.Source == "cars.com" && e.Url == "https://cars.com/a");
+        Assert.Contains(diff.New, e => e.Source == "carvana.com" && e.Url == "https://carvana.com/a");
         Assert.Empty(diff.Moved);
         Assert.Empty(diff.Gone);
         Assert.Empty(diff.PriceDrops);

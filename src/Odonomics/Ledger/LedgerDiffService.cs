@@ -52,7 +52,9 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         var moved = new List<MovedPostingEntry>();
         var priceDrops = new List<PriceDropEntry>();
         var newEntryVins = new HashSet<string>();
-        var movedVins = new HashSet<string>();
+        var newSourceSightings = new HashSet<(string Vin, string Source)>();
+        var movedSightings = new HashSet<(string Vin, string Source)>();
+        var newSourcePriceDropSightings = new HashSet<(string Vin, string Source)>();
         var priceDropVins = new HashSet<string>();
 
         // A brand-new posting row for a vehicle the ledger already knew about might be the same
@@ -103,8 +105,12 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                     // move (nothing on this source to have moved from), so it's reported under
                     // "New" alongside genuinely new vehicles, the same heading this posting would
                     // have landed under before New was keyed on the vehicle's own FirstSeen rather
-                    // than the posting's. The vehicle itself isn't new, but this sighting is.
-                    if (newEntryVins.Add(vehicle.Vin))
+                    // than the posting's. The vehicle itself isn't new, but this sighting is. Deduped
+                    // by (VIN, source) rather than VIN alone: unlike the genuinely-new-vehicle branch
+                    // above, where one entry per VIN is the right call, the same already-known VIN can
+                    // legitimately turn up new on two different sources in the same run (a bare `odo
+                    // walk` covers cars.com and carvana together), and each is its own new sighting.
+                    if (newSourceSightings.Add((vehicle.Vin, posting.Source)))
                     {
                         newEntries.Add(new NewPostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, currentPrice));
                     }
@@ -115,12 +121,14 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                 decimal stalePrice = stale.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
                 if (stalePrice > currentPrice)
                 {
-                    if (priceDropVins.Add(vehicle.Vin))
+                    // Deduped by (VIN, source), the same reasoning as the "new source" branch above:
+                    // the same already-known VIN can drop price on two different sources in one run.
+                    if (newSourcePriceDropSightings.Add((vehicle.Vin, posting.Source)))
                     {
                         priceDrops.Add(new PriceDropEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, stalePrice, currentPrice));
                     }
                 }
-                else if (movedVins.Add(vehicle.Vin))
+                else if (movedSightings.Add((vehicle.Vin, posting.Source)))
                 {
                     moved.Add(new MovedPostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, stale.Url, posting.Url));
                 }
