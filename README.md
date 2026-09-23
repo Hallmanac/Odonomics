@@ -92,9 +92,11 @@ VIN, on top of the NHTSA decode/recalls/complaints `odo show` has always fetched
   dates, price, mileage) and the current listing's days on market. Needs `Marketcheck:ApiKey`; with
   no key set, this degrades to a "could not fetch" line rather than failing the command. `odo show`
   renders this history grouped by seller (see the seller-group rule below): one row per group with
-  its first/last seen dates, dealer name(s) (capped at three plus "and N more"), price range, and
-  mileage range, so a syndicated 50-row history still reads as a handful of lines. Pass
-  `--all-history` to also print the raw, one-row-per-sighting list underneath.
+  its first/last seen dates, dealer name(s) (a multi-seller group's cell leads with its seller
+  count, e.g. "16 sellers: ...", so that count survives even where the column is too narrow for
+  the full name list; names themselves cap at three plus "and N more"), price range, and mileage
+  range, so a syndicated 50-row history still reads as a handful of lines. Pass `--all-history` to
+  also print the raw, one-row-per-sighting list underneath.
 
 Both are cached on the vehicle's ledger row with a fetched-at stamp, and are only re-fetched when
 the cached research is more than seven days old, `--refresh` is passed, the Marketcheck VIN
@@ -171,16 +173,21 @@ moved between them.
   car): it's recorded as a note on the vehicle instead (`mileage corrected 4,703 to 3,852 at Daytona
   Toyota on Sep 10`), the same as an operator's own `odo note` would, and does not raise a flag. A
   drop across two different seller groups, or across a real gap even at the same seller, still flags.
-- **three or more distinct sellers within a 90-day window of the listing history** (`N-sellers`).
-  Sellers are counted from the seller groups above, walked in chronological order: the first group is
-  seller one, and every later group counts as a new seller only when its window starts after the
-  previous counted group's own last window ended AND the mileage moved between them. A group
-  that overlaps the previous one, or resumes at the same mileage, is folded in rather than counted as
-  a seller change, since neither shape tells it apart from the same car sitting with the same owner.
-  This is what a real dealer-to-dealer flip looks like (sequential windows, mileage that actually
-  moved) as opposed to syndication (overlapping windows, identical mileage) even when a shared-stem
-  name never ties the rooftops together at all. The seller-count threshold (default three) is a
-  constant in `RedFlagsEvaluator`, not a scenario or CLI setting. The printed list caps at three names
+- **three or more distinct sellers within a 90-day window of the listing history** (`N-sellers`). A
+  group with no dealer name at all is never counted, the same as a nameless listing was ignored
+  before this rule existed: there's no evidence at all to tell it apart from a repeat of the seller
+  before or after it. Of the named groups, sellers are counted from the seller groups above, walked
+  in chronological order: the first group is seller one, and every later group counts as a new
+  seller only when its window starts after the previous counted group's own last window ended, and
+  it is NOT the case that both sides have a real, equal mileage reading (an absent or placeholder
+  reading on either side is never read as proof the mileage stayed the same, so it still counts as a
+  change). A group that overlaps the previous one, or resumes at the same real mileage, is folded in
+  rather than counted as a seller change, since neither shape tells it apart from the same car
+  sitting with the same owner. This is what a real dealer-to-dealer flip looks like (sequential
+  windows, mileage that actually moved) as opposed to syndication (overlapping windows, identical
+  mileage) even when a shared-stem name never ties the rooftops together at all. The seller-count
+  threshold (default three) is a constant in `RedFlagsEvaluator`, not a scenario or CLI setting. The
+  printed list caps at three names
   followed by "and N more" so a syndication feed's 30-plus rooftop names never dominates the line.
 - **one or more open NHTSA recalls with no remedy published yet** (`no-remedy-recall`). An open
   recall with a remedy already available does not raise a flag on its own; `odo rank` shows the

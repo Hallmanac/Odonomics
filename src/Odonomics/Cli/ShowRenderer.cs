@@ -10,15 +10,18 @@ public static class ShowRenderer
 {
     // Column widths are chosen so that, added to Border.Minimal's per-column padding and separators
     // (3 chars per column plus 1 for the table's own edges: 3 * 5 + 1 = 16 for five columns), the
-    // grouped-history table never needs more than 80 columns: 18 + 10 + 10 + 15 + 11 + 16 = 80.
-    // Every cell is also truncated to its column's width before it reaches the table, since Spectre
-    // wraps a cell that overflows its declared width onto a second line rather than cropping it,
-    // which would turn one seller group's row into two lines and defeat the "readable at a glance"
-    // point of grouping in the first place.
-    private const int DealerColumnWidth = 18;
+    // grouped-history table never needs more than 80 columns: 16 + 10 + 10 + 15 + 13 + 16 = 80.
+    // MileageColumnWidth fits a two five-digit-reading range ("40,000-69,680" is 13 characters)
+    // without ellipsizing the high end into a misleadingly smaller number. Every cell is also
+    // truncated to its column's width before it reaches the table, since Spectre wraps a cell that
+    // overflows its declared width onto a second line rather than cropping it, which would turn one
+    // seller group's row into two lines and defeat the "readable at a glance" point of grouping in
+    // the first place; DealerNamesCell leads with the seller count for a multi-seller group
+    // specifically so that fact survives even when the name list itself has to be cut short.
+    private const int DealerColumnWidth = 16;
     private const int DateColumnWidth = 10;
     private const int PriceColumnWidth = 15;
-    private const int MileageColumnWidth = 11;
+    private const int MileageColumnWidth = 13;
     private const int MaxDealerNamesShown = 3;
 
     public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory)
@@ -107,7 +110,20 @@ public static class ShowRenderer
                 IReadOnlyList<VinHistoryPoint> points = [.. history.PriorListings
                     .Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))];
                 IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
-                AnsiConsole.Write(BuildGroupedHistoryTable(groups));
+                int undated = points.Count(p => p.FirstSeen is null);
+                if (groups.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("  no prior listings have a known first-seen date; pass --all-history to see them");
+                }
+                else
+                {
+                    AnsiConsole.Write(BuildGroupedHistoryTable(groups));
+                    if (undated > 0)
+                    {
+                        AnsiConsole.MarkupLineInterpolated(
+                            $"  {undated} listing{(undated == 1 ? "" : "s")} without a known first-seen date not shown above; pass --all-history to see {(undated == 1 ? "it" : "them")}");
+                    }
+                }
 
                 if (allHistory)
                 {
@@ -165,7 +181,8 @@ public static class ShowRenderer
     }
 
     /// <summary>The listing history grouped by seller (see <see cref="RedFlagsEvaluator.GroupBySeller"/>),
-    /// one row per group: dealer name(s) capped at <see cref="MaxDealerNamesShown"/> plus "and N more",
+    /// one row per group: dealer name(s), led by the seller count for a multi-seller group and capped
+    /// at <see cref="MaxDealerNamesShown"/> names plus "and N more" (see <see cref="DealerNamesCell"/>),
     /// the group's overall first/last seen dates, and its price and mileage ranges. Built without
     /// writing it, so a rendering test can capture it against a fixed-width console instead of the
     /// real one, the same as <c>WalkCommand.BuildSummaryTable</c>.</summary>
@@ -216,6 +233,11 @@ public static class ShowRenderer
         return table;
     }
 
+    /// <summary>Leads a multi-seller group's cell with its seller count ("N sellers: ...") before the
+    /// capped name list, so the one fact this table exists to surface (how many rooftops a group
+    /// spans) survives <see cref="Format.Truncate"/> even when the name list itself has to be cut
+    /// short to fit <see cref="DealerColumnWidth"/> — truncation always cuts from the end, so
+    /// whatever sits at the front of the string is what the column-width-limited cell keeps.</summary>
     private static string DealerNamesCell(IReadOnlyList<string> names)
     {
         if (names.Count == 0)
@@ -223,9 +245,15 @@ public static class ShowRenderer
             return "(unknown)";
         }
 
+        if (names.Count == 1)
+        {
+            return names[0];
+        }
+
         string shown = string.Join(", ", names.Take(MaxDealerNamesShown));
         int remaining = names.Count - Math.Min(MaxDealerNamesShown, names.Count);
-        return remaining > 0 ? $"{shown} and {remaining} more" : shown;
+        string list = remaining > 0 ? $"{shown} and {remaining} more" : shown;
+        return $"{names.Count} sellers: {list}";
     }
 
     private static string RangeCell<T>(T? min, T? max, Func<T, string> format) where T : struct, IEquatable<T>

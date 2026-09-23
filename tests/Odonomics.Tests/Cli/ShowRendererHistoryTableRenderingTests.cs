@@ -38,6 +38,54 @@ public class ShowRendererHistoryTableRenderingTests
     }
 
     [Fact]
+    public void BuildGroupedHistoryTable_MileageRangeWithTwoFiveDigitReadings_RendersBothInFull()
+    {
+        // A group merged by dealer-name stem across a real mileage change (a relisting) must not have
+        // its mileage range's high end ellipsized away into a misleadingly smaller number.
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 12, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> points =
+        [
+            new("Dealer A", day1, day1, 19394m, 40000),
+            new("Dealer A", day2, day2, 27995m, 69680),
+        ];
+
+        IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
+        Assert.Single(groups);
+
+        string[] lines = Render(groups);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Contains(lines, line => line.Contains("40,000-69,680"));
+    }
+
+    [Fact]
+    public void BuildGroupedHistoryTable_ManyRooftopGroup_ShowsSellerCountEvenWhenNamesAreTruncated()
+    {
+        // The dealer cell for a multi-seller group must lead with the seller count, so the one fact
+        // the grouping exists to surface survives even when the column is too narrow for the full
+        // "name1, name2, name3 and N more" list.
+        string[] rooftops =
+        [
+            "Carrollton Hyundai", "Alm Hyundai Florence", "ALM Chevrolet South", "Alm Kia Perry",
+            "ALM Mazda Macon", "Alm Hyundai Athens", "ALM Mazda South", "Alm Cdjr Macon",
+            "ALM Ford Marietta", "Alm Chrysler Dodge Jeep Ram Perry", "Alm Kia South", "Alm Nissan Newnan",
+            "Genesis of Macon", "Alm Hyundai West", "Five Star Hyundai of Macon", "Five Star Hyundai of Warner Robins",
+        ];
+        DateTimeOffset windowStart = new(2026, 1, 24, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset windowEnd = new(2026, 3, 5, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> points = [.. rooftops
+            .Select(name => new VinHistoryPoint(name, windowStart, windowEnd, 27995m, 36005))];
+
+        IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
+        Assert.Single(groups);
+
+        string[] lines = Render(groups);
+
+        Assert.Contains(lines, line => line.Contains("16 sellers"));
+    }
+
+    [Fact]
     public void BuildGroupedHistoryTable_WithNoColorSet_HasNoAnsiCodes()
     {
         List<VinHistoryPoint> points =

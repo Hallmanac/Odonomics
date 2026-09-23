@@ -313,6 +313,75 @@ public class RedFlagsEvaluatorTests
     }
 
     [Fact]
+    public void Evaluate_ListingsWithNoDealerName_NeverCountTowardSellerFlag()
+    {
+        // A listing with no dealer name at all carries no evidence about who the seller was, so it
+        // must never count toward the seller-count flag, the same as the raw-dealer-name rule this
+        // replaced ignored a nameless listing entirely (see MarketcheckHistoryClient, which reports
+        // Dealer as null whenever seller_name is absent).
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 1, 20, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new(null, day1, day1, 20000m, 40000),
+            new(null, day2, day2, 20500m, 41000),
+            new(null, day3, day3, 21000m, 42000),
+        ];
+
+        IReadOnlyList<RedFlag> flags = RedFlagsEvaluator.Evaluate([], null, listings, null).Flags;
+
+        Assert.DoesNotContain(flags, f => f.ShortTag.EndsWith("-sellers"));
+    }
+
+    [Fact]
+    public void Evaluate_UnknownMileageBetweenTwoNamedSellers_StillCountsAsAChange()
+    {
+        // A missing mileage reading is never proof the car sat with the same owner; only two real,
+        // equal readings block counting a seller change. Three sequential, distinctly-named dealers,
+        // the middle one with no reported mileage, must still count as three sellers, the same as
+        // three raw distinct dealer names did before this rule existed.
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 1, 20, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Dealer A", day1, day1, 20000m, 40000),
+            new("Dealer B", day2, day2, 20500m, null),
+            new("Dealer C", day3, day3, 21000m, 42000),
+        ];
+
+        IReadOnlyList<RedFlag> flags = RedFlagsEvaluator.Evaluate([], null, listings, null).Flags;
+
+        RedFlag flag = Assert.Single(flags);
+        Assert.Equal("3-sellers", flag.ShortTag);
+    }
+
+    [Fact]
+    public void Evaluate_AllPlaceholderMileageAcrossDistinctDealers_StillCountsSellers()
+    {
+        // All-placeholder mileage across genuinely different, non-overlapping dealers must not
+        // silently collapse the seller count to one: PlaceholderMileageMax already distrusts a
+        // near-zero reading as evidence of sameness in BuildSellerGroups, and CountSellers must
+        // apply that same distrust rather than reading two equal placeholders as proof the mileage
+        // stayed put.
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 1, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 2, 10, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Dealer A", day1, day1, 20000m, 0),
+            new("Dealer B", day2, day2, 20000m, 0),
+            new("Dealer C", day3, day3, 20000m, 0),
+        ];
+
+        IReadOnlyList<RedFlag> flags = RedFlagsEvaluator.Evaluate([], null, listings, null).Flags;
+
+        RedFlag flag = Assert.Single(flags);
+        Assert.Equal("3-sellers", flag.ShortTag);
+    }
+
+    [Fact]
     public void Evaluate_SyndicatedOverlappingSameMileageListings_YieldsOneSellerGroupAndNoFlag()
     {
         // Reproduces the operator's 2026-09-23 odo show on 4T1DAACK7SU000408 (a 2025 Camry Hybrid):
@@ -350,11 +419,14 @@ public class RedFlagsEvaluatorTests
         // A VIN with an ordinary multi-year history (one dealer, or a slow trickle) plus a recent
         // burst of three dealers in a handful of days: the whole history spans years, but the burst
         // itself is exactly the pattern this rule exists to catch, so it must not get diluted away by
-        // the years-old listings sitting earlier in the same array. Reproduces a real Marketcheck VIN
-        // history observed during manual verification of this feature; the burst dealers' mileage
-        // rises a little at each step (a realistic dealer-to-dealer transport distance) so each
-        // transition is a genuine seller change under the window/mileage rule, not a same-mileage
-        // syndication artifact.
+        // the years-old listings sitting earlier in the same array. Same shape as a real Marketcheck
+        // VIN history observed during manual verification of this feature, but with the burst
+        // dealers' mileage bumped a little at each step (a realistic dealer-to-dealer transport
+        // distance) instead of the recorded unchanged reading, so each transition is a genuine
+        // seller change under the window/mileage rule rather than a same-mileage syndication
+        // artifact; the literal recorded readings (all three burst dealers at one unchanged mileage)
+        // are covered separately below, since they read as syndication under this rule and no
+        // longer flag.
         DateTimeOffset yearsAgo1 = new(2020, 6, 25, 0, 0, 0, TimeSpan.Zero);
         DateTimeOffset yearsAgo2 = new(2020, 6, 26, 0, 0, 0, TimeSpan.Zero);
         DateTimeOffset burst1 = new(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
@@ -372,6 +444,36 @@ public class RedFlagsEvaluatorTests
         IReadOnlyList<RedFlag> flags = RedFlagsEvaluator.Evaluate([], null, listings, null).Flags;
 
         Assert.Contains(flags, f => f.Detail.Contains("different sellers") && f.Detail.Contains("Holler Classic"));
+    }
+
+    [Fact]
+    public void Evaluate_RecordedDealerHopBurstAtUnchangedMileage_NoLongerFlags()
+    {
+        // The literal recorded reading from manual verification of this feature: three dealers
+        // within days of each other, all at one unchanged 69,599 miles (Driver's Mart Usa Sep 13
+        // 01:58, Driver's Mart Sanford Sep 13 02:36, Holler Classic Sep 17). Under the window/mileage
+        // rule, Driver's Mart Usa and Sanford merge into one seller group (touching windows,
+        // identical real mileage, and a shared name stem besides), and Holler Classic then resumes
+        // at that same unchanged mileage, so it is folded in rather than counted as a third seller:
+        // this reads as syndication, not a genuine dealer-to-dealer hop, so it must not flag, unlike
+        // the (deliberately modified) mileage-rising version above.
+        DateTimeOffset yearsAgo1 = new(2020, 6, 25, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset yearsAgo2 = new(2020, 6, 26, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset burst1 = new(2026, 9, 13, 1, 58, 0, TimeSpan.Zero);
+        DateTimeOffset burst2 = new(2026, 9, 13, 2, 36, 0, TimeSpan.Zero);
+        DateTimeOffset burst3 = new(2026, 9, 17, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Old Dealer A", yearsAgo1, yearsAgo1, 25765m, 60000),
+            new("Old Dealer B", yearsAgo2, yearsAgo2, 25765m, 60000),
+            new("Driver's Mart Usa", burst1, burst1, 19394m, 69599),
+            new("Driver's Mart Sanford", burst2, burst2, 19394m, 69599),
+            new("Holler Classic", burst3, burst3, 17995m, 69599),
+        ];
+
+        IReadOnlyList<RedFlag> flags = RedFlagsEvaluator.Evaluate([], null, listings, null).Flags;
+
+        Assert.DoesNotContain(flags, f => f.ShortTag.EndsWith("-sellers"));
     }
 
     [Fact]
