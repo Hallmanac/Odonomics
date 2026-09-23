@@ -68,9 +68,9 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void CarsCom_DetailLinkOverfetchMultiplier_IsOne()
+    public void CarsCom_DetailLinkOverfetchMultiplier_IsTwo()
     {
-        Assert.Equal(1, WalkSites.CarsCom.DetailLinkOverfetchMultiplier);
+        Assert.Equal(2, WalkSites.CarsCom.DetailLinkOverfetchMultiplier);
     }
 
     [Fact]
@@ -99,10 +99,12 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_CorollaHybridAtBriansZip_MatchesOperatorsBrowserUrl()
+    public void Carvana_BuildSearchUrl_CorollaHybrid_CvnaidMatchesOperatorsBrowserValue()
     {
-        // The exact cvnaid Brian's Edge browser built choosing "Corolla Hybrid"
-        // (notes/run-session-2026-09-22.md, "Facet URLs from Brian").
+        // Only the cvnaid payload here is attested against Brian's Edge browser
+        // (notes/run-session-2026-09-22.md, "Facet URLs from Brian"): the "/cars/filters?zip="
+        // route and the zip parameter are carried over from the walk's own URL shape, not
+        // independently confirmed against carvana's live site.
         string url = WalkSites.Carvana.BuildSearchUrl("Toyota", "Corolla Hybrid", "32114", 50);
 
         Assert.Equal(
@@ -112,9 +114,9 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void Carvana_DetailLinkOverfetchMultiplier_IsOne()
+    public void Carvana_DetailLinkOverfetchMultiplier_IsTwo()
     {
-        Assert.Equal(1, WalkSites.Carvana.DetailLinkOverfetchMultiplier);
+        Assert.Equal(2, WalkSites.Carvana.DetailLinkOverfetchMultiplier);
     }
 
     [Fact]
