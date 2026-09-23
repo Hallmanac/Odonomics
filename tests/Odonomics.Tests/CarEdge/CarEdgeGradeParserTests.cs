@@ -142,6 +142,36 @@ public class CarEdgeGradeParserTests
     }
 
     [Fact]
+    public void Parse_SoleCardNameExtendsTheSearchedDealerNameWithNoExactCardOnThePage_FallsBackToThatCard()
+    {
+        // CarEdge sometimes renders a dealer's full franchised name longer than the ledger's stem
+        // ("Schaller Honda" in the ledger vs. "Schaller Honda Subaru Mitsubishi" on the card). When
+        // no card on the page is an exact match, the boundary-anchored containment fallback must
+        // still accept this card rather than falling through to a permanent "not on CarEdge".
+        const string pageText = """
+            Search: "Schaller Honda"
+            1 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Schaller Honda Subaru Mitsubishi
+            Orlando, FL · 12 verified quotes
+            $600
+            doc fee
+            No add-ons
+            B
+            88/100
+            Above average
+            See 12 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Schaller Honda");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("B", result.Grade);
+        Assert.Equal(88, result.Score);
+    }
+
+    [Fact]
     public void Parse_DeclaredCountExceedsCardsThatParsed_ReturnsUnrecognized()
     {
         // The page claims two dealers but only one card matches a known card layout: the searched
