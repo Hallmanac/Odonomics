@@ -336,7 +336,7 @@ own warning heading, still ranked, never hidden.
 
 ## Unmet target budgets
 
-`odo rank` says plainly, in one line above the Ranked section, when no vehicle's expected during-loan monthly cost meets one or more of the scenario's target monthly budgets. The line names only the unmet targets and the cheapest vehicle's during-loan range, then points at `odo budget` for the purchase price each target allows. It reads the targets from the scenario rather than from `--budget`, and it still counts vehicles that `--budget` moved into the over-budget section, so a tight `--budget` does not hide it. It is not printed when every target is met or when there is no vehicle to name.
+`odo rank` says plainly, in one line above the Ranked section, when no rankable vehicle's expected during-loan monthly cost meets one or more of the scenario's target monthly budgets. The line names only the unmet targets and the cheapest vehicle's during-loan range, then points at `odo budget` for the purchase price each target allows. It reads the targets from the scenario rather than from `--budget`, and it still counts vehicles that `--budget` moved into the over-budget section, so a tight `--budget` does not hide it. It is not printed when every target is met or when there is no rankable vehicle to name. A rankable vehicle is one that passes the scenario's filters, has a known insurance figure, and has a current price, so excluded and insurance-unknown vehicles are never considered.
 
 ## Scenario
 

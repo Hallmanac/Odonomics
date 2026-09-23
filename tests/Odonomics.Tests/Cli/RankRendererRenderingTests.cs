@@ -233,7 +233,7 @@ public class RankRendererRenderingTests
 
     private static string UnmetTargetsText(string[] lines)
     {
-        int start = Array.FindIndex(lines, line => line.StartsWith("No ranked vehicle meets"));
+        int start = Array.FindIndex(lines, line => line.StartsWith("No rankable vehicle meets"));
         if (start < 0)
         {
             return string.Empty;
@@ -253,10 +253,10 @@ public class RankRendererRenderingTests
 
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.Equal(
-            "No ranked vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
+            "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
         Assert.True(
-            Array.FindIndex(lines, line => line.StartsWith("No ranked vehicle meets")) < Array.FindIndex(lines, line => line.StartsWith("Ranked (")),
+            Array.FindIndex(lines, line => line.StartsWith("No rankable vehicle meets")) < Array.FindIndex(lines, line => line.StartsWith("Ranked (")),
             "the line should print above the Ranked heading");
     }
 
@@ -290,7 +290,7 @@ public class RankRendererRenderingTests
 
         string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
 
-        Assert.DoesNotContain(lines, line => line.Contains("No ranked vehicle meets"));
+        Assert.DoesNotContain(lines, line => line.Contains("No rankable vehicle meets"));
         Assert.DoesNotContain(lines, line => line.Contains("odo budget"));
         Assert.Equal("Ranked (1)", lines[0]);
     }
@@ -303,7 +303,7 @@ public class RankRendererRenderingTests
 
         string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
 
-        Assert.StartsWith("No ranked vehicle meets a target budget of $300 during the loan;", UnmetTargetsText(lines));
+        Assert.StartsWith("No rankable vehicle meets a target budget of $300 during the loan;", UnmetTargetsText(lines));
         Assert.DoesNotContain(lines, line => line.Contains("$350") || line.Contains("$400"));
     }
 
@@ -316,7 +316,7 @@ public class RankRendererRenderingTests
         string[] lines = Render([pricey, cheap], budget: 1000m, targets: [300m, 350m, 400m]);
 
         Assert.Equal(
-            "No ranked vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $410-$430 a month. Run odo budget for the purchase price each target allows.",
+            "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $410-$430 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
     }
 
@@ -325,7 +325,7 @@ public class RankRendererRenderingTests
     {
         string[] lines = Render([], budget: null, targets: [300m, 350m, 400m]);
 
-        Assert.DoesNotContain(lines, line => line.Contains("No ranked vehicle meets"));
+        Assert.DoesNotContain(lines, line => line.Contains("No rankable vehicle meets"));
     }
 
     [Fact]
@@ -338,7 +338,7 @@ public class RankRendererRenderingTests
 
         Assert.Contains(lines, line => line.StartsWith("Ranked (0)"));
         Assert.Equal(
-            "No ranked vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
+            "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
     }
 }
