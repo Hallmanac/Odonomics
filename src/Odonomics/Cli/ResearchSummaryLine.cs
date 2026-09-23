@@ -30,7 +30,9 @@ public static class ResearchSummaryLine
         for (int keep = tags.Count; keep >= 1; keep--)
         {
             string named = string.Join(", ", tags.Take(keep));
-            string candidate = keep == tags.Count ? named : $"{named}, +{tags.Count - keep}";
+            string candidate = keep == tags.Count
+                ? named
+                : $"{named}, +{tags.Count - keep}";
             if (candidate.Length <= maxWidth)
             {
                 return candidate;

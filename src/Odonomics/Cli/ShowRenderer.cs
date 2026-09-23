@@ -36,14 +36,14 @@ public static class ShowRenderer
             AnsiConsole.MarkupLineInterpolated($"[bold]Recalls ({recalls.Entries.Count})[/]");
             foreach (RecallEntry recall in recalls.Entries)
             {
-                if (recall.RemedyAvailable)
-                {
-                    AnsiConsole.MarkupLineInterpolated($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component} - remedy available");
-                }
-                else
-                {
-                    AnsiConsole.MarkupLineInterpolated($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component} - [red]no remedy yet[/]");
-                }
+                // Markup.Escape, not MarkupLineInterpolated, for the data half: remedyClause carries
+                // real [red]...[/] markup that MarkupLineInterpolated would otherwise auto-escape
+                // into literal brackets if it were passed as an interpolated argument.
+                string remedyClause = recall.RemedyAvailable
+                    ? "remedy available"
+                    : "[red]no remedy yet[/]";
+                string prefix = Markup.Escape($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component} - ");
+                AnsiConsole.MarkupLine($"{prefix}{remedyClause}");
             }
         }
 
