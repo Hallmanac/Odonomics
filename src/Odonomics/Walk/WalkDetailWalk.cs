@@ -21,7 +21,9 @@ public enum DetailPageOutcome
     /// pool <see cref="WalkDetailWalk.RunAsync"/> was handed.</summary>
     NotMatching,
 
-    /// <summary>The page matched but had no VIN to key a ledger row on.</summary>
+    /// <summary>The page had no VIN to key a ledger row on. Checked before the model-match check
+    /// below, so this can be recorded even for a page that is also some other model; that page
+    /// still spends a slot of the per-pair cap, since it never got far enough to tell.</summary>
     NoVin,
 
     /// <summary>The page's VIN was already saved earlier in this same (site, model) pair's walk,
