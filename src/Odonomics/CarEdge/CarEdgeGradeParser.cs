@@ -40,7 +40,7 @@ public static partial class CarEdgeGradeParser
             return CarEdgeGradeResult.Unrecognized;
         }
 
-        string normalizedDealerLocation = DealerNormalizer.Normalize(dealerLocation);
+        DealerLocationParts dealerParts = DealerLocationParts.Parse(dealerLocation);
 
         List<(int Start, int End, Match Match, bool Graded)> signals = [];
         foreach (Match match in GradedCard().Matches(pageText))
@@ -80,40 +80,38 @@ public static partial class CarEdgeGradeParser
         // not-rated multi-brand card carries sit below it, not above). Collect every card's name line
         // and that same location line up front, scoped the same way as before (between the previous
         // card's signal and this one), before deciding which card to accept.
-        List<(int Start, int End, Match Match, bool Graded, string NameLine, string LocationLine)> cards = [];
+        List<Card> cards = [];
         foreach ((int start, int end, Match match, bool graded) in signals)
         {
             string precedingBlock = pageText[precedingStart..start];
             precedingStart = end;
             (string nameLine, string locationLine) = DealerCardIdentity(precedingBlock);
-            cards.Add((start, end, match, graded, nameLine, locationLine));
+            cards.Add(new Card(match, graded, nameLine, locationLine));
         }
 
         // A card whose own "City, ST" line doesn't match the searched dealer's known location is
         // never this dealer, even when the name matches exactly: CarEdge's search can return
         // same-named dealers in other cities (a chain, or an unrelated store CarEdge's own matching
         // considered close enough), and taking one of those permanently mislabels the searched
-        // dealer's grade. The dealer's own location is often partial (an upstream API can report only
-        // a city or only a state), while a card's location line always carries both, so the check
-        // requires the dealer's known location text to appear as a whole word within the card's
-        // "City, ST" line rather than requiring the two strings to be identical outright: a city-only
-        // or state-only dealer location still matches its own card, while a card genuinely in a
-        // different city still fails to contain it and is rejected. Skipped entirely when the dealer
-        // has no location on record, so that case still falls back to the name-only check below
-        // exactly as before.
-        Regex? dealerLocationBoundary = normalizedDealerLocation.Length > 0
-            ? new Regex($@"\b{Regex.Escape(normalizedDealerLocation)}\b")
-            : null;
-
+        // dealer's grade. Both locations are split into a city part and a state part and compared
+        // part by part (see DealerLocationParts): a card matches when every part the dealer has
+        // equals the card's same part, so the walk's "Winter Park, FL 32792" still matches its own
+        // "Winter Park, FL" card, "Ft. Lauderdale" matches "Fort Lauderdale", and a partial dealer
+        // location never matches a different city ("Palm Beach" is not "West Palm Beach"). A
+        // state-only dealer gets a same-state check, and a city-only dealer a same-city check, so
+        // neither can tell two same-named stores in that state or city apart: when more than one
+        // card still matches, the result is Ambiguous rather than the first card in document order.
+        // Skipped entirely when the dealer has no location on record, so that case still falls back
+        // to the name-only check below exactly as before.
         bool LocationMatches(string cardLocationLine)
         {
-            if (dealerLocationBoundary is null)
+            if (dealerParts.IsEmpty)
             {
                 return true;
             }
 
-            string normalizedCardLocation = DealerNormalizer.Normalize(cardLocationLine);
-            return normalizedCardLocation.Length == 0 || dealerLocationBoundary.IsMatch(normalizedCardLocation);
+            DealerLocationParts cardParts = DealerLocationParts.Parse(cardLocationLine);
+            return cardParts.IsEmpty || dealerParts.Matches(cardParts);
         }
 
         // Prefer a card whose name line is exactly the searched name: a page that returns a fuzzy
@@ -124,34 +122,40 @@ public static partial class CarEdgeGradeParser
         // sometimes renders a dealer's franchised name longer than the ledger's stem (a "Schaller
         // Honda" ledger entry against a "Schaller Honda Subaru Mitsubishi" card), and a card that
         // legitimately extends the searched name is the best available match rather than a
-        // permanent, possibly wrong, "not on CarEdge".
-        (int Start, int End, Match Match, bool Graded, string NameLine)? chosen = null;
-        foreach ((int start, int end, Match match, bool graded, string nameLine, string locationLine) in cards)
+        // permanent, possibly wrong, "not on CarEdge". A card that matches on name but not on
+        // location is remembered, so a page whose only name matches were rejected that way comes
+        // back LocationMismatch (retried) instead of NotFound (stamped for good).
+        Regex nameBoundary = new($@"\b{Regex.Escape(normalizedDealerName)}\b");
+        List<Card> exactNameCards = [];
+        List<Card> containingNameCards = [];
+        bool nameMatchedButLocationRejected = false;
+        foreach (Card card in cards)
         {
-            if (string.Equals(DealerNormalizer.Normalize(nameLine), normalizedDealerName, StringComparison.Ordinal)
-                && LocationMatches(locationLine))
+            string normalizedNameLine = DealerNormalizer.Normalize(card.NameLine);
+            bool exactName = string.Equals(normalizedNameLine, normalizedDealerName, StringComparison.Ordinal);
+            if (!exactName && !(normalizedNameLine.Length > 0 && nameBoundary.IsMatch(normalizedNameLine)))
             {
-                chosen = (start, end, match, graded, nameLine);
-                break;
+                continue;
             }
+
+            if (!LocationMatches(card.LocationLine))
+            {
+                nameMatchedButLocationRejected = true;
+                continue;
+            }
+
+            (exactName ? exactNameCards : containingNameCards).Add(card);
         }
 
-        if (chosen is null)
+        List<Card> nameMatches = exactNameCards.Count > 0 ? exactNameCards : containingNameCards;
+        if (nameMatches.Count > 1 && dealerParts.IsPartial)
         {
-            Regex nameBoundary = new($@"\b{Regex.Escape(normalizedDealerName)}\b");
-            foreach ((int start, int end, Match match, bool graded, string nameLine, string locationLine) in cards)
-            {
-                string normalizedNameLine = DealerNormalizer.Normalize(nameLine);
-                if (normalizedNameLine.Length > 0 && nameBoundary.IsMatch(normalizedNameLine) && LocationMatches(locationLine))
-                {
-                    chosen = (start, end, match, graded, nameLine);
-                    break;
-                }
-            }
+            return CarEdgeGradeResult.Ambiguous;
         }
 
-        if (chosen is { } chosenCard)
+        if (nameMatches.Count > 0)
         {
+            Card chosenCard = nameMatches[0];
             if (!chosenCard.Graded)
             {
                 return CarEdgeGradeResult.NotFound;
@@ -170,6 +174,11 @@ public static partial class CarEdgeGradeParser
             return new CarEdgeGradeResult(CarEdgeGradeStatus.Graded, grade, score, verifiedQuoteCount, docFee, addOnsNote, Reason: null);
         }
 
+        if (nameMatchedButLocationRejected)
+        {
+            return CarEdgeGradeResult.LocationMismatch;
+        }
+
         // The page recognizably rendered CarEdge's results layout and none of the cards that parsed
         // named this dealer. That's only trustworthy as "CarEdge's search doesn't have it" when every
         // card the page itself declares actually parsed; if fewer cards parsed than the page's own
@@ -180,6 +189,8 @@ public static partial class CarEdgeGradeParser
             ? CarEdgeGradeResult.NotFound
             : CarEdgeGradeResult.Unrecognized;
     }
+
+    private sealed record Card(Match Match, bool Graded, string NameLine, string LocationLine);
 
     private static (string NameLine, string LocationLine) DealerCardIdentity(string block)
     {
