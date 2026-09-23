@@ -271,7 +271,12 @@ Both cars.com and Carvana do have a working hybrid facet: an earlier build read 
 `odo search` and `odo walk` link every posting they upsert to a dealer, keyed by the dealer's
 normalized name and location, when the source names one: Auto.dev and Marketcheck carry a dealer
 name and city/state in their API response, and the walk's own extraction reads a dealer name and
-location off the page text the same way it reads the vehicle's own fields.
+location off the page text the same way it reads the vehicle's own fields. A carvana detail page
+usually names no dealer, so the walk stores such a posting with the dealer "Carvana" (with no
+location) rather than none; a page that does name a hub, such as "Carvana Winder", keeps that name.
+Existing carvana postings with no dealer are stamped "Carvana" once, on the first startup after the
+update. The dealer grade pass treats "Carvana" like any other dealer name: it looks the name up on
+CarEdge, and a result of not found or ungraded stamps it checked the same way.
 
 `odo dealer grade --all` connects over CDP to the same operator-launched browser `odo walk` uses
 (see above); if nothing is listening on the debugging port, it prints the identical launch-line
