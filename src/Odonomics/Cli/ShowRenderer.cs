@@ -31,7 +31,7 @@ public static class ShowRenderer
     private const int DateColumnWidth = 10;
     private const int PriceHeaderWidth = 5;
     private const int MileageHeaderWidth = 5;
-    private const int PriceColumnMaxWidth = 16;
+    private const int PriceColumnMaxWidth = 17;
     private const int MileageColumnMaxWidth = 15;
     private const int MaxDealerNamesShown = 3;
     private const int CurrentListingMaxIdleDays = 14;
