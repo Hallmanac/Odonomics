@@ -43,21 +43,85 @@ public class WalkSummaryTableRenderingTests
     }
 
     [Fact]
-    public void BuildSummaryTable_OnAnEightyColumnConsole_NeverWrapsAPairAcrossMoreThanOneLine()
+    public void BuildSummaryTable_SingleReasonPair_NamesTheReasonInTheDroppedColumnRatherThanABareCount()
+    {
+        List<WalkPairSummary> summaries =
+        [
+            new("cars.com", "Honda Insight", 9, 7, new DroppedBreakdown(MissingFields: 2, NoVin: 0, NotMatching: 0, Failed: 0), Completed: true),
+        ];
+
+        string[] lines = Render(summaries);
+
+        Assert.Equal(
+            [
+                "  Site     │ Model                  │ Pages │ Saved │ Dropped         │ Status  ",
+                " ──────────┼────────────────────────┼───────┼───────┼─────────────────┼──────── ",
+                "  cars.com │ Honda Insight          │ 9     │ 7     │ 2 (missing      │ ok      ",
+                "           │                        │       │       │ fields)         │         ",
+            ],
+            lines[1..5]);
+    }
+
+    [Fact]
+    public void BuildSummaryTable_MixedReasonPair_NamesEachReasonWithItsCountInTheFixedOrder()
+    {
+        List<WalkPairSummary> summaries =
+        [
+            new("cars.com", "Honda Insight", 14, 7, new DroppedBreakdown(MissingFields: 3, NoVin: 0, NotMatching: 4, Failed: 0), Completed: true),
+        ];
+
+        string[] lines = Render(summaries);
+
+        Assert.Equal(
+            [
+                "  Site     │ Model                  │ Pages │ Saved │ Dropped         │ Status  ",
+                " ──────────┼────────────────────────┼───────┼───────┼─────────────────┼──────── ",
+                "  cars.com │ Honda Insight          │ 14    │ 7     │ 7 (4 wrong      │ ok      ",
+                "           │                        │       │       │ model, 3        │         ",
+                "           │                        │       │       │ missing fields) │         ",
+            ],
+            lines[1..6]);
+    }
+
+    [Fact]
+    public void BuildSummaryTable_LongestRealisticRow_WrapsReasonsOntoContinuationLinesWithoutMidWordBreaksWithinEightyColumns()
+    {
+        List<WalkPairSummary> summaries =
+        [
+            new(
+                "auto trader",
+                "Corolla Hybrid Limited",
+                30,
+                5,
+                new DroppedBreakdown(MissingFields: 4, NoVin: 3, NotMatching: 8, Failed: 2, ExtractionFailed: 0, Repeat: 8),
+                Completed: true),
+        ];
+
+        string[] lines = Render(summaries);
+
+        Assert.Equal(
+            [
+                "  Site     │ Model                  │ Pages │ Saved │ Dropped         │ Status  ",
+                " ──────────┼────────────────────────┼───────┼───────┼─────────────────┼──────── ",
+                "  auto tr… │ Corolla Hybrid Limited │ 30    │ 5     │ 25 (8 wrong     │ ok      ",
+                "           │                        │       │       │ model, 4        │         ",
+                "           │                        │       │       │ missing fields, │         ",
+                "           │                        │       │       │ 3 no VIN, 8     │         ",
+                "           │                        │       │       │ repeat, 2       │         ",
+                "           │                        │       │       │ failed to load) │         ",
+            ],
+            lines[1..9]);
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    private static string[] Render(List<WalkPairSummary> summaries)
     {
         var console = new TestConsole();
         console.Profile.Width = 80;
         console.Profile.Capabilities.Ansi = false;
 
-        console.Write(WalkCommand.BuildSummaryTable(Summaries));
+        console.Write(WalkCommand.BuildSummaryTable(summaries));
 
-        string[] lines = console.Output.Replace("\r\n", "\n").Split('\n');
-        string[] contentLines = [.. lines.Where(line => !string.IsNullOrWhiteSpace(line))];
-
-        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
-
-        // Header row plus the separator rule plus exactly one line per pair: if any pair's
-        // "Dropped" or "Model" cell had wrapped onto a second line, this count would be higher.
-        Assert.Equal(Summaries.Count + 2, contentLines.Length);
+        return console.Output.Replace("\r\n", "\n").Split('\n');
     }
 }
