@@ -14,7 +14,7 @@ public static class ShowRenderer
     // 16 + DealerWidth + 10 + 10 + PriceWidth + MileageWidth = 80. The date columns are fixed
     // ("yyyy-MM-dd" is always 10 characters), but price and mileage rarely need their worst-case
     // width (a group whose mileage or price crosses from five digits to six, e.g.
-    // "95,000-150,000", 14 characters, or "$95,000-$150,000", 16 characters); reserving that width
+    // "105,000-150,000", 15 characters, or "$95,000-$150,000", 16 characters); reserving that width
     // unconditionally starves the Dealer column, the one the grouping feature exists to make
     // readable, of space it needs far more. So price and mileage width are computed per render call
     // from what the actual groups need (floored at their short header's own length so the header
@@ -32,7 +32,7 @@ public static class ShowRenderer
     private const int PriceHeaderWidth = 5;
     private const int MileageHeaderWidth = 5;
     private const int PriceColumnMaxWidth = 16;
-    private const int MileageColumnMaxWidth = 14;
+    private const int MileageColumnMaxWidth = 15;
     private const int MaxDealerNamesShown = 3;
     private const int CurrentListingMaxIdleDays = 14;
 
