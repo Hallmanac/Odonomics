@@ -8,25 +8,28 @@ namespace Odonomics.Cli;
 
 public static class ShowRenderer
 {
-    // Column widths are chosen so that, added to Border.Minimal's per-column padding and separators
-    // (3 chars per column plus 1 for the table's own edges: 3 * 5 + 1 = 16 for five columns), the
-    // grouped-history table never needs more than 80 columns: 16 + 14 + 10 + 10 + 16 + 14 = 80.
-    // MileageColumnWidth and PriceColumnWidth are sized for the realistic worst case this tool's own
-    // recorded scenarios exercise, a group whose mileage or price crosses from five digits to six
-    // (e.g. "95,000-150,000", 14 characters, or "$95,000-$150,000", 16 characters) rather than a
-    // six-digit-vs-six-digit range ("$150,000-$999,999"), a spread a single seller group's readings
-    // do not produce for a used car within this tool's budget; reserving width for that shape only
-    // starves DealerColumnWidth, the column the grouping feature exists to make readable, of space it
-    // needs far more. Every cell is also truncated to its column's width before it reaches the table,
-    // since Spectre wraps a cell that overflows its declared width onto a second line rather than
-    // cropping it, which would turn one seller group's row into two lines and defeat the "readable at
-    // a glance" point of grouping in the first place; DealerNamesCell leads with the seller count for
-    // a multi-seller group specifically so that fact survives even when the name list itself has to
-    // be cut short.
-    private const int DealerColumnWidth = 14;
+    // Column widths add up, with Border.Minimal's per-column padding and separators (3 chars per
+    // column plus 1 for the table's own edges: 3 * 5 + 1 = 16 for five columns), to exactly 80:
+    // 16 + DealerWidth + 10 + 10 + PriceWidth + MileageWidth = 80. The date columns are fixed
+    // ("yyyy-MM-dd" is always 10 characters), but price and mileage rarely need their worst-case
+    // width (a group whose mileage or price crosses from five digits to six, e.g.
+    // "95,000-150,000", 14 characters, or "$95,000-$150,000", 16 characters); reserving that width
+    // unconditionally starves the Dealer column, the one the grouping feature exists to make
+    // readable, of space it needs far more. So price and mileage width are computed per render call
+    // from what the actual groups need (floored at their header text's own length so the header
+    // itself is never truncated, capped at the six-digit worst case so a wide range still survives),
+    // and whatever they don't use goes to Dealer. Every cell is also truncated to its column's width
+    // before it reaches the table, since Spectre wraps a cell that overflows its declared width onto
+    // a second line rather than cropping it, which would turn one seller group's row into two lines
+    // and defeat the "readable at a glance" point of grouping in the first place; DealerNamesCell
+    // leads with the seller count for a multi-seller group specifically so that fact survives even
+    // when the name list itself has to be cut short.
+    private const int TableOverheadWidth = 16;
     private const int DateColumnWidth = 10;
-    private const int PriceColumnWidth = 16;
-    private const int MileageColumnWidth = 14;
+    private const int PriceHeaderWidth = 11;
+    private const int MileageHeaderWidth = 11;
+    private const int PriceColumnMaxWidth = 16;
+    private const int MileageColumnMaxWidth = 14;
     private const int MaxDealerNamesShown = 3;
 
     public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory)
@@ -195,21 +198,29 @@ public static class ShowRenderer
     /// real one, the same as <c>WalkCommand.BuildSummaryTable</c>.</summary>
     public static Table BuildGroupedHistoryTable(IReadOnlyList<SellerGroupSummary> groups)
     {
+        int priceColumnWidth = groups.Count == 0
+            ? PriceHeaderWidth
+            : Math.Clamp(groups.Max(g => RangeCell(g.MinPrice, g.MaxPrice, Format.Money).Length), PriceHeaderWidth, PriceColumnMaxWidth);
+        int mileageColumnWidth = groups.Count == 0
+            ? MileageHeaderWidth
+            : Math.Clamp(groups.Max(g => RangeCell(g.MinMileage, g.MaxMileage, m => m.ToString("N0")).Length), MileageHeaderWidth, MileageColumnMaxWidth);
+        int dealerColumnWidth = 80 - TableOverheadWidth - (2 * DateColumnWidth) - priceColumnWidth - mileageColumnWidth;
+
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
-        table.AddColumn(new TableColumn("Dealer(s)") { Width = DealerColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Dealer(s)") { Width = dealerColumnWidth, NoWrap = true });
         table.AddColumn(new TableColumn("First") { Width = DateColumnWidth, NoWrap = true });
         table.AddColumn(new TableColumn("Last") { Width = DateColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Price range") { Width = PriceColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Miles range") { Width = MileageColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Price range") { Width = priceColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Miles range") { Width = mileageColumnWidth, NoWrap = true });
         foreach (SellerGroupSummary group in groups)
         {
             table.AddRow(
-                Format.Cell(Format.Truncate(DealerNamesCell(group.DealerNames), DealerColumnWidth)),
+                Format.Cell(Format.Truncate(DealerNamesCell(group.DealerNames), dealerColumnWidth)),
                 group.FirstSeen.ToString("yyyy-MM-dd"),
                 group.LastSeen.ToString("yyyy-MM-dd"),
-                Format.Cell(Format.Truncate(RangeCell(group.MinPrice, group.MaxPrice, Format.Money), PriceColumnWidth)),
-                Format.Cell(Format.Truncate(RangeCell(group.MinMileage, group.MaxMileage, m => m.ToString("N0")), MileageColumnWidth)));
+                Format.Cell(Format.Truncate(RangeCell(group.MinPrice, group.MaxPrice, Format.Money), priceColumnWidth)),
+                Format.Cell(Format.Truncate(RangeCell(group.MinMileage, group.MaxMileage, m => m.ToString("N0")), mileageColumnWidth)));
         }
 
         return table;
@@ -243,8 +254,8 @@ public static class ShowRenderer
     /// <summary>Leads a multi-seller group's cell with its seller count ("N sellers: ...") before the
     /// capped name list, so the one fact this table exists to surface (how many rooftops a group
     /// spans) survives <see cref="Format.Truncate"/> even when the name list itself has to be cut
-    /// short to fit <see cref="DealerColumnWidth"/>: truncation always cuts from the end, so
-    /// whatever sits at the front of the string is what the column-width-limited cell keeps.</summary>
+    /// short to fit the dealer column's width: truncation always cuts from the end, so whatever
+    /// sits at the front of the string is what the column-width-limited cell keeps.</summary>
     private static string DealerNamesCell(IReadOnlyList<string> names)
     {
         if (names.Count == 0)
