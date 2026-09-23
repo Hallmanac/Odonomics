@@ -71,12 +71,14 @@ public static class RankRenderer
     }
 
     /// <summary>Says plainly, above the Ranked section, which of the scenario's target monthly
-    /// budgets no ranked vehicle meets during the loan, and points at <c>odo budget</c> for the
-    /// purchase price each target allows. Deliberately driven by the scenario's own targets and
-    /// not by rank's optional --budget flag, so it takes every vehicle that would have ranked,
-    /// including those the flag moved into the over-budget section: a tight --budget is exactly
-    /// when no vehicle meets a target. Prints nothing only when there is no vehicle to name. It
-    /// is written as markup for its yellow style; a "$590-$626" band has no space in it, so
+    /// budgets no rankable vehicle meets during the loan, and points at <c>odo budget</c> for the
+    /// purchase price each target allows. A rankable vehicle is one that passes the filters, has a
+    /// known insurance figure, and has a cost. Deliberately driven by the scenario's own targets
+    /// and not by rank's optional --budget flag, so it takes every rankable vehicle, including
+    /// those the flag moved into the over-budget section: the cheapest band it names may belong to
+    /// a vehicle listed under the over-budget heading rather than Ranked. Prints nothing when
+    /// there is no rankable vehicle to name or when the cheapest one meets every target. It is
+    /// written as markup for its yellow style; a "$590-$626" band has no space in it, so
     /// Spectre's word wrapping never splits a dollar figure.</summary>
     private static void RenderUnmetTargets(IAnsiConsole console, IReadOnlyList<Score> rankable, IReadOnlyList<decimal> targetMonthlyBudgets)
     {
@@ -95,7 +97,7 @@ public static class RankRenderer
             return;
         }
 
-        console.MarkupLine($"[yellow]No ranked vehicle meets a target budget of {JoinTargets(unmet)} during the loan; the cheapest is {Format.Band(cheapest)} a month. Run odo budget for the purchase price each target allows.[/]");
+        console.MarkupLine($"[yellow]No rankable vehicle meets a target budget of {JoinTargets(unmet)} during the loan; the cheapest is {Format.Band(cheapest)} a month. Run odo budget for the purchase price each target allows.[/]");
     }
 
     private static string JoinTargets(IReadOnlyList<decimal> targets) => targets switch
