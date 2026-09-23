@@ -261,7 +261,7 @@ public static class WalkCommand
                     Trim = outcome.Result.Trim,
                     Price = outcome.Result.Price.Value,
                     Mileage = outcome.Result.Mileage.Value,
-                    DealerName = outcome.Result.DealerName,
+                    DealerName = site.ResolveDealerName(outcome.Result.DealerName),
                     DealerLocation = outcome.Result.DealerLocation,
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
