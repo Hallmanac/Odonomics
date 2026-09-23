@@ -144,4 +144,64 @@ public class LedgerDataMigrationsTests
         Assert.Equal(sidBearingUrl, posting.Url);
         Assert.Single(db.LedgerMigrations, m => m.Name == "CanonicalizeWalkedPostingUrls");
     }
+
+    [Fact]
+    public async Task ApplyAll_CarvanaPostingsWithNoDealer_LinksThemToOneCarvanaDealerAndLeavesNamedHubsAndCarsComAlone()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        var run = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "carvana:Prius");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsert.UpsertAsync(Candidate("JTDEAMDE3NJ058833", 18000m, "https://www.carvana.com/vehicle/1", "carvana"), run, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDEBRBE8LJ019584", 19000m, "https://www.carvana.com/vehicle/2", "carvana"), run, CancellationToken.None);
+        ListingCandidate hub = Candidate("4T1B21HK8KU518914", 20000m, "https://www.carvana.com/vehicle/3", "carvana");
+        await upsert.UpsertAsync(new ListingCandidate
+        {
+            Vin = hub.Vin, Source = hub.Source, Url = hub.Url, Year = hub.Year, Make = hub.Make, Model = hub.Model,
+            Trim = hub.Trim, Price = hub.Price, Mileage = hub.Mileage, DealerName = "Carvana Winder",
+        }, run, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 21000m, "https://www.cars.com/vehicledetail/abc123/"), run, CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        List<PostingEntity> postings = [.. db.Postings.Include(p => p.Dealer).OrderBy(p => p.Url)];
+        // Ordered by URL: the cars.com posting first, then the three carvana ones.
+        Assert.Equal([null, "Carvana", "Carvana", "Carvana Winder"], postings.Select(p => p.Dealer?.Name));
+        Assert.Same(postings[1].Dealer, postings[2].Dealer);
+        Assert.Null(postings[1].Dealer!.Location);
+        Assert.Single(db.Dealers, d => d.NormalizedName == "CARVANA");
+        Assert.Single(db.LedgerMigrations, m => m.Name == "StampCarvanaFallbackDealer");
+    }
+
+    [Fact]
+    public async Task ApplyAll_CarvanaDealerAlreadyExists_ReusesItAndIsANoOpOnAnyLaterCall()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        var run = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "carvana:Prius");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+        db.Dealers.Add(new DealerEntity { Name = "Carvana", NormalizedName = "CARVANA", NormalizedLocation = "" });
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDEAMDE3NJ058833", 18000m, "https://www.carvana.com/vehicle/1", "carvana"), run, CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        Assert.Single(db.Dealers);
+        PostingEntity posting = Assert.Single(db.Postings.Include(p => p.Dealer));
+        Assert.Equal("Carvana", posting.Dealer!.Name);
+
+        // A posting that shows up undealered after the migration ran (it never will from the walk,
+        // which now always stamps one) is not touched by a later startup.
+        await upsert.UpsertAsync(Candidate("JTDEBRBE8LJ019584", 19000m, "https://www.carvana.com/vehicle/2", "carvana"), run, CancellationToken.None);
+        LedgerDataMigrations.ApplyAll(db);
+
+        Assert.Null(db.Postings.Include(p => p.Dealer).Single(p => p.VehicleVin == "JTDEBRBE8LJ019584").Dealer);
+    }
 }
