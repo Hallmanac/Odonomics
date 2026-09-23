@@ -87,6 +87,46 @@ public class RedFlagsEvaluatorTests
     }
 
     [Fact]
+    public void Evaluate_MileageDropWithAReadingBeforeIt_NamesTheReadingsAroundTheOutlier()
+    {
+        // 85,960 -> 181,407 -> 86,663: the 181,407 is almost certainly a typed 81,407, so the flag
+        // names the readings either side of it rather than only the 181,407-to-86,663 drop.
+        DateTimeOffset day1 = new(2025, 10, 16, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Dealer A", day1, day1, 20000m, 85960),
+            new("Dealer B", day2, day2, 20000m, 181407),
+            new("Dealer C", day3, day3, 20000m, 86663),
+        ];
+
+        EvaluationResult result = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        RedFlag flag = Assert.Single(result.Flags);
+        Assert.Equal("mileage-drop", flag.ShortTag);
+        Assert.Contains("one listing showed 181,407 miles between readings of 85,960 and 86,663", flag.Detail);
+    }
+
+    [Fact]
+    public void Evaluate_MileageDropWithNoReadingBeforeIt_KeepsTheDroppedFromWording()
+    {
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Dealer A", day1, day1, 20000m, 181407),
+            new("Dealer B", day2, day2, 20000m, 86663),
+        ];
+
+        EvaluationResult result = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        RedFlag flag = Assert.Single(result.Flags);
+        Assert.Equal("mileage-drop", flag.ShortTag);
+        Assert.Contains("mileage dropped from 181,407 to 86,663 between listings", flag.Detail);
+    }
+
+    [Fact]
     public void Evaluate_MileageNeverDecreases_NoFlag()
     {
         DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
