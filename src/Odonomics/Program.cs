@@ -64,17 +64,20 @@ showCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(showCommand);
 
-var researchVinsArgument = new Argument<string[]>("vins") { Description = "specific VINs to research; omit to research every vehicle in the ledger that passes the scenario's filters and hasn't been researched in the last seven days", Arity = ArgumentArity.ZeroOrMore };
+var researchVinsArgument = new Argument<string[]>("vins") { Description = "specific VINs to research; omit to research every vehicle in the ledger that passes the scenario's filters", Arity = ArgumentArity.ZeroOrMore };
+var researchQuietOption = new Option<bool>("--quiet") { Description = "replace the per-vehicle progress lines with a single counter line that overwrites itself" };
 var researchCommand = new Command("research", "NHTSA safety ratings and Marketcheck VIN history for one or more vehicles in one go, with a red-flags summary at the end");
 researchCommand.Add(researchVinsArgument);
 researchCommand.Add(scenarioOption);
 researchCommand.Add(refreshOption);
+researchCommand.Add(researchQuietOption);
 researchCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     string[] vins = parseResult.GetValue(researchVinsArgument) ?? [];
     string scenarioPath = parseResult.GetValue(scenarioOption)!;
     bool refresh = parseResult.GetValue(refreshOption);
-    return await ResearchCommand.RunAsync(scenarioPath, vins, refresh, cancellationToken);
+    bool quiet = parseResult.GetValue(researchQuietOption);
+    return await ResearchCommand.RunAsync(scenarioPath, vins, refresh, quiet, cancellationToken);
 });
 rootCommand.Add(researchCommand);
 

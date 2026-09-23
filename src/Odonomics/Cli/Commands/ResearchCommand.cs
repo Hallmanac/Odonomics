@@ -10,9 +10,12 @@ namespace Odonomics.Cli.Commands;
 
 public static class ResearchCommand
 {
+    /// <summary>Paced only between vehicles that actually hit NHTSA or Marketcheck this run: a
+    /// cached vehicle makes no network call, so pausing after one too would only slow down a batch
+    /// where most of the filtered set is already cached, for no benefit to either API.</summary>
     private static readonly TimeSpan PauseBetweenVehicles = TimeSpan.FromSeconds(1);
 
-    public static async Task<int> RunAsync(string scenarioPath, IReadOnlyList<string> vins, bool refresh, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string scenarioPath, IReadOnlyList<string> vins, bool refresh, bool quiet, CancellationToken cancellationToken)
     {
         using OdonomicsDbContext db = LedgerFactory.Open();
 
@@ -42,10 +45,14 @@ public static class ResearchCommand
         }
         else
         {
+            // Every vehicle that passes the scenario's filters, whether or not it needs a refresh:
+            // NeedsRefresh is decided per vehicle inside the loop below, where it also picks the
+            // fetch-vs-cache path. Filtering it out here too would drop an already-cached vehicle
+            // from the summary entirely, which is the whole reason the summary used to cover only
+            // the vehicles fetched that run instead of the whole filtered set.
             Scenario scenario = ScenarioLoader.Load(scenarioPath);
             vehicles = [.. allVehicles.Where(v =>
-                PassesScenarioFilters(v, scenario, VehiclePricing.LowestCurrentPrice(v, latestCoverageBySource))
-                && VinResearchService.NeedsRefresh(v.VinRecord, refresh))];
+                PassesScenarioFilters(v, scenario, VehiclePricing.LowestCurrentPrice(v, latestCoverageBySource)))];
         }
 
         if (vehicles.Count == 0)
@@ -62,14 +69,16 @@ public static class ResearchCommand
         int fullyResearched = 0;
         int partiallyResearched = 0;
         int unreachable = 0;
+        int fetchedCount = 0;
+        int cachedCount = 0;
 
         for (int i = 0; i < vehicles.Count; i++)
         {
             VehicleEntity vehicle = vehicles[i];
             string label = $"{vehicle.Year} {vehicle.Make} {vehicle.Model} ({vehicle.Vin})";
+            bool usingCache = !VinResearchService.NeedsRefresh(vehicle.VinRecord, refresh);
             try
             {
-                bool usingCache = !VinResearchService.NeedsRefresh(vehicle.VinRecord, refresh);
                 VinResearchResult research = usingCache
                     ? VinResearchService.FromCached(vehicle.VinRecord!)
                     : await researchService.RefreshAsync(db, vehicle, refresh, cancellationToken);
@@ -90,33 +99,59 @@ public static class ResearchCommand
                     tags.Add("partial");
                 }
 
-                summaryEntries.Add(new ResearchSummaryEntry(vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Vin, tags));
+                ResearchSource source = usingCache ? ResearchSource.Cached : ResearchSource.Fetched;
+                summaryEntries.Add(new ResearchSummaryEntry(vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Vin, tags, source));
+                if (usingCache)
+                {
+                    cachedCount++;
+                }
+                else
+                {
+                    fetchedCount++;
+                }
 
                 if (!anyPieceFailed)
                 {
                     fullyResearched++;
-                    string source = usingCache ? "cached" : "researched";
-                    string flagSummary = redFlags.Count == 0 ? "no red flags" : $"{redFlags.Count} red flag(s)";
-                    AnsiConsole.MarkupLineInterpolated($"{label}: {source}, {flagSummary}");
+                    if (!quiet && !usingCache)
+                    {
+                        AnsiConsole.WriteLine(ResearchProgressLine.Format(label, tags));
+                    }
                 }
                 else
                 {
                     partiallyResearched++;
-                    string sentence = ComposePartialResultSentence(research.Safety, research.Recalls, research.Complaints);
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]{label}: {sentence}[/]");
+                    if (!quiet)
+                    {
+                        string sentence = ComposePartialResultSentence(research.Safety, research.Recalls, research.Complaints);
+                        AnsiConsole.MarkupLineInterpolated($"[yellow]{label}: {sentence}[/]");
+                    }
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 unreachable++;
-                summaryEntries.Add(new ResearchSummaryEntry(vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Vin, ["unreachable"]));
-                AnsiConsole.MarkupLineInterpolated($"[red]{label}: could not be reached ({ex.Message})[/]");
+                summaryEntries.Add(new ResearchSummaryEntry(vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Vin, ["unreachable"], ResearchSource.Unreachable));
+                if (!quiet)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]{label}: could not be reached ({ex.Message})[/]");
+                }
             }
 
-            if (i < vehicles.Count - 1)
+            if (quiet)
+            {
+                ResearchProgressCounter.Write(AnsiConsole.Console, i + 1, vehicles.Count, fetchedCount, cachedCount, unreachable);
+            }
+
+            if (i < vehicles.Count - 1 && !usingCache)
             {
                 await Task.Delay(PauseBetweenVehicles, cancellationToken);
             }
+        }
+
+        if (quiet)
+        {
+            ResearchProgressCounter.Finish(AnsiConsole.Console);
         }
 
         AnsiConsole.WriteLine();
