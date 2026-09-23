@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Odonomics.Domain;
 using Odonomics.Marketcheck;
 using Odonomics.Nhtsa;
@@ -141,6 +142,8 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
         {
             record.HistoryRawJson = JsonSerializer.Serialize(history.PriorListings);
             record.CurrentListingDaysOnMarket = history.CurrentListingDaysOnMarket;
+
+            await AddMileageCorrectionNotesAsync(db, vehicle.Vin, history.PriorListings, cancellationToken);
         }
 
         bool anyPieceSucceeded = recalls.CouldNotFetchReason is null
@@ -218,14 +221,42 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
         return RedFlagsEvaluator.Evaluate(
             [.. recalls.Select(r => new RecallForFlagging(r.RemedyAvailable))],
             record.SafetyOverallRating,
-            [.. priorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.Price, l.Mileage))],
-            currentPrice);
+            [.. priorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))],
+            currentPrice).Flags;
     }
 
     public static IReadOnlyList<RedFlag> RedFlags(VinResearchResult research, decimal? currentPrice) =>
         RedFlagsEvaluator.Evaluate(
             [.. research.Recalls.Entries.Select(r => new RecallForFlagging(r.RemedyAvailable))],
             research.Safety.OverallRating,
-            [.. research.History.PriorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.Price, l.Mileage))],
-            currentPrice);
+            [.. research.History.PriorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))],
+            currentPrice).Flags;
+
+    /// <summary>Persists any mileage-correction note (see <see cref="RedFlagsEvaluator.Evaluate"/>'s
+    /// <see cref="EvaluationResult.Notes"/>) that isn't already on the vehicle, the same way an
+    /// operator's own `odo note` would, so a same-seller odometer correction shows up in `odo show`'s
+    /// notes list instead of silently vanishing once it's excluded from the mileage-drop flag. Checks
+    /// the database directly rather than <see cref="VehicleEntity.Notes"/>, since a caller of
+    /// <see cref="RefreshAsync"/> is not guaranteed to have included that navigation.</summary>
+    private static async Task AddMileageCorrectionNotesAsync(
+        OdonomicsDbContext db, string vin, IReadOnlyList<VinHistoryListing> priorListings, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> notes = RedFlagsEvaluator.Evaluate(
+            [], null,
+            [.. priorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))],
+            null).Notes;
+        if (notes.Count == 0)
+        {
+            return;
+        }
+
+        HashSet<string> existingNoteTexts = [.. await db.Notes.Where(n => n.VehicleVin == vin).Select(n => n.Text).ToListAsync(cancellationToken)];
+        foreach (string noteText in notes)
+        {
+            if (existingNoteTexts.Add(noteText))
+            {
+                db.Notes.Add(new NoteEntity { VehicleVin = vin, Text = noteText, CreatedAt = DateTimeOffset.UtcNow });
+            }
+        }
+    }
 }

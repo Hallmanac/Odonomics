@@ -105,6 +105,56 @@ public class VinResearchServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_SameSellerConsecutiveDayMileageCorrection_AddsANoteAndSkipsTheFlagWithoutDuplicatingOnRerun()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        VehicleEntity vehicle = Vehicle();
+        db.Vehicles.Add(vehicle);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        string fixtureRoot = Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures");
+        const string historyJson = """
+            [
+                {"seller_name":"Daytona Toyota","first_seen_at_date":"2026-09-09T00:00:00.000Z","last_seen_at_date":"2026-09-09T00:00:00.000Z","price":40799,"miles":4703,"vdp_url":"https://example.com/a"},
+                {"seller_name":"Daytona Toyota","first_seen_at_date":"2026-09-10T00:00:00.000Z","last_seen_at_date":"2026-09-18T00:00:00.000Z","price":40799,"miles":3852,"vdp_url":"https://example.com/b"}
+            ]
+            """;
+        const string activeSearchJson = """{"num_found":0,"listings":[]}""";
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            [$"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{Vin}?format=json"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "decode-1HGCM82633A004352.json")),
+            ["https://api.nhtsa.gov/recalls/recallsByVehicle?make=Honda&model=Insight&modelYear=2020"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "recalls-honda-insight-2020.json")),
+            ["https://api.nhtsa.gov/complaints/complaintsByVehicle?make=Honda&model=Insight&modelYear=2020"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "complaints-honda-insight-2020.json")),
+            ["https://api.nhtsa.gov/SafetyRatings/modelyear/2020/make/Honda/model/Insight"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "safety-ratings-lookup-honda-insight-2020.json")),
+            ["https://api.nhtsa.gov/SafetyRatings/VehicleId/14485"] =
+                await File.ReadAllTextAsync(Path.Combine(fixtureRoot, "nhtsa", "safety-ratings-detail-14485.json")),
+            ["https://mc-api.marketcheck.com/v2/history/car/1HGCM82633A004352?api_key=test-key"] = historyJson,
+            ["https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&vin=1HGCM82633A004352"] = activeSearchJson,
+        });
+        var http = new HttpClient(handler);
+        var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient("test-key", http));
+
+        VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
+
+        IReadOnlyList<RedFlag> flags = VinResearchService.RedFlags(result, currentPrice: null);
+        Assert.DoesNotContain(flags, f => f.ShortTag == "mileage-drop");
+
+        List<NoteEntity> notes = await db.Notes.Where(n => n.VehicleVin == Vin).ToListAsync(CancellationToken.None);
+        NoteEntity note = Assert.Single(notes);
+        Assert.Equal("mileage corrected 4,703 to 3,852 at Daytona Toyota on Sep 10", note.Text);
+
+        // A second refresh over the same history must not add a duplicate note.
+        await service.RefreshAsync(db, vehicle, refresh: true, CancellationToken.None);
+        List<NoteEntity> notesAfterSecondRun = await db.Notes.Where(n => n.VehicleVin == Vin).ToListAsync(CancellationToken.None);
+        Assert.Single(notesAfterSecondRun);
+    }
+
+    [Fact]
     public async Task RefreshAsync_MarketcheckHasNoKey_KeepsPreviousHistoryButStillStampsResearchedAt()
     {
         using var testDb = new LedgerTestDatabase();
