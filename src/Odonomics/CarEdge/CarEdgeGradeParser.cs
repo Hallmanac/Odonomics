@@ -57,9 +57,11 @@ public static partial class CarEdgeGradeParser
         signals.Sort((a, b) => a.Start.CompareTo(b.Start));
 
         // Scope the dealer-name check to the text between the previous card's own signal (or the
-        // start of the page) and this one, so a multi-result page can't match this card's letter to
-        // a dealer named lower down in a different result's card.
-        int precedingStart = 0;
+        // end of the results-found line) and this one, so a multi-result page can't match this
+        // card's letter to a dealer named lower down in a different result's card, and so the
+        // first card isn't matched against the page's own "Search: "<query>"" echo above the
+        // results-found line, which always contains the searched dealer's name.
+        int precedingStart = resultsFound.Index + resultsFound.Length;
         foreach ((int start, int end, Match match, bool graded) in signals)
         {
             string precedingBlock = pageText[precedingStart..start];
