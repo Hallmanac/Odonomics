@@ -223,6 +223,16 @@ public class LedgerDataMigrationsTests
         DealerLocation = dealerLocation,
     };
 
+    // The upsert drops the location for Carvana names, so the located rows an older walk left behind
+    // have to be seeded directly to exercise the fold.
+    private static DealerEntity LocatedDealer(string name, string location) => new()
+    {
+        Name = name,
+        Location = location,
+        NormalizedName = name.ToUpperInvariant(),
+        NormalizedLocation = location.Replace(",", "").ToUpperInvariant(),
+    };
+
     private static void AddHistory(OdonomicsDbContext db, string vin, params VinHistoryListing[] listings)
     {
         db.VinRecords.Add(new VinRecordEntity
@@ -253,9 +263,17 @@ public class LedgerDataMigrationsTests
         // Undealered, and the only hub its history names is a stay from months before the walk.
         await upsert.UpsertAsync(CarvanaCandidate("JTDEBRBE8LJ019584"), run, CancellationToken.None);
         // The older walk stored the pickup city as the dealer's location; history names a hub.
-        await upsert.UpsertAsync(CarvanaCandidate("JTDBCMFE9PJ003977", "Carvana", "Orlando, FL"), run, CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("JTDBCMFE9PJ003977"), run, CancellationToken.None);
         // The same located row, and no history at all.
-        await upsert.UpsertAsync(CarvanaCandidate("4T1B21HK8KU518914", "Carvana", "Orlando, FL"), run, CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("4T1B21HK8KU518914"), run, CancellationToken.None);
+        DealerEntity located = LocatedDealer("Carvana", "Orlando, FL");
+        db.Dealers.Add(located);
+        foreach (PostingEntity posting in db.Postings.Where(p => p.VehicleVin == "JTDBCMFE9PJ003977" || p.VehicleVin == "4T1B21HK8KU518914"))
+        {
+            posting.Dealer = located;
+        }
+
+        await db.SaveChangesAsync(CancellationToken.None);
         AddHistory(db, "JTDEAMDE3NJ058833", Stay("Carvana Winder", new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 23, 1, 25, 0, TimeSpan.Zero)));
         AddHistory(db, "JTDEBRBE8LJ019584", Stay("Carvana Fairburn", new DateTimeOffset(2026, 1, 7, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 2, 26, 0, 0, 0, TimeSpan.Zero)));
         AddHistory(db, "JTDBCMFE9PJ003977", Stay("Carvana Belton", new DateTimeOffset(2026, 9, 22, 2, 28, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 23, 1, 34, 0, TimeSpan.Zero)));
@@ -269,8 +287,11 @@ public class LedgerDataMigrationsTests
         Assert.Equal("Carvana", dealerByVin["4T1B21HK8KU518914"]);
 
         DealerEntity bare = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana"));
+        Assert.NotEqual(located.Id, bare.Id);
+        Assert.DoesNotContain(db.Dealers, d => d.Id == located.Id);
         Assert.Equal("", bare.NormalizedLocation);
         Assert.Null(bare.Location);
+        Assert.Equal(2, db.Postings.Count(p => p.DealerId == bare.Id));
         Assert.All(db.Dealers.Where(d => d.NormalizedName.StartsWith("CARVANA ")), hub =>
         {
             Assert.Equal("", hub.NormalizedLocation);
@@ -290,9 +311,17 @@ public class LedgerDataMigrationsTests
         db.Runs.Add(run);
         await db.SaveChangesAsync(CancellationToken.None);
 
-        await upsert.UpsertAsync(CarvanaCandidate("JTDEAMDE3NJ058833", "Carvana", "Orlando, FL"), run, CancellationToken.None);
-        await upsert.UpsertAsync(CarvanaCandidate("JTDEBRBE8LJ019584", "Carvana", "Atlanta, GA"), run, CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEAMDE3NJ058833"), run, CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEBRBE8LJ019584"), run, CancellationToken.None);
         await upsert.UpsertAsync(CarvanaCandidate("4T1B21HK8KU518914"), run, CancellationToken.None);
+        DealerEntity orlando = LocatedDealer("Carvana", "Orlando, FL");
+        DealerEntity atlanta = LocatedDealer("Carvana", "Atlanta, GA");
+        DealerEntity existingBare = new() { Name = "Carvana", NormalizedName = "CARVANA", NormalizedLocation = "" };
+        db.Dealers.AddRange(orlando, atlanta, existingBare);
+        Dictionary<string, PostingEntity> postingByVin = db.Postings.ToDictionary(p => p.VehicleVin);
+        postingByVin["JTDEAMDE3NJ058833"].Dealer = orlando;
+        postingByVin["JTDEBRBE8LJ019584"].Dealer = atlanta;
+        await db.SaveChangesAsync(CancellationToken.None);
         // The dealer grade run Brian may have made before this migration: a located row graded from
         // whichever hub's card matched its city, and the bare row stamped as checked too.
         DateTimeOffset gradedAt = new(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
@@ -311,7 +340,9 @@ public class LedgerDataMigrationsTests
         LedgerDataMigrations.ApplyAll(db);
 
         DealerEntity bare = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana"));
+        Assert.Equal(existingBare.Id, bare.Id);
         Assert.Equal("", bare.NormalizedLocation);
+        Assert.Null(bare.Location);
         Assert.Null(bare.Grade);
         Assert.Null(bare.GradeReason);
         Assert.Null(bare.GradeCheckedAt);
@@ -335,13 +366,17 @@ public class LedgerDataMigrationsTests
         var run = Run(WalkedAt, sources: "carvana:Prius");
         db.Runs.Add(run);
         await db.SaveChangesAsync(CancellationToken.None);
-        await upsert.UpsertAsync(CarvanaCandidate("JTDEAMDE3NJ058833", "Carvana", "Orlando, FL"), run, CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEAMDE3NJ058833"), run, CancellationToken.None);
+        DealerEntity located = LocatedDealer("Carvana", "Orlando, FL");
+        db.Postings.Single().Dealer = located;
+        await db.SaveChangesAsync(CancellationToken.None);
 
         LedgerDataMigrations.ApplyAll(db);
 
         DealerEntity bare = Assert.Single(db.Dealers);
         Assert.Equal("Carvana", bare.Name);
         Assert.Equal("", bare.NormalizedLocation);
+        Assert.Null(bare.Location);
         Assert.Equal(bare.Id, Assert.Single(db.Postings).DealerId);
     }
 
