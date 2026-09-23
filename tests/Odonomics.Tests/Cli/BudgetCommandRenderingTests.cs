@@ -46,7 +46,7 @@ public class BudgetCommandRenderingTests
         string output = RenderWithNoColor(BuildScenario());
         string[] lines = SplitLines(output);
 
-        string prose = string.Join(' ', lines.Select(line => line.Trim()));
+        string prose = JoinTrimmed(lines);
         Assert.Contains(
             "Running costs before any payment: about $279 a month (insurance $95, fuel $64, maintenance $70, reserve $50)",
             prose);
@@ -68,7 +68,7 @@ public class BudgetCommandRenderingTests
             InsuranceMonthlyByModel = new Dictionary<string, decimal?> { ["Honda Insight"] = 90m, ["Toyota Prius"] = 90.8m },
         };
 
-        string prose = string.Join(' ', SplitLines(RenderWithNoColor(scenario)).Select(line => line.Trim()));
+        string prose = JoinTrimmed(SplitLines(RenderWithNoColor(scenario)));
 
         Assert.Contains(
             "about $275 a month (insurance $91, fuel $64, maintenance $70, reserve $50)",
@@ -97,14 +97,17 @@ public class BudgetCommandRenderingTests
         string[] pricierLines = SplitLines(RenderWithNoColor(pricierGas));
 
         // Fuel goes from $64 to 12000 / 50 * $4.80 / 12 = $96, so the total goes from $279 to $311.
-        Assert.Contains(baselineLines, line => line.Contains("about $279 a month (insurance $95, fuel $64,"));
-        Assert.Contains(pricierLines, line => line.Contains("about $311 a month (insurance $95, fuel $96,"));
+        // Joined into one string so the assertion does not depend on where the 80-column wrap falls.
+        Assert.Contains("about $279 a month (insurance $95, fuel $64,", JoinTrimmed(baselineLines));
+        Assert.Contains("about $311 a month (insurance $95, fuel $96,", JoinTrimmed(pricierLines));
 
         decimal baselinePrice = ParseMoney(RowCells(baselineLines, "$400")[2]);
         decimal pricierPrice = ParseMoney(RowCells(pricierLines, "$400")[2]);
         Assert.True(pricierPrice < baselinePrice, $"expected {pricierPrice} to be below {baselinePrice}");
         Assert.Equal("$89", RowCells(pricierLines, "$400")[1]);
     }
+
+    private static string JoinTrimmed(IEnumerable<string> lines) => string.Join(' ', lines.Select(line => line.Trim()));
 
     private static string RenderWithNoColor(Scenario scenario)
     {
