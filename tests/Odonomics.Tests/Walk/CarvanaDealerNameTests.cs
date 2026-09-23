@@ -86,6 +86,18 @@ public class CarvanaDealerNameTests
         Assert.True(dealer.IsFallback);
     }
 
+    [Theory]
+    [InlineData("Carvana")]
+    [InlineData("  CARVANA ")]
+    public void ResolveDealer_ExtractionEchoesTheSitesOwnNameWithAPickupLocation_IsTheLocationlessFallback(string extractedName)
+    {
+        ResolvedDealer dealer = WalkSites.Carvana.ResolveDealer(extractedName, "Orlando, FL");
+
+        Assert.Equal("Carvana", dealer.Name);
+        Assert.Null(dealer.Location);
+        Assert.True(dealer.IsFallback);
+    }
+
     [Fact]
     public void ResolveDealer_PageNamesAHub_KeepsTheHubAndItsLocationAndIsNotTheFallback()
     {
