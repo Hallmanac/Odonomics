@@ -56,7 +56,7 @@ public static class RankRenderer
         int ByTenYearAverage(Score a, Score b) => a.Cost!.TenYearAverageMonthly.Expected.CompareTo(b.Cost!.TenYearAverageMonthly.Expected);
         ranked.Sort(ByTenYearAverage);
 
-        RenderUnmetTargets(console, ranked, targetMonthlyBudgets);
+        RenderUnmetTargets(console, [.. ranked, .. overBudget], targetMonthlyBudgets);
         RenderRanked(console, $"Ranked ({ranked.Count})", ranked, research);
 
         if (budget is decimal budgetValue && overBudget.Count > 0)
@@ -73,16 +73,19 @@ public static class RankRenderer
     /// <summary>Says plainly, above the Ranked section, which of the scenario's target monthly
     /// budgets no ranked vehicle meets during the loan, and points at <c>odo budget</c> for the
     /// purchase price each target allows. Deliberately driven by the scenario's own targets and
-    /// not by rank's optional --budget flag. Printed as markup so Spectre wraps it at word
-    /// boundaries: a "$590-$626" band has no space in it, so a dollar figure is never split.</summary>
-    private static void RenderUnmetTargets(IAnsiConsole console, IReadOnlyList<Score> ranked, IReadOnlyList<decimal> targetMonthlyBudgets)
+    /// not by rank's optional --budget flag, so it takes every vehicle that would have ranked,
+    /// including those the flag moved into the over-budget section: a tight --budget is exactly
+    /// when no vehicle meets a target. Prints nothing only when there is no vehicle to name. It
+    /// is written as markup for its yellow style; a "$590-$626" band has no space in it, so
+    /// Spectre's word wrapping never splits a dollar figure.</summary>
+    private static void RenderUnmetTargets(IAnsiConsole console, IReadOnlyList<Score> rankable, IReadOnlyList<decimal> targetMonthlyBudgets)
     {
-        if (ranked.Count == 0)
+        if (rankable.Count == 0)
         {
             return;
         }
 
-        Band cheapest = ranked.Select(s => s.Cost!.DuringLoanMonthly).OrderBy(band => band.Expected).First();
+        Band cheapest = rankable.Select(s => s.Cost!.DuringLoanMonthly).OrderBy(band => band.Expected).First();
         List<decimal> unmet = [.. targetMonthlyBudgets
             .Where(target => cheapest.Expected > target)
             .Distinct()
