@@ -288,6 +288,15 @@ is work for a future day.
   these URLs by guessing needs to validate the returned vehicle actually matches what was asked
   for regardless of which slug it guessed, which is exactly what
   `QueryGroup.MatchesExtractedVehicle` does for every page-walk candidate.
+  **Correction (2026-09-22): the underscored slug is confirmed working after all, from a
+  different browser session than this spike's.** Brian ticked "Corolla Hybrid" by hand in his own
+  warmed Edge profile and the URL it built was `models[]=toyota-corolla_hybrid`, the exact
+  underscored form this entry says didn't apply (project home `notes/run-session-2026-09-22.md`,
+  "Facet URLs from Brian"). What differs between that request and this spike's (cookies, an A/B
+  bucket, some other session state) is unconfirmed, but the operator-built URL is what the walk
+  now trusts; see `WalkSites.cs`'s class remarks and `README.md`'s walk section for how. The
+  `MatchesExtractedVehicle`-as-safety-net conclusion two paragraphs up still holds regardless of
+  which facet value turns out to work.
 - **Craigslist's canonical listing URL has moved.** Individual postings are no longer at the
   classic `<city>.craigslist.org/cto/d/...html` shape; they're at
   `https://www.craigslist.org/view/d/<slug>/<id>`, discoverable only via the JSON-LD-adjacent

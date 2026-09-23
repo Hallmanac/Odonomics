@@ -4,13 +4,18 @@ using System.Text.RegularExpressions;
 namespace Odonomics.Walk;
 
 /// <summary>One walk target's search-URL builder, detail-link pattern, and how much the walk
-/// should over-fetch candidate links to make up for a search URL that cannot filter down to the
-/// exact requested model. <see cref="DetailLinkOverfetchMultiplier"/> is 1 (no over-fetch) for a
-/// site whose search URL already isolates the requested model, and greater than 1 for a site
-/// whose search results can mix in other models the walk then has to reject.</summary>
+/// should over-fetch candidate links. <see cref="DetailLinkOverfetchMultiplier"/> stays above 1
+/// even for a site whose search URL isolates the requested model, since a page rejected as
+/// <see cref="Odonomics.Walk.DetailPageOutcome.Repeat"/> or (rarely, for a hybrid-only-from-year
+/// model, see <see cref="BuildSearchUrl"/>'s hybridOnlyFromModelYear parameter)
+/// <see cref="Odonomics.Walk.DetailPageOutcome.NotMatching"/> needs a spare link to replace it
+/// with rather than shortening the pair; see README.md's walk section for the full reasoning.
+/// <paramref name="BuildSearchUrl"/> takes make, model, zip, radius, and whether the scenario
+/// marks this model's base model as hybrid-only from some year onward (see
+/// <see cref="Odonomics.Domain.Scenario.HybridOnlyFromModelYear"/>).</summary>
 public sealed record WalkSite(
     string Name,
-    Func<string, string, string, int, string> BuildSearchUrl,
+    Func<string, string, string, int, bool, string> BuildSearchUrl,
     Regex DetailUrlPattern,
     int DetailLinkOverfetchMultiplier = 1);
 
@@ -25,11 +30,22 @@ public sealed record WalkSite(
 /// the hybrid facet by hand: his warmed Edge profile built and used that exact URL (project home
 /// notes/run-session-2026-09-22.md, "Facet URLs from Brian"). What actually differs between the
 /// two requests (cookies, an A/B bucket, some other session state) is unconfirmed; the
-/// operator-built URL is what the walk now trusts. cars.com's model facet joins every word of the
-/// model name with underscores after the make and a hyphen ("Toyota Corolla Hybrid" ->
-/// models[]=toyota-corolla_hybrid), and carvana has no separate hybrid model at all; it filters
-/// its base-model search by fuel type (parentModels: "Corolla" plus fuelTypes: ["Hybrid"])
-/// instead.</summary>
+/// operator-built URL is what the walk now trusts. cars.com's model facet lowercases the model
+/// name and replaces every run of non-alphanumeric characters with an underscore, after the make
+/// and a hyphen ("Toyota Corolla Hybrid" -> models[]=toyota-corolla_hybrid, "Honda CR-V Hybrid" ->
+/// models[]=honda-cr_v_hybrid), and carvana has no separate hybrid model at all; it filters its
+/// base-model search by fuel type (parentModels: "Corolla" plus fuelTypes: ["Hybrid"]) instead.
+/// cars.com's hybrid facet is a distinct model bucket, not every hybrid instance of the base
+/// model: a scenario's HybridOnlyFromModelYear rule exists because a base model can go
+/// hybrid-only from some year on without cars.com ever moving those listings into the hybrid
+/// bucket (Toyota's 2025+ Camry is filed under plain "camry", not "camry_hybrid"; the repo's own
+/// recorded walk output confirms it). For a model with that rule set, cars.com's search URL below
+/// queries the base model instead of the hybrid facet, so those listings are in the pool at all;
+/// ListingQuery.MatchesExtractedVehicle is what then accepts the ones at or after the hybrid-only
+/// year and rejects the genuinely-gas ones below it. Carvana needs no equivalent fallback: its
+/// fuelTypes filter matches each listing's actual fuel type, not its title text, so a
+/// hybrid-only-from-year model's newer listings already come back correctly under the base-model
+/// query it always uses.</summary>
 public static class WalkSites
 {
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");
@@ -44,11 +60,12 @@ public static class WalkSites
     /// same posting again instead of minting a new one every time the session id changes.</summary>
     public static string CanonicalDetailUrl(string href) => new Uri(href).GetLeftPart(UriPartial.Path);
 
-    /// <summary>cars.com's model-facet value for a model name: every word lowercased and joined
-    /// with underscores ("Corolla Hybrid" -> "corolla_hybrid", "Corolla Cross" ->
-    /// "corolla_cross"), matching the exact value the site's own browser puts in models[] when
-    /// that model is ticked in the left-column facet.</summary>
-    private static string ModelFacetWords(string model) => model.ToLowerInvariant().Replace(" ", "_");
+    /// <summary>cars.com's model-facet value for a model name: lowercased, with every run of
+    /// characters that isn't a letter or digit collapsed to a single underscore ("Corolla Hybrid"
+    /// -> "corolla_hybrid", "Corolla Cross" -> "corolla_cross", "CR-V Hybrid" -> "cr_v_hybrid"),
+    /// matching the exact value the site's own browser puts in models[] when that model is ticked
+    /// in the left-column facet.</summary>
+    private static string ModelFacetWords(string model) => Regex.Replace(model.ToLowerInvariant(), "[^a-z0-9]+", "_");
 
     /// <summary>The scenario model with a trailing " Hybrid" removed, for carvana's parentModels
     /// facet: carvana has no separate hybrid model, so the base model plus fuelTypes=Hybrid is
@@ -71,10 +88,11 @@ public static class WalkSites
 
     public static readonly WalkSite CarsCom = new(
         "cars.com",
-        (make, model, zip, radius) =>
+        (make, model, zip, radius, hybridOnlyFromModelYear) =>
         {
             string makeSlug = Slugify(make);
-            string modelSlug = $"{makeSlug}-{ModelFacetWords(model)}";
+            string facetModel = hybridOnlyFromModelYear ? BaseModelName(model) : model;
+            string modelSlug = $"{makeSlug}-{ModelFacetWords(facetModel)}";
             return $"https://www.cars.com/shopping/results/?stock_type=used&makes[]={makeSlug}" +
                    $"&models[]={modelSlug}&zip={zip}&maximum_distance={radius}";
         },
@@ -83,7 +101,7 @@ public static class WalkSites
 
     public static readonly WalkSite Carvana = new(
         "carvana",
-        (make, model, zip, _) =>
+        (make, model, zip, _, _) =>
         {
             string baseModel = BaseModelName(model);
             object filters = IsHybridVariant(model)

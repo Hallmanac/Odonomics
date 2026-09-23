@@ -9,7 +9,7 @@ public class WalkSitesTests
     [Fact]
     public void CarsCom_BuildSearchUrl_UsesMakeModelSlugZipAndRadius()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla", "32114", 50);
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla", "32114", 50, false);
 
         Assert.Equal(
             "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla&zip=32114&maximum_distance=50",
@@ -21,7 +21,7 @@ public class WalkSitesTests
     {
         // The exact facet value Brian's Edge browser built ticking "Corolla Hybrid"
         // (notes/run-session-2026-09-22.md, "Facet URLs from Brian"), minus its sid and sort.
-        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla Hybrid", "32833", 50);
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla Hybrid", "32833", 50, false);
 
         Assert.Equal(
             "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla_hybrid&zip=32833&maximum_distance=50",
@@ -31,7 +31,7 @@ public class WalkSitesTests
     [Fact]
     public void CarsCom_BuildSearchUrl_CamryHybrid_UnderscoresHybridWord()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Camry Hybrid", "32114", 50);
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Camry Hybrid", "32114", 50, false);
 
         Assert.Contains("models[]=toyota-camry_hybrid&", url);
     }
@@ -39,15 +39,26 @@ public class WalkSitesTests
     [Fact]
     public void CarsCom_BuildSearchUrl_MultiWordNonHybridModel_UnderscoresEveryWord()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla Cross", "32114", 50);
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla Cross", "32114", 50, false);
 
         Assert.Contains("models[]=toyota-corolla_cross&", url);
     }
 
     [Fact]
+    public void CarsCom_BuildSearchUrl_HyphenatedModel_UnderscoresTheHyphenToo()
+    {
+        // cars.com's own model-facet JSON carries "honda-cr_v_hybrid" and "toyota-c_hr", not the
+        // hyphenated "honda-cr-v_hybrid" a plain space-to-underscore replace would produce
+        // (spike/recorded/cars.com/day1/Honda-Insight-search.html).
+        string url = WalkSites.CarsCom.BuildSearchUrl("Honda", "CR-V Hybrid", "32114", 50, false);
+
+        Assert.Contains("models[]=honda-cr_v_hybrid&", url);
+    }
+
+    [Fact]
     public void CarsCom_BuildSearchUrl_HondaInsight_Unchanged()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl("Honda", "Insight", "32114", 50);
+        string url = WalkSites.CarsCom.BuildSearchUrl("Honda", "Insight", "32114", 50, false);
 
         Assert.Contains("models[]=honda-insight&", url);
     }
@@ -55,9 +66,25 @@ public class WalkSitesTests
     [Fact]
     public void CarsCom_BuildSearchUrl_ToyotaPrius_Unchanged()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Prius", "32114", 50);
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Prius", "32114", 50, false);
 
         Assert.Contains("models[]=toyota-prius&", url);
+    }
+
+    [Fact]
+    public void CarsCom_BuildSearchUrl_HybridOnlyFromModelYear_QueriesBaseModelNotHybridFacet()
+    {
+        // Toyota's 2025+ Camry is hybrid-only but cars.com never moved those listings into the
+        // "camry_hybrid" bucket (they're still filed under plain "camry"); this run's own
+        // recorded search.txt for the "toyota-camry" bucket lists eleven 2025/2026 Camrys with
+        // "Hybrid" nowhere in their titles. Querying the hybrid facet for a HybridOnlyFromModelYear
+        // model would silently exclude all of them, so the walk queries the base model instead and
+        // leaves ListingQuery.MatchesExtractedVehicle to accept the ones at or after the hybrid
+        // year.
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Camry Hybrid", "32114", 50, true);
+
+        Assert.Contains("models[]=toyota-camry&", url);
+        Assert.DoesNotContain("camry_hybrid", url);
     }
 
     [Fact]
@@ -76,7 +103,7 @@ public class WalkSitesTests
     [Fact]
     public void Carvana_BuildSearchUrl_NonHybridModel_HasNoFuelTypesFilter()
     {
-        string url = WalkSites.Carvana.BuildSearchUrl("Honda", "Insight", "32114", 50);
+        string url = WalkSites.Carvana.BuildSearchUrl("Honda", "Insight", "32114", 50, false);
 
         JsonElement filters = DecodeCvnaid(url);
         JsonElement makes = filters.GetProperty("filters").GetProperty("makes");
@@ -89,7 +116,7 @@ public class WalkSitesTests
     [Fact]
     public void Carvana_BuildSearchUrl_HybridModel_FiltersByBaseModelAndFuelType()
     {
-        string url = WalkSites.Carvana.BuildSearchUrl("Toyota", "Corolla Hybrid", "32114", 50);
+        string url = WalkSites.Carvana.BuildSearchUrl("Toyota", "Corolla Hybrid", "32114", 50, false);
 
         JsonElement filters = DecodeCvnaid(url);
         JsonElement makes = filters.GetProperty("filters").GetProperty("makes");
@@ -101,16 +128,28 @@ public class WalkSitesTests
     [Fact]
     public void Carvana_BuildSearchUrl_CorollaHybrid_CvnaidMatchesOperatorsBrowserValue()
     {
-        // Only the cvnaid payload here is attested against Brian's Edge browser
-        // (notes/run-session-2026-09-22.md, "Facet URLs from Brian"): the "/cars/filters?zip="
-        // route and the zip parameter are carried over from the walk's own URL shape, not
-        // independently confirmed against carvana's live site.
-        string url = WalkSites.Carvana.BuildSearchUrl("Toyota", "Corolla Hybrid", "32114", 50);
+        // The whole URL here, route and zip included, is attested against Brian's Edge browser
+        // (notes/run-session-2026-09-22.md, "Facet URLs from Brian"): that note's pasted carvana
+        // URL is exactly "https://www.carvana.com/cars/filters?zip=32114&cvnaid=...", so neither
+        // the route nor the zip parameter is a guess carried over from the walk's old URL shape.
+        string url = WalkSites.Carvana.BuildSearchUrl("Toyota", "Corolla Hybrid", "32114", 50, false);
 
         Assert.Equal(
             "https://www.carvana.com/cars/filters?zip=32114&cvnaid=" +
             "eyJmaWx0ZXJzIjp7Im1ha2VzIjpbeyJuYW1lIjoiVG95b3RhIiwicGFyZW50TW9kZWxzIjpbeyJuYW1lIjoiQ29yb2xsYSJ9XX1dLCJmdWVsVHlwZXMiOlsiSHlicmlkIl19fQ",
             url);
+    }
+
+    [Fact]
+    public void Carvana_BuildSearchUrl_HybridOnlyFromModelYear_StillFiltersByFuelType()
+    {
+        // Unlike cars.com, carvana's fuelTypes filter matches each listing's actual fuel type
+        // rather than its title text, so a hybrid-only-from-year model needs no base-model
+        // fallback: it already returns those listings under the normal hybrid query.
+        string withFlag = WalkSites.Carvana.BuildSearchUrl("Toyota", "Camry Hybrid", "32114", 50, true);
+        string withoutFlag = WalkSites.Carvana.BuildSearchUrl("Toyota", "Camry Hybrid", "32114", 50, false);
+
+        Assert.Equal(withoutFlag, withFlag);
     }
 
     [Fact]
