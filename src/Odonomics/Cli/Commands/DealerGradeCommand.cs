@@ -11,11 +11,13 @@ namespace Odonomics.Cli.Commands;
 /// same operator-launched browser connection `odo walk` uses (see <see cref="CdpConnection"/>),
 /// paced like the walk and pausing on a bot-defense challenge the same way. A dealer CarEdge
 /// positively says it has no rating for is stamped as checked, so it is never looked up again on a
-/// later run; a page that merely failed to parse is left unstamped so a later run retries it. Three
-/// consecutive CarEdge 404 pages mean the search URL itself is dead, not that three dealers in a row
-/// are unrateable, so the run stops there and exits non-zero rather than burning through the rest of
-/// the list against a URL that will keep failing; every dealer it never got to stays ungraded and
-/// eligible for the next run.</summary>
+/// later run; a page that merely failed to parse is left unstamped so a later run retries it, and
+/// so is one whose name-matched cards were all in another city or state, or that matched several
+/// same-named cards a partial location could not tell apart. Three consecutive CarEdge 404 pages
+/// mean the search URL itself is dead, not that three dealers in a row are unrateable, so the run
+/// stops there and exits non-zero rather than burning through the rest of the list against a URL
+/// that will keep failing; every dealer it never got to stays ungraded and eligible for the next
+/// run.</summary>
 public static class DealerGradeCommand
 {
     public static async Task<int> RunAsync(bool all, string? vin, CancellationToken cancellationToken)
@@ -85,6 +87,7 @@ public static class DealerGradeCommand
 
         int graded = 0;
         int ungraded = 0;
+        int unmatched = 0;
         int failed = 0;
         var deadSearchUrlGate = new ConsecutiveDeadSearchUrlGate();
         for (int i = 0; i < targets.Count; i++)
@@ -107,34 +110,36 @@ public static class DealerGradeCommand
                 await recorder.WriteAsync($"dealer-{dealer.Id}.txt", bodyText, cancellationToken);
 
                 CarEdgeGradeResult result = CarEdgeGradeParser.Parse(bodyText, dealer.Name, dealer.Location);
-                switch (result.Status)
+                DealerGradeOutcome outcome = ApplyResult(dealer, result, DateTimeOffset.UtcNow, url);
+                switch (outcome.Tally)
                 {
-                    case CarEdgeGradeStatus.Graded:
-                        dealer.Grade = result.Grade;
-                        dealer.GradeReason = result.Reason;
-                        dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
+                    case DealerGradeTally.Graded:
                         graded++;
-                        deadSearchUrlGate.RecordOtherOutcome();
-                        AnsiConsole.MarkupLineInterpolated($"{dealer.Name}: {result.Grade}");
-                        await db.SaveChangesAsync(cancellationToken);
                         break;
-                    case CarEdgeGradeStatus.NotFound:
-                        dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
+                    case DealerGradeTally.Ungraded:
                         ungraded++;
-                        deadSearchUrlGate.RecordOtherOutcome();
-                        AnsiConsole.MarkupLineInterpolated($"[grey]{dealer.Name}: not on CarEdge[/]");
-                        await db.SaveChangesAsync(cancellationToken);
                         break;
-                    case CarEdgeGradeStatus.Unrecognized:
+                    case DealerGradeTally.Unmatched:
+                        unmatched++;
+                        break;
+                    case DealerGradeTally.Failed:
                         failed++;
-                        deadSearchUrlGate.RecordOtherOutcome();
-                        AnsiConsole.MarkupLineInterpolated($"[yellow]{dealer.Name}: page didn't match a known CarEdge layout, will retry later[/]");
                         break;
-                    case CarEdgeGradeStatus.CarEdgeSearchUrlInvalid:
-                        failed++;
-                        deadSearchUrlGate.RecordDeadSearchUrl();
-                        AnsiConsole.MarkupLineInterpolated($"[red]{dealer.Name}: CarEdge search returned its own 404, search URL is dead: {url}[/]");
-                        break;
+                }
+
+                if (result.Status == CarEdgeGradeStatus.CarEdgeSearchUrlInvalid)
+                {
+                    deadSearchUrlGate.RecordDeadSearchUrl();
+                }
+                else
+                {
+                    deadSearchUrlGate.RecordOtherOutcome();
+                }
+
+                AnsiConsole.Write(new Text(outcome.Line + Environment.NewLine, new Style(outcome.Color)));
+                if (outcome.Stamped)
+                {
+                    await db.SaveChangesAsync(cancellationToken);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -155,8 +160,51 @@ public static class DealerGradeCommand
             }
         }
 
-        AnsiConsole.MarkupLineInterpolated($"graded {graded}, recorded {ungraded} ungraded, {failed} failed");
+        AnsiConsole.MarkupLineInterpolated($"graded {graded}, recorded {ungraded} ungraded, {unmatched} unmatched, {failed} failed");
         return deadSearchUrlGate.ShouldStop ? 1 : 0;
+    }
+
+    /// <summary>Applies what the parser made of a dealer's CarEdge page to that dealer, and says how
+    /// to report it. <see cref="DealerEntity.GradeCheckedAt"/> is stamped only for the two outcomes
+    /// that are final, a grade or CarEdge positively having none; every other outcome leaves the
+    /// dealer untouched so a later run looks it up again.</summary>
+    public static DealerGradeOutcome ApplyResult(DealerEntity dealer, CarEdgeGradeResult result, DateTimeOffset checkedAt, string searchUrl)
+    {
+        switch (result.Status)
+        {
+            case CarEdgeGradeStatus.Graded:
+                dealer.Grade = result.Grade;
+                dealer.GradeReason = result.Reason;
+                dealer.GradeCheckedAt = checkedAt;
+                return new DealerGradeOutcome($"{dealer.Name}: {result.Grade}", Color.Default, DealerGradeTally.Graded, Stamped: true);
+            case CarEdgeGradeStatus.NotFound:
+                dealer.GradeCheckedAt = checkedAt;
+                return new DealerGradeOutcome($"{dealer.Name}: not on CarEdge", Color.Grey, DealerGradeTally.Ungraded, Stamped: true);
+            case CarEdgeGradeStatus.Ambiguous:
+                return new DealerGradeOutcome(
+                    $"{dealer.Name}: several CarEdge dealers share this name and the location on record is too partial to pick one, left ungraded until a fuller location is known",
+                    Color.Yellow,
+                    DealerGradeTally.Unmatched,
+                    Stamped: false);
+            case CarEdgeGradeStatus.LocationMismatch:
+                return new DealerGradeOutcome(
+                    $"{dealer.Name}: name matched, location did not, will retry later",
+                    Color.Yellow,
+                    DealerGradeTally.Unmatched,
+                    Stamped: false);
+            case CarEdgeGradeStatus.CarEdgeSearchUrlInvalid:
+                return new DealerGradeOutcome(
+                    $"{dealer.Name}: CarEdge search returned its own 404, search URL is dead: {searchUrl}",
+                    Color.Red,
+                    DealerGradeTally.Failed,
+                    Stamped: false);
+            default:
+                return new DealerGradeOutcome(
+                    $"{dealer.Name}: page didn't match a known CarEdge layout, will retry later",
+                    Color.Yellow,
+                    DealerGradeTally.Failed,
+                    Stamped: false);
+        }
     }
 
     private static void PrintGrade(DealerEntity dealer)
@@ -171,3 +219,17 @@ public static class DealerGradeCommand
         }
     }
 }
+
+/// <summary>How a dealer's lookup counted toward the run's closing tally.</summary>
+public enum DealerGradeTally
+{
+    Graded,
+    Ungraded,
+    Unmatched,
+    Failed,
+}
+
+/// <summary>What <see cref="DealerGradeCommand.ApplyResult"/> decided: the line to print, its color,
+/// which tally the dealer counts toward, and whether the dealer's row was stamped and so needs
+/// saving.</summary>
+public sealed record DealerGradeOutcome(string Line, Color Color, DealerGradeTally Tally, bool Stamped);
