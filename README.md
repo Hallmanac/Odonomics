@@ -97,7 +97,8 @@ VIN, on top of the NHTSA decode/recalls/complaints `odo show` has always fetched
   cut short, so a long name list wraps onto lines under the group's row), price range, and mileage
   range, so a syndicated 50-row history still reads as a handful of lines. When Marketcheck reports
   no days on market for the current listing, `odo show` counts the days since the current seller
-  group (the one seen most recently) was first seen. Pass `--all-history` to also print the raw,
+  group (the one seen most recently) was first seen, provided that group was last seen within the
+  past 14 days; otherwise the car is treated as not currently listed and it prints `(unknown)`. Pass `--all-history` to also print the raw,
   one-row-per-sighting list underneath.
 
 Both are cached on the vehicle's ledger row with a fetched-at stamp, and are only re-fetched when
@@ -175,9 +176,11 @@ moved between them.
   car): it's recorded as a note on the vehicle instead (`mileage corrected 4,703 to 3,852 at Daytona
   Toyota on Sep 10`), the same as an operator's own `odo note` would, and does not raise a flag. A
   drop across two different seller groups, or across a real gap even at the same seller, still flags.
-  When a reading precedes the higher one, the flag names the readings on either side of it (`one
-  listing showed 181,407 miles between readings of 85,960 and 86,663`), since that shape is usually
-  one mistyped odometer value; with no earlier reading it reads `mileage dropped from X to Y`.
+  When the higher reading is a spike (an earlier reading no higher than the lower one precedes it),
+  the flag names the readings on either side of it, each with its date (`one listing showed 181,407
+  miles on 2026-02-01 between readings of 85,960 on 2025-10-16 and 86,663 on 2026-06-01`), since
+  that shape is usually one mistyped odometer value; with no such earlier reading it reads `mileage
+  dropped from X to Y between listings`.
 - **three or more distinct sellers within a 90-day window of the listing history** (`N-sellers`). A
   group with no dealer name at all is never counted, the same as a nameless listing was ignored
   before this rule existed: there's no evidence at all to tell it apart from a repeat of the seller

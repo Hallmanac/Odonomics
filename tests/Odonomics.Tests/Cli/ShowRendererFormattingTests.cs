@@ -56,6 +56,14 @@ public class ShowRendererFormattingTests
     }
 
     [Fact]
+    public void DaysOnMarket_NoReportedFigureAndCurrentGroupLastSeenLongAgo_IsUnknown()
+    {
+        SellerGroupSummary past = Group(new(2025, 10, 16, 0, 0, 0, TimeSpan.Zero), new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal("(unknown)", ShowRenderer.DaysOnMarket(null, [past], new(2026, 9, 23, 0, 0, 0, TimeSpan.Zero)));
+    }
+
+    [Fact]
     public void DaysOnMarket_NoReportedFigureAndNoGroup_IsUnknown()
     {
         Assert.Equal("(unknown)", ShowRenderer.DaysOnMarket(null, [], new(2026, 9, 23, 0, 0, 0, TimeSpan.Zero)));
