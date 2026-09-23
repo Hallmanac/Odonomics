@@ -141,11 +141,18 @@ public static class RankRenderer
     private static string RankedDetailLine(Score score, ResearchStatus? status, bool anyGraded)
     {
         CostBreakdown cost = score.Cost!;
-        string line = $"  {Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m)}  during {Format.Band(cost.DuringLoanMonthly)}  10yr avg {Format.Band(cost.TenYearAverageMonthly)}  {ResearchMarker(status)}  rc {RecallsText(status)}";
+        string line = $"  {PriceText(score)}  during {Format.Band(cost.DuringLoanMonthly)}  10yr avg {Format.Band(cost.TenYearAverageMonthly)}  {ResearchMarker(status)}  rc {RecallsText(status)}";
         return anyGraded
             ? $"{line}  gr {Format.Cell(Format.Truncate(score.Vehicle.DealerGrade ?? "-", GradeColumnWidth))}"
             : line;
     }
+
+    /// <summary>A vehicle with no current asking price shows "-" rather than "$0", which would read
+    /// as a real price of zero.</summary>
+    private static string PriceText(Score score) =>
+        score.Vehicle.LowestCurrentPrice is decimal price
+            ? Format.Money(price)
+            : "-";
 
     private static string ResearchMarker(ResearchStatus? status) => status switch
     {
@@ -253,7 +260,7 @@ public static class RankRenderer
     private static void AddVehiclePriceRow(Table table, Score score, bool includeGrade, string defaultGrade)
     {
         string vehicle = Format.Cell(Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", VehicleColumnWidth(includeGrade)));
-        string price = Format.Cell(Format.Truncate(Format.Money(score.Vehicle.LowestCurrentPrice ?? 0m), PriceColumnWidth));
+        string price = Format.Cell(Format.Truncate(PriceText(score), PriceColumnWidth));
         if (includeGrade)
         {
             string grade = Format.Truncate(score.Vehicle.DealerGrade ?? defaultGrade, GradeColumnWidth);

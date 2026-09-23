@@ -14,7 +14,7 @@ public class RankRendererRenderingTests
         int year,
         string make,
         string model,
-        decimal price,
+        decimal? price,
         bool passes = true,
         bool insuranceUnknown = false,
         IReadOnlyList<string>? failureReasons = null,
@@ -217,6 +217,18 @@ public class RankRendererRenderingTests
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.Contains(lines, line => line.Contains("F-graded dealer only"));
         Assert.Contains(lines, line => line.Contains("4T1G11AK0LU123456") && line.Contains("F"));
+    }
+
+    [Fact]
+    public void Render_FGradedDealerOnlyVehicleWithNoCurrentPrice_ShowsADashInsteadOfZeroDollars()
+    {
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", price: null, dealerGrade: "F", onlyFGraded: true);
+
+        string[] lines = Render([score], budget: null);
+
+        string row = Assert.Single(lines, line => line.Contains("4T1G11AK0LU123456"));
+        Assert.DoesNotContain("$0", row);
+        Assert.Contains(" - ", row);
     }
 
     private static string UnmetTargetsText(string[] lines)
