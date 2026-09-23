@@ -15,10 +15,10 @@ public enum DetailPageOutcome
     ExtractionFailed,
 
     /// <summary>The page is some other vehicle than the one this pair asked for. Like
-    /// <see cref="Repeat"/>, this never spends any of the per-pair cap: a search page that mixes
-    /// in other models (neither cars.com's nor Carvana's own model filter separates a hybrid or
-    /// plug-in variant from its base model) still gets every real candidate visited, up to the
-    /// pool <see cref="WalkDetailWalk.RunAsync"/> was handed.</summary>
+    /// <see cref="Repeat"/>, this never spends any of the per-pair cap: a search page that still
+    /// mixes in other models, despite the walk's own search URL now asking each site for the
+    /// exact model (see <see cref="Odonomics.Walk.WalkSites"/>), still gets every real candidate
+    /// visited, up to the pool <see cref="WalkDetailWalk.RunAsync"/> was handed.</summary>
     NotMatching,
 
     /// <summary>The page had no VIN to key a ledger row on. Checked before the model-match check

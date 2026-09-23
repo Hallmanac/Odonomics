@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Odonomics.Walk;
@@ -15,14 +16,20 @@ public sealed record WalkSite(
 
 /// <summary>Search-URL shapes and detail-link patterns for the two v0 walk targets. The spike's
 /// SPIKE-FINDINGS.md recorded both sites as having no working hybrid facet, but that recording
-/// came from a cold browser profile that got a degraded, bot-defended page back for every query;
-/// it never actually proved what the sites' own facets do. Brian confirmed both do have a working
-/// hybrid facet by ticking it in his own warmed Edge profile and pasting the URL each site's
-/// browser built (project home notes/run-session-2026-09-22.md, "Facet URLs from Brian"):
-/// cars.com's model facet joins every word of the model name with underscores after the make and
-/// a hyphen ("Toyota Corolla Hybrid" -> models[]=toyota-corolla_hybrid), and carvana has no
-/// separate hybrid model at all; it filters its base-model search by fuel type
-/// (parentModels: "Corolla" plus fuelTypes: ["Hybrid"]) instead.</summary>
+/// doesn't hold up against the spike's own day-one capture: the cars.com response to a
+/// "toyota-corolla_hybrid" query (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html)
+/// is a complete, non-degraded results page, yet its own selected_search_filters on that request
+/// still resolved back to the base "toyota-corolla", so the earlier conclusion rested on a
+/// request whose facet just didn't apply that day, not on a bot-defended or otherwise broken
+/// response. Brian has since confirmed the same underscored value does apply when a person ticks
+/// the hybrid facet by hand: his warmed Edge profile built and used that exact URL (project home
+/// notes/run-session-2026-09-22.md, "Facet URLs from Brian"). What actually differs between the
+/// two requests (cookies, an A/B bucket, some other session state) is unconfirmed; the
+/// operator-built URL is what the walk now trusts. cars.com's model facet joins every word of the
+/// model name with underscores after the make and a hyphen ("Toyota Corolla Hybrid" ->
+/// models[]=toyota-corolla_hybrid), and carvana has no separate hybrid model at all; it filters
+/// its base-model search by fuel type (parentModels: "Corolla" plus fuelTypes: ["Hybrid"])
+/// instead.</summary>
 public static class WalkSites
 {
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");
@@ -72,20 +79,33 @@ public static class WalkSites
                    $"&models[]={modelSlug}&zip={zip}&maximum_distance={radius}";
         },
         new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
-        DetailLinkOverfetchMultiplier: 1);
+        DetailLinkOverfetchMultiplier: 2);
 
     public static readonly WalkSite Carvana = new(
         "carvana",
         (make, model, zip, _) =>
         {
             string baseModel = BaseModelName(model);
-            string filters = IsHybridVariant(model)
-                ? $"{{\"filters\":{{\"makes\":[{{\"name\":\"{make}\",\"parentModels\":[{{\"name\":\"{baseModel}\"}}]}}],\"fuelTypes\":[\"Hybrid\"]}}}}"
-                : $"{{\"filters\":{{\"makes\":[{{\"name\":\"{make}\",\"parentModels\":[{{\"name\":\"{baseModel}\"}}]}}]}}}}";
-            return $"https://www.carvana.com/cars/filters?zip={zip}&cvnaid={EncodeCvnaid(filters)}";
+            object filters = IsHybridVariant(model)
+                ? new
+                {
+                    filters = new
+                    {
+                        makes = new[] { new { name = make, parentModels = new[] { new { name = baseModel } } } },
+                        fuelTypes = new[] { "Hybrid" },
+                    },
+                }
+                : new
+                {
+                    filters = new
+                    {
+                        makes = new[] { new { name = make, parentModels = new[] { new { name = baseModel } } } },
+                    },
+                };
+            return $"https://www.carvana.com/cars/filters?zip={zip}&cvnaid={EncodeCvnaid(JsonSerializer.Serialize(filters))}";
         },
         new Regex("/vehicle/", RegexOptions.IgnoreCase),
-        DetailLinkOverfetchMultiplier: 1);
+        DetailLinkOverfetchMultiplier: 2);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
