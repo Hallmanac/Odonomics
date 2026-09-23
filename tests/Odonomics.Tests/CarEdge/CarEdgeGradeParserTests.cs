@@ -475,13 +475,50 @@ public class CarEdgeGradeParserTests
     {
         string pageText = PageText(
             2,
-            CardText("Carvana Orlando", "Orlando, FL", "F", 20),
-            CardText("Carvana Atlanta", "Atlanta, GA", "A", 95));
+            CardText("Holler Honda Orlando", "Orlando, FL", "F", 20),
+            CardText("Holler Honda Atlanta", "Atlanta, GA", "A", 95));
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Carvana", null);
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", null);
 
         Assert.Equal(CarEdgeGradeStatus.Ambiguous, result.Status);
         Assert.Null(result.Grade);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Orlando, FL")]
+    public void Parse_BareCarvanaSearchWithOnlyHubCards_NeverAcceptsAHubsCard(string? dealerLocation)
+    {
+        // "Carvana" is contained in every hub's card name, so the containment fallback would grade
+        // the chain by whichever hub the page happened to list; only a card named exactly
+        // "Carvana" can be the bare chain's own.
+        string singleHub = PageText(1, CardText("Carvana Atlanta", "Atlanta, GA", "A", 95));
+        string severalHubs = PageText(
+            2,
+            CardText("Carvana Orlando", "Orlando, FL", "F", 20),
+            CardText("Carvana Atlanta", "Atlanta, GA", "A", 95));
+
+        CarEdgeGradeResult single = CarEdgeGradeParser.Parse(singleHub, "Carvana", dealerLocation);
+        CarEdgeGradeResult several = CarEdgeGradeParser.Parse(severalHubs, "Carvana", dealerLocation);
+
+        Assert.Equal(CarEdgeGradeStatus.NotFound, single.Status);
+        Assert.Null(single.Grade);
+        Assert.Equal(CarEdgeGradeStatus.NotFound, several.Status);
+        Assert.Null(several.Grade);
+    }
+
+    [Fact]
+    public void Parse_CarvanaHubSearchAmongSeveralHubCards_TakesOnlyThatHubsCard()
+    {
+        string pageText = PageText(
+            2,
+            CardText("Carvana Orlando", "Orlando, FL", "F", 20),
+            CardText("Carvana Winder", "Winder, GA", "B", 85));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Carvana Winder", null);
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("B", result.Grade);
     }
 
     [Fact]

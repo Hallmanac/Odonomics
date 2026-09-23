@@ -127,6 +127,10 @@ public static partial class CarEdgeGradeParser
         // permanent, possibly wrong, "not on CarEdge". A card that matches on name but not on
         // location is remembered, so a page whose only name matches were rejected that way comes
         // back LocationMismatch (retried) instead of NotFound (stamped for good).
+        // The bare chain name "Carvana" is the exception to that containment fallback: every Carvana
+        // hub's card ("Carvana Winder") contains it, so accepting one would grade the chain by an
+        // arbitrary hub. Only a card named exactly "Carvana" can be the bare chain's own.
+        bool nameIsBareChain = normalizedDealerName == CarvanaDealers.ChainNormalizedName;
         Regex nameBoundary = new($@"\b{Regex.Escape(normalizedDealerName)}\b");
         List<Card> exactNameCards = [];
         List<Card> containingNameCards = [];
@@ -135,7 +139,7 @@ public static partial class CarEdgeGradeParser
         {
             string normalizedNameLine = DealerNormalizer.Normalize(card.NameLine);
             bool exactName = string.Equals(normalizedNameLine, normalizedDealerName, StringComparison.Ordinal);
-            if (!exactName && !(normalizedNameLine.Length > 0 && nameBoundary.IsMatch(normalizedNameLine)))
+            if (!exactName && (nameIsBareChain || !(normalizedNameLine.Length > 0 && nameBoundary.IsMatch(normalizedNameLine))))
             {
                 continue;
             }
