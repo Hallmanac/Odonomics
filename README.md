@@ -167,14 +167,15 @@ catches the same dealer spelled or franchised differently across sightings even 
 moved between them.
 
 - **mileage that decreased between two listings of the same VIN** (`mileage-drop`), ignoring a drop
-  to zero or nearly zero (a placeholder/reset value, not a real odometer reading) and any sighting
-  with no mileage at all (both are skipped, so a rollback that straddles one still flags), a drop
-  between two listings first seen on the same calendar day (the same snapshot re-scraped, not two
-  real readings), and a drop smaller than the larger of 500 miles or 1% of the prior mileage (rounding
-  and minor re-entry noise). Both the 500-mile floor and the 1% figure are constants in
-  `RedFlagsEvaluator`; no scenario field or CLI flag exposes them yet. A drop that survives all of
-  that but sits between two listings in the *same seller group* whose windows are on consecutive or
-  overlapping days is judged a same-listing odometer correction rather than a real rollback (e.g.
+  to zero or nearly zero (a placeholder/reset value, not a real odometer reading), a drop measured
+  against a sighting with no mileage at all (neither kind of sighting serves as a baseline, so a
+  rollback that straddles one still flags), a drop between two listings first seen on the same
+  calendar day (the same snapshot re-scraped, not two real readings), and a drop smaller than the
+  larger of 500 miles or 1% of the prior mileage (rounding and minor re-entry noise). Both the
+  500-mile floor and the 1% figure are constants in `RedFlagsEvaluator`; no scenario field or CLI
+  flag exposes them yet. A drop that survives all of that but sits between two listings in the *same
+  seller group* whose windows are on consecutive or overlapping days is judged a same-listing
+  odometer correction rather than a real rollback (e.g.
   Daytona Toyota's own listing corrected from 4,703 to 3,852 miles between Sep 9 and Sep 10 on a demo
   car): it's recorded as a note on the vehicle instead (`mileage corrected 4,703 to 3,852 at Daytona
   Toyota on Sep 10`), the same as an operator's own `odo note` would, and does not raise a flag. A
