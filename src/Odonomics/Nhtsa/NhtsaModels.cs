@@ -13,8 +13,9 @@ public sealed record VinDecodeResult(
 /// <summary>
 /// One NHTSA recall campaign for a make/model/model-year. The free recallsByVehicle endpoint has
 /// no per-VIN remedy-completed status (that needs a paid VIN history service), so v0 treats every
-/// campaign this endpoint returns as "open" rather than guessing at completion; see the brief's
-/// instruction to degrade gracefully on an uncertain detail rather than guess an endpoint shape.
+/// campaign this endpoint returns as an open recall rather than guessing at per-VIN completion; see
+/// <see cref="RemedyAvailable"/> for the one exception, whether the campaign's own remedy text has
+/// been published yet, which the endpoint does expose.
 /// </summary>
 public sealed record RecallEntry(
     string CampaignNumber,
