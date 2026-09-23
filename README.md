@@ -76,7 +76,8 @@ odo research [<vin> ...] [--refresh] [--quiet]
                                      just the given VINs), with a red-flags summary (see below)
 odo note <vin> "<text>"             attach a free-text note to a vehicle
 odo finalist <vin>                  mark a vehicle a finalist (needs a PPI note and a Carfax/AutoCheck note)
-odo budget                          max purchase price per target monthly budget in the scenario
+odo budget                          the fixed monthly running cost, then the payment room and max
+                                     purchase price per target monthly budget in the scenario
 ```
 
 Every command that scores against a scenario defaults to `scenarios/daughter.json`; pass `--scenario <path>` to use a different one.
