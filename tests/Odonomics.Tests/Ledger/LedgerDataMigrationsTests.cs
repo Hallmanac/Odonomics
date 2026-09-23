@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Odonomics.Ledger;
+using Odonomics.Marketcheck;
 
 namespace Odonomics.Tests.Ledger;
 
@@ -203,5 +205,161 @@ public class LedgerDataMigrationsTests
         LedgerDataMigrations.ApplyAll(db);
 
         Assert.Null(db.Postings.Include(p => p.Dealer).Single(p => p.VehicleVin == "JTDEBRBE8LJ019584").Dealer);
+    }
+
+    private static readonly DateTimeOffset WalkedAt = new(2026, 9, 23, 2, 55, 0, TimeSpan.Zero);
+
+    private static ListingCandidate CarvanaCandidate(string vin, string? dealerName = null, string? dealerLocation = null) => new()
+    {
+        Vin = vin,
+        Source = "carvana",
+        Url = $"https://www.carvana.com/vehicle/{vin}",
+        Year = 2020,
+        Make = "Toyota",
+        Model = "Prius",
+        Price = 20000m,
+        Mileage = 40000,
+        DealerName = dealerName,
+        DealerLocation = dealerLocation,
+    };
+
+    private static void AddHistory(OdonomicsDbContext db, string vin, params VinHistoryListing[] listings)
+    {
+        db.VinRecords.Add(new VinRecordEntity
+        {
+            Vin = vin,
+            DecodedAt = WalkedAt,
+            DecodeRawJson = "",
+            HistoryRawJson = JsonSerializer.Serialize(listings.ToList()),
+        });
+        db.SaveChanges();
+    }
+
+    private static VinHistoryListing Stay(string dealer, DateTimeOffset firstSeen, DateTimeOffset lastSeen) =>
+        new(dealer, null, null, firstSeen, lastSeen, 20000m, 40000, null);
+
+    [Fact]
+    public async Task ApplyAll_CarvanaPostingsOnTheBareOrALocatedCarvanaRow_MoveToTheHubTheirVinHistoryNamesAndStayBareOnlyWhenNoHubIsKnown()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var run = Run(WalkedAt, sources: "carvana:Prius");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        // Undealered (so the earlier stamp migration puts it on the bare row), history names a hub.
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEAMDE3NJ058833"), run, CancellationToken.None);
+        // Undealered, and the only hub its history names is a stay from months before the walk.
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEBRBE8LJ019584"), run, CancellationToken.None);
+        // The older walk stored the pickup city as the dealer's location; history names a hub.
+        await upsert.UpsertAsync(CarvanaCandidate("JTDBCMFE9PJ003977", "Carvana", "Orlando, FL"), run, CancellationToken.None);
+        // The same located row, and no history at all.
+        await upsert.UpsertAsync(CarvanaCandidate("4T1B21HK8KU518914", "Carvana", "Orlando, FL"), run, CancellationToken.None);
+        AddHistory(db, "JTDEAMDE3NJ058833", Stay("Carvana Winder", new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 23, 1, 25, 0, TimeSpan.Zero)));
+        AddHistory(db, "JTDEBRBE8LJ019584", Stay("Carvana Fairburn", new DateTimeOffset(2026, 1, 7, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 2, 26, 0, 0, 0, TimeSpan.Zero)));
+        AddHistory(db, "JTDBCMFE9PJ003977", Stay("Carvana Belton", new DateTimeOffset(2026, 9, 22, 2, 28, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 23, 1, 34, 0, TimeSpan.Zero)));
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        Dictionary<string, string?> dealerByVin = db.Postings.Include(p => p.Dealer).ToDictionary(p => p.VehicleVin, p => p.Dealer?.Name);
+        Assert.Equal("Carvana Winder", dealerByVin["JTDEAMDE3NJ058833"]);
+        Assert.Equal("Carvana", dealerByVin["JTDEBRBE8LJ019584"]);
+        Assert.Equal("Carvana Belton", dealerByVin["JTDBCMFE9PJ003977"]);
+        Assert.Equal("Carvana", dealerByVin["4T1B21HK8KU518914"]);
+
+        DealerEntity bare = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana"));
+        Assert.Equal("", bare.NormalizedLocation);
+        Assert.Null(bare.Location);
+        Assert.All(db.Dealers.Where(d => d.NormalizedName.StartsWith("CARVANA ")), hub =>
+        {
+            Assert.Equal("", hub.NormalizedLocation);
+            Assert.Null(hub.Location);
+        });
+        Assert.Equal(["Carvana", "Carvana Belton", "Carvana Winder"], db.Dealers.Select(d => d.Name).OrderBy(n => n).ToList());
+        Assert.Single(db.LedgerMigrations, m => m.Name == "ResolveCarvanaHubDealers");
+    }
+
+    [Fact]
+    public async Task ApplyAll_LocatedCarvanaRowsExist_FoldsThemIntoTheBareRowAndClearsItsGradeSoTheNextGradeRunRedoesIt()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var run = Run(WalkedAt, sources: "carvana:Prius");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEAMDE3NJ058833", "Carvana", "Orlando, FL"), run, CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEBRBE8LJ019584", "Carvana", "Atlanta, GA"), run, CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("4T1B21HK8KU518914"), run, CancellationToken.None);
+        // The dealer grade run Brian may have made before this migration: a located row graded from
+        // whichever hub's card matched its city, and the bare row stamped as checked too.
+        DateTimeOffset gradedAt = new(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
+        foreach (DealerEntity dealer in db.Dealers.Where(d => d.Name == "Carvana"))
+        {
+            dealer.Grade = "F";
+            dealer.GradeReason = "matched a hub's card";
+            dealer.GradeCheckedAt = gradedAt;
+        }
+
+        DealerEntity winder = new() { Name = "Carvana Winder", NormalizedName = "CARVANA WINDER", NormalizedLocation = "", Grade = "B", GradeCheckedAt = gradedAt };
+        db.Dealers.Add(winder);
+        await db.SaveChangesAsync(CancellationToken.None);
+        AddHistory(db, "4T1B21HK8KU518914", Stay("Carvana Winder", new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 23, 1, 25, 0, TimeSpan.Zero)));
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        DealerEntity bare = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana"));
+        Assert.Equal("", bare.NormalizedLocation);
+        Assert.Null(bare.Grade);
+        Assert.Null(bare.GradeReason);
+        Assert.Null(bare.GradeCheckedAt);
+        Assert.Equal(2, db.Postings.Count(p => p.DealerId == bare.Id));
+
+        // The undealered posting was stamped bare by the earlier migration, then moved to the
+        // hub that already had a row; that row keeps the grade it earned under its own name.
+        DealerEntity existingHub = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana Winder"));
+        Assert.Equal(winder.Id, existingHub.Id);
+        Assert.Equal("B", existingHub.Grade);
+        Assert.Equal(gradedAt, existingHub.GradeCheckedAt);
+        Assert.Equal(1, db.Postings.Count(p => p.DealerId == existingHub.Id));
+    }
+
+    [Fact]
+    public async Task ApplyAll_OnlyLocatedCarvanaRowsExistAndNoBareOne_CreatesTheBareRowForTheirPostings()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var run = Run(WalkedAt, sources: "carvana:Prius");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEAMDE3NJ058833", "Carvana", "Orlando, FL"), run, CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        DealerEntity bare = Assert.Single(db.Dealers);
+        Assert.Equal("Carvana", bare.Name);
+        Assert.Equal("", bare.NormalizedLocation);
+        Assert.Equal(bare.Id, Assert.Single(db.Postings).DealerId);
+    }
+
+    [Fact]
+    public async Task ApplyAll_ALaterStartupAfterTheHubMigrationRan_LeavesAPostingHistoryNowNamesAHubForUntouched()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var run = Run(WalkedAt, sources: "carvana:Prius");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(CarvanaCandidate("JTDEAMDE3NJ058833"), run, CancellationToken.None);
+        LedgerDataMigrations.ApplyAll(db);
+        AddHistory(db, "JTDEAMDE3NJ058833", Stay("Carvana Winder", new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 23, 1, 25, 0, TimeSpan.Zero)));
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        Assert.Equal("Carvana", db.Postings.Include(p => p.Dealer).Single().Dealer!.Name);
     }
 }
