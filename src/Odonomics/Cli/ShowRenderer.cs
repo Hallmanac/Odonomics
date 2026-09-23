@@ -13,8 +13,8 @@ public static class ShowRenderer
     // column plus 1 for the table's own edges: 3 * 5 + 1 = 16 for five columns), to exactly 80:
     // 16 + DealerWidth + 10 + 10 + PriceWidth + MileageWidth = 80. The date columns are fixed
     // ("yyyy-MM-dd" is always 10 characters), but price and mileage rarely need their worst-case
-    // width (a group whose mileage or price crosses from five digits to six, e.g.
-    // "105,000-150,000", 15 characters, or "$95,000-$150,000", 16 characters); reserving that width
+    // width (a group whose mileage or price has six digits at both ends, e.g.
+    // "105,000-150,000", 15 characters, or "$105,000-$150,000", 17 characters); reserving that width
     // unconditionally starves the Dealer column, the one the grouping feature exists to make
     // readable, of space it needs far more. So price and mileage width are computed per render call
     // from what the actual groups need (floored at their short header's own length so the header
