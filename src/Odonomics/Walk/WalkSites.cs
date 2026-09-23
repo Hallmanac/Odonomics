@@ -13,16 +13,16 @@ public sealed record WalkSite(
     Regex DetailUrlPattern,
     int DetailLinkOverfetchMultiplier = 1);
 
-/// <summary>Search-URL shapes and detail-link patterns for the two v0 walk targets, ported from
-/// spike/Sources/PageWalkSources.cs. Neither site has a confirmed model facet that separates a
-/// hybrid or plug-in variant from its base model: cars.com's underscored
-/// "toyota-corolla_hybrid" looked like a fix because that exact value appears in the site's own
-/// model-facet JSON, but the site's own recorded response to that query still resolved back to
-/// plain "toyota-corolla" (SPIKE-FINDINGS.md's "sites silently ignore a model facet they don't
-/// recognize" surprise has the detail). So every query here asks for the base model only and
-/// leans on <see cref="WalkSite.DetailLinkOverfetchMultiplier"/> plus
-/// <see cref="Odonomics.Sources.ListingQuery.MatchesExtractedVehicle"/> to fill the per-pair cap
-/// with real candidates instead.</summary>
+/// <summary>Search-URL shapes and detail-link patterns for the two v0 walk targets. The spike's
+/// SPIKE-FINDINGS.md recorded both sites as having no working hybrid facet, but that recording
+/// came from a cold browser profile that got a degraded, bot-defended page back for every query;
+/// it never actually proved what the sites' own facets do. Brian confirmed both do have a working
+/// hybrid facet by ticking it in his own warmed Edge profile and pasting the URL each site's
+/// browser built (project home notes/run-session-2026-09-22.md, "Facet URLs from Brian"):
+/// cars.com's model facet joins every word of the model name with underscores after the make and
+/// a hyphen ("Toyota Corolla Hybrid" -> models[]=toyota-corolla_hybrid), and carvana has no
+/// separate hybrid model at all; it filters its base-model search by fuel type
+/// (parentModels: "Corolla" plus fuelTypes: ["Hybrid"]) instead.</summary>
 public static class WalkSites
 {
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");
@@ -37,10 +37,29 @@ public static class WalkSites
     /// same posting again instead of minting a new one every time the session id changes.</summary>
     public static string CanonicalDetailUrl(string href) => new Uri(href).GetLeftPart(UriPartial.Path);
 
-    private static string BaseModelSlug(string model)
+    /// <summary>cars.com's model-facet value for a model name: every word lowercased and joined
+    /// with underscores ("Corolla Hybrid" -> "corolla_hybrid", "Corolla Cross" ->
+    /// "corolla_cross"), matching the exact value the site's own browser puts in models[] when
+    /// that model is ticked in the left-column facet.</summary>
+    private static string ModelFacetWords(string model) => model.ToLowerInvariant().Replace(" ", "_");
+
+    /// <summary>The scenario model with a trailing " Hybrid" removed, for carvana's parentModels
+    /// facet: carvana has no separate hybrid model, so the base model plus fuelTypes=Hybrid is
+    /// the filtering mechanism (see the class remarks).</summary>
+    private static string BaseModelName(string model)
     {
         int hybridIndex = model.IndexOf(" Hybrid", StringComparison.OrdinalIgnoreCase);
-        return Slugify(hybridIndex >= 0 ? model[..hybridIndex] : model);
+        return hybridIndex >= 0 ? model[..hybridIndex] : model;
+    }
+
+    private static bool IsHybridVariant(string model) => model.Contains("Hybrid", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Base64url-encodes carvana's cvnaid JSON filter payload, unpadded (no trailing
+    /// "=") to match the value carvana's own browser puts on the URL.</summary>
+    private static string EncodeCvnaid(string json)
+    {
+        string base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+        return base64.Replace('+', '-').Replace('/', '_').TrimEnd('=');
     }
 
     public static readonly WalkSite CarsCom = new(
@@ -48,22 +67,25 @@ public static class WalkSites
         (make, model, zip, radius) =>
         {
             string makeSlug = Slugify(make);
-            string modelSlug = $"{makeSlug}-{BaseModelSlug(model)}";
-            return $"https://www.cars.com/shopping/results/?makes[]={makeSlug}&models[]={modelSlug}" +
-                   $"&maximum_distance={radius}&zip={zip}&stock_type=used";
+            string modelSlug = $"{makeSlug}-{ModelFacetWords(model)}";
+            return $"https://www.cars.com/shopping/results/?stock_type=used&makes[]={makeSlug}" +
+                   $"&models[]={modelSlug}&zip={zip}&maximum_distance={radius}";
         },
         new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
-        DetailLinkOverfetchMultiplier: 3);
+        DetailLinkOverfetchMultiplier: 1);
 
     public static readonly WalkSite Carvana = new(
         "carvana",
         (make, model, zip, _) =>
         {
-            string modelSlug = $"{Slugify(make)}-{BaseModelSlug(model)}";
-            return $"https://www.carvana.com/cars/{modelSlug}?zip={zip}";
+            string baseModel = BaseModelName(model);
+            string filters = IsHybridVariant(model)
+                ? $"{{\"filters\":{{\"makes\":[{{\"name\":\"{make}\",\"parentModels\":[{{\"name\":\"{baseModel}\"}}]}}],\"fuelTypes\":[\"Hybrid\"]}}}}"
+                : $"{{\"filters\":{{\"makes\":[{{\"name\":\"{make}\",\"parentModels\":[{{\"name\":\"{baseModel}\"}}]}}]}}}}";
+            return $"https://www.carvana.com/cars/filters?zip={zip}&cvnaid={EncodeCvnaid(filters)}";
         },
         new Regex("/vehicle/", RegexOptions.IgnoreCase),
-        DetailLinkOverfetchMultiplier: 3);
+        DetailLinkOverfetchMultiplier: 1);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
