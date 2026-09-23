@@ -202,7 +202,7 @@ An empty section says so explicitly (`odo show`: "none found"; `odo research`: `
 being left blank.
 
 `odo rank` marks each vehicle's row with whether it has been researched yet and whether any red
-flag turned up (`-` for not yet researched, `clean`, or `flag`), and a `rc` figure showing the
+flag turned up (`-` for not yet researched, `clean`, or `flag`), and an `rc` figure showing the
 total open NHTSA recall count (`-` when not yet researched, or when recalls have never been
 successfully fetched for that vehicle even though other research pieces have); both are
 display-only and never change the ranking math itself.
@@ -281,9 +281,10 @@ after three such pages in a row, leaving every dealer it never got to ungraded f
 `odo show <vin>` prints the grade beside each posting; on the graded pages recorded so far, the
 current dealer card carries no "why this grade" text, so no reason is shown alongside it. No F-grade
 page has been recorded, so whether an F still carries one is unknown. `odo rank` shows each
-vehicle's grade when at least one vehicle in that table has one, and lists any vehicle whose only
-postings come from F-range-graded dealers under its own warning heading, still ranked, never
-hidden.
+vehicle's grade whenever at least one vehicle in that section has one: as a `gr` marker on the
+ranked and over-budget lines, and as a Grade column in the insurance-unknown and F-graded-only
+tables. It also lists any vehicle whose only postings come from F-range-graded dealers under its
+own warning heading, still ranked, never hidden.
 
 ## Scenario
 
