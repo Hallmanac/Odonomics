@@ -86,4 +86,23 @@ public class DealerGradeCommandTests
             Assert.Equal(DealerGradeTally.Failed, outcome.Tally);
         }
     }
+
+    [Fact]
+    public void ApplyResult_CarvanaFallbackDealerWithNoLocation_IsGradedLikeAnyOtherDealerAndNeverCountsAsFailed()
+    {
+        // The walk stamps carvana postings with a name-only "Carvana" dealer (see
+        // WalkSites.CarvanaDealerName). The grade pass deliberately has no special case for it:
+        // a name with no location goes through the same parser and the same outcomes as any other
+        // dealer. Here CarEdge's results page (a recorded page for a different dealer) has no card
+        // for it, which stamps it checked with no grade rather than counting it as a failed grade.
+        string pageText = File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "caredge", "dealers-q-daytona-toyota.txt"));
+        var dealer = new DealerEntity { Name = "Carvana", NormalizedName = "CARVANA", NormalizedLocation = "" };
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, dealer.Name, dealer.Location);
+        DealerGradeOutcome outcome = DealerGradeCommand.ApplyResult(dealer, result, CheckedAt, SearchUrl);
+
+        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+        Assert.NotEqual(DealerGradeTally.Failed, outcome.Tally);
+        Assert.Equal(CheckedAt, dealer.GradeCheckedAt);
+    }
 }
