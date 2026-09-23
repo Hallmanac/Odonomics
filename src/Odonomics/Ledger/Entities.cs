@@ -128,6 +128,14 @@ public sealed class VinRecordEntity
     public VehicleEntity? Vehicle { get; set; }
 }
 
+/// <summary>One one-time ledger data migration that has already run, recorded by name so
+/// <see cref="LedgerDataMigrations"/> never re-applies it on a later startup.</summary>
+public sealed class LedgerMigrationEntity
+{
+    public required string Name { get; set; }
+    public required DateTimeOffset AppliedAt { get; set; }
+}
+
 /// <summary>A free-text note attached to a vehicle: PPI results, a Carfax/AutoCheck summary,
 /// anything the operator wants on record before marking a finalist.</summary>
 public sealed class NoteEntity

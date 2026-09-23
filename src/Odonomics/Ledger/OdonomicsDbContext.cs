@@ -11,6 +11,7 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
     public DbSet<VinRecordEntity> VinRecords => Set<VinRecordEntity>();
     public DbSet<NoteEntity> Notes => Set<NoteEntity>();
     public DbSet<DealerEntity> Dealers => Set<DealerEntity>();
+    public DbSet<LedgerMigrationEntity> LedgerMigrations => Set<LedgerMigrationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,5 +36,7 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
         {
             entity.HasIndex(d => new { d.NormalizedName, d.NormalizedLocation }).IsUnique();
         });
+
+        modelBuilder.Entity<LedgerMigrationEntity>().HasKey(m => m.Name);
     }
 }
