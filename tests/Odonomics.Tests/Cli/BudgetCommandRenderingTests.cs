@@ -58,6 +58,24 @@ public class BudgetCommandRenderingTests
     }
 
     [Fact]
+    public void Render_PartsThatEachRoundDown_ItemizedFiguresStillAddUpToTheStatedTotal()
+    {
+        // Insurance averages (90 + 90.8) / 2 = 90.4 and fuel is 12000 / 50 * $3.21 / 12 = 64.2, so
+        // the total is 274.6 and rounds to 275. Rounding each part alone gives 90 + 64 + 70 + 50 = 274.
+        Scenario scenario = BuildScenario() with
+        {
+            GasPricePerGallon = Parameter.Pinned(3.21m),
+            InsuranceMonthlyByModel = new Dictionary<string, decimal?> { ["Honda Insight"] = 90m, ["Toyota Prius"] = 90.8m },
+        };
+
+        string prose = string.Join(' ', SplitLines(RenderWithNoColor(scenario)).Select(line => line.Trim()));
+
+        Assert.Contains(
+            "about $275 a month (insurance $91, fuel $64, maintenance $70, reserve $50)",
+            prose);
+    }
+
+    [Fact]
     public void Render_MaxPurchasePriceColumn_MatchesTheSolver()
     {
         Scenario scenario = BuildScenario();
