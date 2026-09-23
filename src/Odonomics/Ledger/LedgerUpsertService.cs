@@ -152,7 +152,7 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         }
 
         string normalizedName = DealerNormalizer.Normalize(dealerName);
-        string normalizedLocation = DealerNormalizer.Normalize(dealerLocation);
+        string normalizedLocation = DealerNormalizer.NormalizeLocation(dealerLocation);
 
         DealerEntity? dealer = await db.Dealers
             .FirstOrDefaultAsync(d => d.NormalizedName == normalizedName && d.NormalizedLocation == normalizedLocation, cancellationToken);

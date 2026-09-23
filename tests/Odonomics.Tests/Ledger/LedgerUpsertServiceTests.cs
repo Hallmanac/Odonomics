@@ -159,6 +159,27 @@ public class LedgerUpsertServiceTests
         Assert.Single(db.Dealers);
     }
 
+    [Theory]
+    [InlineData("Saint Augustine, FL", "St. Augustine, FL")]
+    [InlineData("St. Augustine, FL", "Saint Augustine, FL")]
+    public async Task UpsertAsync_SameDealerCityAbbreviatedInOneSourceAndSpelledOutInAnother_ResolvesToOneDealerRow(string firstLocation, string secondLocation)
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com", "Jack Hanania Chevrolet", firstLocation), run, CancellationToken.None);
+        await service.UpsertAsync(Candidate("5YJ3E1EA1KF000000", 22000m, "https://cars.com/b", "cars.com", "Jack Hanania Chevrolet", secondLocation), run, CancellationToken.None);
+
+        DealerEntity dealer = Assert.Single(db.Dealers);
+        Assert.Equal(firstLocation, dealer.Location);
+        Assert.Equal("SAINT AUGUSTINE FL", dealer.NormalizedLocation);
+        Assert.All(db.Postings, p => Assert.Equal(dealer.Id, p.DealerId));
+    }
+
     [Fact]
     public async Task UpsertAsync_LaterSightingCarriesNoDealer_KeepsThePostingsExistingDealerLink()
     {
