@@ -11,12 +11,14 @@ namespace Odonomics.Ledger;
 public static class LedgerDataMigrations
 {
     private const string CanonicalizeWalkedPostingUrlsName = "CanonicalizeWalkedPostingUrls";
+    private const string StampCarvanaFallbackDealerName = "StampCarvanaFallbackDealer";
 
     private static readonly string[] WalkedSources = [WalkSites.CarsCom.Name, WalkSites.Carvana.Name];
 
     public static void ApplyAll(OdonomicsDbContext db)
     {
         ApplyOnce(db, CanonicalizeWalkedPostingUrlsName, CanonicalizeWalkedPostingUrls);
+        ApplyOnce(db, StampCarvanaFallbackDealerName, StampCarvanaFallbackDealer);
     }
 
     private static void ApplyOnce(OdonomicsDbContext db, string name, Action<OdonomicsDbContext> migration)
@@ -68,6 +70,35 @@ public static class LedgerDataMigrations
 
                 db.Postings.Remove(duplicate);
             }
+        }
+    }
+
+    /// <summary>Links every carvana posting with no dealer to the "Carvana" dealer, the same one the
+    /// walk now stamps when a detail page names no hub (see <see cref="WalkSite.ResolveDealerName"/>),
+    /// so a ledger walked before that change shows a dealer without a fresh walk. A posting that
+    /// already has a dealer, such as a named hub, is left alone. The dealer is the one with no
+    /// location, matching what the walk creates; an existing "Carvana" dealer that does have a
+    /// location is a different dealer row and is not reused.</summary>
+    private static void StampCarvanaFallbackDealer(OdonomicsDbContext db)
+    {
+        List<PostingEntity> undealered = [.. db.Postings.Where(p => p.Source == WalkSites.Carvana.Name && p.DealerId == null)];
+        if (undealered.Count == 0)
+        {
+            return;
+        }
+
+        string normalizedName = DealerNormalizer.Normalize(WalkSites.CarvanaDealerName);
+        DealerEntity dealer = db.Dealers.FirstOrDefault(d => d.NormalizedName == normalizedName && d.NormalizedLocation == "")
+            ?? new DealerEntity
+            {
+                Name = WalkSites.CarvanaDealerName,
+                NormalizedName = normalizedName,
+                NormalizedLocation = "",
+            };
+
+        foreach (PostingEntity posting in undealered)
+        {
+            posting.Dealer = dealer;
         }
     }
 
