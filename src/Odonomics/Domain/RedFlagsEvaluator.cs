@@ -28,11 +28,15 @@ public sealed record EvaluationResult(IReadOnlyList<RedFlag> Flags, IReadOnlyLis
 
 /// <summary>One seller group's shape for display (see <see cref="RedFlagsEvaluator.GroupBySeller"/>):
 /// every dealer name recorded for the group, in first-appearance order, and the group's overall
-/// window, price range, and mileage range. A caller (currently `odo show`) decides how many names to
-/// print and how to format the ranges; this type only carries the facts.</summary>
+/// window, price range, and mileage range. <see cref="LatestRunStart"/> is where the group's most
+/// recent unbroken run of sightings begins: a group merged by dealer-name stem can span several
+/// separate listings months apart, and only that last run is the listing that is live now. A caller
+/// (currently `odo show`) decides how many names to print and how to format the ranges; this type
+/// only carries the facts.</summary>
 public sealed record SellerGroupSummary(
     DateTimeOffset FirstSeen,
     DateTimeOffset LastSeen,
+    DateTimeOffset LatestRunStart,
     IReadOnlyList<string> DealerNames,
     decimal? MinPrice,
     decimal? MaxPrice,
@@ -147,7 +151,7 @@ public static partial class RedFlagsEvaluator
             (decimal? minPrice, decimal? maxPrice) = MinMax(g.Points.Select(p => p.Price));
             (int? minMileage, int? maxMileage) = MinMax(g.Points
                 .Select(p => p.Mileage is int mileage && mileage > PlaceholderMileageMax ? mileage : (int?)null));
-            return new SellerGroupSummary(g.WindowStart, g.WindowEnd, g.DealerNames, minPrice, maxPrice, minMileage, maxMileage);
+            return new SellerGroupSummary(g.WindowStart, g.WindowEnd, g.LatestRunStart, g.DealerNames, minPrice, maxPrice, minMileage, maxMileage);
         })];
     }
 
@@ -457,6 +461,37 @@ public static partial class RedFlagsEvaluator
 
         public DateTimeOffset WindowStart => Points.Min(p => p.FirstSeen!.Value);
         public DateTimeOffset WindowEnd => Points.Max(p => p.LastSeen ?? p.FirstSeen!.Value);
+
+        /// <summary>The start of the group's last unbroken run of sightings: walking the points by
+        /// <see cref="VinHistoryPoint.FirstSeen"/>, a point whose window neither overlaps nor comes
+        /// within <see cref="SellerGroupWindowTouchDays"/> days of the run so far begins a new run.</summary>
+        public DateTimeOffset LatestRunStart
+        {
+            get
+            {
+                DateTimeOffset runStart = default;
+                DateTimeOffset runEnd = default;
+                bool first = true;
+                foreach (VinHistoryPoint point in Points.OrderBy(p => p.FirstSeen))
+                {
+                    DateTimeOffset start = point.FirstSeen!.Value;
+                    DateTimeOffset end = point.LastSeen ?? start;
+                    if (first || (start - runEnd).TotalDays > SellerGroupWindowTouchDays)
+                    {
+                        runStart = start;
+                        runEnd = end;
+                        first = false;
+                    }
+                    else if (end > runEnd)
+                    {
+                        runEnd = end;
+                    }
+                }
+
+                return runStart;
+            }
+        }
+
         public int? EntryMileage => Points.OrderBy(p => p.FirstSeen).First().Mileage;
         public int? ExitMileage => Points.OrderBy(p => p.FirstSeen).Last().Mileage;
 

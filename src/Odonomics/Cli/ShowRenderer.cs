@@ -36,7 +36,7 @@ public static class ShowRenderer
     private const int MaxDealerNamesShown = 3;
     private const int CurrentListingMaxIdleDays = 14;
 
-    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory, TimeProvider? timeProvider = null)
+    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory)
     {
         (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
@@ -115,7 +115,7 @@ public static class ShowRenderer
             IReadOnlyList<VinHistoryPoint> points = [.. history.PriorListings
                 .Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))];
             IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
-            DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+            DateTimeOffset now = DateTimeOffset.UtcNow;
             AnsiConsole.MarkupLineInterpolated($"  days on market (current listing): {DaysOnMarket(history.CurrentListingDaysOnMarket, groups, now)}");
             if (history.PriorListings.Count == 0)
             {
@@ -218,11 +218,15 @@ public static class ShowRenderer
     }
 
     /// <summary>Days on market for the current listing: Marketcheck's own figure when it reported one,
-    /// otherwise the days since the current seller group (the group whose window ends last) was first
-    /// seen, and "(unknown)" when neither exists. Marketcheck reports no figure both for a listing
-    /// that carries no days on market and for a VIN that is not listed at all, so the fallback only
-    /// applies when that group was last seen within <see cref="CurrentListingMaxIdleDays"/> days of
-    /// <paramref name="now"/>; a group last seen longer ago is a past listing, not the current one.</summary>
+    /// otherwise the days since the current seller group (the group whose window ends last) began its
+    /// most recent unbroken run of sightings (see <see cref="SellerGroupSummary.LatestRunStart"/>, so a
+    /// relisting months after an earlier listing by the same dealer counts from the relisting), and
+    /// "(unknown)" when neither exists. Marketcheck reports no figure both for a listing that carries
+    /// no days on market and for a VIN that is not listed at all, so the fallback only applies when
+    /// that group was last seen within <see cref="CurrentListingMaxIdleDays"/> days of
+    /// <paramref name="now"/>; a group last seen longer ago is a past listing, not the current one.
+    /// Days are counted between calendar dates in each sighting's own offset, the same dates the
+    /// grouped table prints.</summary>
     public static string DaysOnMarket(int? reportedDays, IReadOnlyList<SellerGroupSummary> groups, DateTimeOffset now)
     {
         if (reportedDays is int reported)
@@ -231,18 +235,21 @@ public static class ShowRenderer
         }
 
         SellerGroupSummary? current = groups.MaxBy(g => g.LastSeen);
-        return current is null || (now.UtcDateTime.Date - current.LastSeen.UtcDateTime.Date).Days > CurrentListingMaxIdleDays
+        return current is null || DaysSince(current.LastSeen, now) > CurrentListingMaxIdleDays
             ? "(unknown)"
-            : Math.Max(0, (now.UtcDateTime.Date - current.FirstSeen.UtcDateTime.Date).Days).ToString("N0");
+            : Math.Max(0, DaysSince(current.LatestRunStart, now)).ToString("N0");
     }
+
+    private static int DaysSince(DateTimeOffset seen, DateTimeOffset now) =>
+        (now.ToOffset(seen.Offset).Date - seen.Date).Days;
 
     /// <summary>The listing history grouped by seller (see <see cref="RedFlagsEvaluator.GroupBySeller"/>),
     /// one row per group: dealer name(s), led by the seller count for a multi-seller group and capped
     /// at <see cref="MaxDealerNamesShown"/> names plus "and N more" (see <see cref="DealerNamesCell"/>)
     /// and wrapped, never truncated, within its column, the group's overall first/last seen dates, and
-    /// its price and mileage ranges. Built without
-    /// writing it, so a rendering test can capture it against a fixed-width console instead of the
-    /// real one, the same as <c>WalkCommand.BuildSummaryTable</c>.</summary>
+    /// its price and mileage ranges. Built without writing it, so a rendering test can capture it
+    /// against a fixed-width console instead of the real one, the same as
+    /// <c>WalkCommand.BuildSummaryTable</c>.</summary>
     public static Table BuildGroupedHistoryTable(IReadOnlyList<SellerGroupSummary> groups)
     {
         int priceColumnWidth = groups.Count == 0
