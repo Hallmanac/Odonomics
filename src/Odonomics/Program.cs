@@ -122,7 +122,7 @@ var dealerCommand = new Command("dealer", "dealer-grade commands");
 dealerCommand.Add(dealerGradeCommand);
 rootCommand.Add(dealerCommand);
 
-var budgetCommand = new Command("budget", "the max purchase price under the scenario for each target monthly budget");
+var budgetCommand = new Command("budget", "the fixed monthly running cost, then the payment room and max purchase price under the scenario for each target monthly budget");
 budgetCommand.Add(scenarioOption);
 budgetCommand.SetAction(async (parseResult, cancellationToken) =>
 {
