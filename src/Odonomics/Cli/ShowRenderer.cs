@@ -10,18 +10,22 @@ public static class ShowRenderer
 {
     // Column widths are chosen so that, added to Border.Minimal's per-column padding and separators
     // (3 chars per column plus 1 for the table's own edges: 3 * 5 + 1 = 16 for five columns), the
-    // grouped-history table never needs more than 80 columns: 16 + 10 + 10 + 15 + 13 + 16 = 80.
-    // MileageColumnWidth fits a two five-digit-reading range ("40,000-69,680" is 13 characters)
-    // without ellipsizing the high end into a misleadingly smaller number. Every cell is also
-    // truncated to its column's width before it reaches the table, since Spectre wraps a cell that
-    // overflows its declared width onto a second line rather than cropping it, which would turn one
-    // seller group's row into two lines and defeat the "readable at a glance" point of grouping in
-    // the first place; DealerNamesCell leads with the seller count for a multi-seller group
-    // specifically so that fact survives even when the name list itself has to be cut short.
-    private const int DealerColumnWidth = 16;
+    // grouped-history table never needs more than 80 columns: 16 + 14 + 10 + 10 + 15 + 15 = 80.
+    // MileageColumnWidth fits a six-digit-vs-six-digit range ("150,000-999,999" is 15 characters,
+    // and every 6-digit reading formats to the same 7 characters) without ellipsizing the high end
+    // into a misleadingly smaller number; a used car crossing the 100k-mile mark during a relisting
+    // is routine, not an edge case. DealerColumnWidth gives up two of those characters to stay
+    // within the 80-column budget, which only shortens the truncated name list a little further.
+    // Every cell is also truncated to its column's width before it reaches the table, since Spectre
+    // wraps a cell that overflows its declared width onto a second line rather than cropping it,
+    // which would turn one seller group's row into two lines and defeat the "readable at a glance"
+    // point of grouping in the first place; DealerNamesCell leads with the seller count for a
+    // multi-seller group specifically so that fact survives even when the name list itself has to
+    // be cut short.
+    private const int DealerColumnWidth = 14;
     private const int DateColumnWidth = 10;
     private const int PriceColumnWidth = 15;
-    private const int MileageColumnWidth = 13;
+    private const int MileageColumnWidth = 15;
     private const int MaxDealerNamesShown = 3;
 
     public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory)
@@ -236,7 +240,7 @@ public static class ShowRenderer
     /// <summary>Leads a multi-seller group's cell with its seller count ("N sellers: ...") before the
     /// capped name list, so the one fact this table exists to surface (how many rooftops a group
     /// spans) survives <see cref="Format.Truncate"/> even when the name list itself has to be cut
-    /// short to fit <see cref="DealerColumnWidth"/> — truncation always cuts from the end, so
+    /// short to fit <see cref="DealerColumnWidth"/>: truncation always cuts from the end, so
     /// whatever sits at the front of the string is what the column-width-limited cell keeps.</summary>
     private static string DealerNamesCell(IReadOnlyList<string> names)
     {
