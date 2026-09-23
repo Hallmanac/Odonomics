@@ -391,6 +391,45 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_SameVinAndSourceDropsPriceThroughBothTheOrdinaryAndRelistPathsInOneRun_ReportsOnlyOneDrop()
+    {
+        // One VIN can carry two postings on the same source: an old untouched URL that just gets a
+        // lower price this run (the ordinary path) and a second, newer URL that's a stale third
+        // posting's relist (the relist path). Both paths used to dedup against their own independent
+        // set, so this run reported the same (VIN, source) dropping price twice, disagreeing on the
+        // "was" price. They must share one set so only the first-seen posting's drop is reported.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 20000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 19000m, "https://cars.com/b", "cars.com"), run2, CancellationToken.None);
+
+        RunEntity run3 = Run(new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run3);
+        await db.SaveChangesAsync(CancellationToken.None);
+        // /a: same URL as run1, ordinary path, price drops 20000 -> 18000.
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run3, CancellationToken.None);
+        // /c: a brand-new URL, relist path against stale /b, price drops 19000 -> 17000.
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://cars.com/c", "cars.com"), run3, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run3, CancellationToken.None);
+
+        PriceDropEntry drop = Assert.Single(diff.PriceDrops);
+        Assert.Equal("cars.com", drop.Source);
+        Assert.Equal(20000m, drop.PreviousPrice);
+        Assert.Equal(18000m, drop.CurrentPrice);
+    }
+
+    [Fact]
     public async Task ComputeAsync_MovedPostingWhosePriceAlsoDropped_IsFoldedIntoPriceDropsNotMoved()
     {
         using var testDb = new LedgerTestDatabase();
