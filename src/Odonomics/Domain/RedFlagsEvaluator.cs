@@ -37,10 +37,10 @@ public static partial class RedFlagsEvaluator
     private const int MinPriorListingsForTrajectory = 2;
     private const int LowSafetyRatingThreshold = 4;
 
-    /// <summary>A later listing's mileage at or below this is treated as a placeholder/reset value
+    /// <summary>A listing's mileage at or below this is treated as a placeholder/reset value
     /// (a blank field defaulted to 0, or a similarly bogus near-zero scrape) rather than a real
     /// odometer reading, since a used car that previously showed tens of thousands of miles never
-    /// legitimately drops to single digits in a later listing.</summary>
+    /// legitimately drops to fewer than these miles in a later listing.</summary>
     private const int PlaceholderMileageMax = 50;
 
     public static IReadOnlyList<RedFlag> Evaluate(
@@ -98,29 +98,24 @@ public static partial class RedFlagsEvaluator
         return flags;
     }
 
-    /// <summary>The first mileage decrease between consecutive listings that survives three
-    /// deliberate exclusions: a drop to a placeholder value (see <see cref="PlaceholderMileageMax"/>),
-    /// a drop between two listings first seen on the same calendar day (almost always the same
-    /// snapshot re-scraped, not two real odometer readings), and a drop smaller than the larger of
+    /// <summary>The first mileage decrease between consecutive listings, after two deliberate
+    /// exclusions applied to the ordered history itself, not to each pair: a placeholder value (see
+    /// <see cref="PlaceholderMileageMax"/>) is dropped from the sequence entirely rather than merely
+    /// skipped as an endpoint, so it can never become the baseline for the next comparison and mask a
+    /// real rollback that straddles it; and listings first seen on the same calendar day (almost
+    /// always the same snapshot re-scraped, not two real odometer readings) collapse to that day's
+    /// first reading, for the same reason. What survives still needs a drop of at least the larger of
     /// <paramref name="mileageDropMinMiles"/> and <paramref name="mileageDropMinPercent"/> of the
     /// prior mileage (rounding and minor re-entry noise, not a rolled-back odometer).</summary>
     private static RedFlag? FindMileageDrop(IReadOnlyList<VinHistoryPoint> ordered, int mileageDropMinMiles, decimal mileageDropMinPercent)
     {
-        for (int i = 1; i < ordered.Count; i++)
+        List<VinHistoryPoint> filtered = FilterMileagePoints(ordered);
+
+        for (int i = 1; i < filtered.Count; i++)
         {
-            VinHistoryPoint previous = ordered[i - 1];
-            VinHistoryPoint next = ordered[i];
+            VinHistoryPoint previous = filtered[i - 1];
+            VinHistoryPoint next = filtered[i];
             if (previous.Mileage is not int previousMileage || next.Mileage is not int nextMileage || nextMileage >= previousMileage)
-            {
-                continue;
-            }
-
-            if (nextMileage <= PlaceholderMileageMax)
-            {
-                continue;
-            }
-
-            if (previous.FirstSeen!.Value.Date == next.FirstSeen!.Value.Date)
             {
                 continue;
             }
@@ -139,6 +134,31 @@ public static partial class RedFlagsEvaluator
         }
 
         return null;
+    }
+
+    /// <summary>Drops placeholder-mileage points (see <see cref="PlaceholderMileageMax"/>) entirely,
+    /// and collapses a run of same-calendar-day points down to the first reading of that day, so
+    /// neither kind of bogus reading can ever end up as the baseline or endpoint of a pair comparison
+    /// in <see cref="FindMileageDrop"/>.</summary>
+    private static List<VinHistoryPoint> FilterMileagePoints(IReadOnlyList<VinHistoryPoint> ordered)
+    {
+        List<VinHistoryPoint> filtered = [];
+        foreach (VinHistoryPoint point in ordered)
+        {
+            if (point.Mileage is int mileage && mileage <= PlaceholderMileageMax)
+            {
+                continue;
+            }
+
+            if (filtered.Count > 0 && filtered[^1].FirstSeen!.Value.Date == point.FirstSeen!.Value.Date)
+            {
+                continue;
+            }
+
+            filtered.Add(point);
+        }
+
+        return filtered;
     }
 
     /// <summary>Finds the first (earliest-starting) 90-day window across the ordered history that
@@ -164,7 +184,9 @@ public static partial class RedFlagsEvaluator
                 int days = (int)(ordered[end].FirstSeen!.Value - ordered[start].FirstSeen!.Value).TotalDays;
                 string shown = string.Join(", ", sellers.Take(MaxSellerNamesShown));
                 int remaining = sellers.Count - Math.Min(MaxSellerNamesShown, sellers.Count);
-                string suffix = remaining > 0 ? $" and {remaining} more" : "";
+                string suffix = remaining > 0
+                    ? $" and {remaining} more"
+                    : "";
                 return new RedFlag(
                     $"{sellers.Count}-sellers",
                     $"listed by {sellers.Count} different sellers within {days} days: {shown}{suffix}");
@@ -177,11 +199,15 @@ public static partial class RedFlagsEvaluator
     /// <summary>Reduces a window's raw dealer names to distinct sellers: case and punctuation are
     /// normalized away, and a name that is a word-for-word leading prefix of another (e.g. "Schaller
     /// Honda" of "Schaller Honda Subaru Mitsubishi") is treated as the same seller listed under two
-    /// spellings rather than two sellers, keeping the shorter spelling as the group's displayed
-    /// name. Order of first appearance is preserved so the printed list reads chronologically.</summary>
+    /// spellings rather than two sellers, keeping the shortest spelling seen as the group's displayed
+    /// name. A candidate is compared against every member already in a group, not only its current
+    /// representative, and matching groups are merged together, so the result never depends on the
+    /// order names first appear in and never holds two entries where one is a word-prefix of the
+    /// other. Order of first group appearance is preserved so the printed list reads
+    /// chronologically.</summary>
     private static List<string> DistinctSellers(IEnumerable<string?> dealerNames)
     {
-        List<(string Original, string[] Words)> groups = [];
+        List<List<(string Original, string[] Words)>> groups = [];
 
         foreach (string? raw in dealerNames)
         {
@@ -196,18 +222,26 @@ public static partial class RedFlagsEvaluator
                 continue;
             }
 
-            int matchIndex = groups.FindIndex(g => IsWordPrefixOfEither(g.Words, words));
-            if (matchIndex < 0)
+            List<int> matchingGroupIndexes = [.. Enumerable.Range(0, groups.Count)
+                .Where(i => groups[i].Any(member => IsWordPrefixOfEither(member.Words, words)))];
+
+            if (matchingGroupIndexes.Count == 0)
             {
-                groups.Add((raw, words));
+                groups.Add([(raw, words)]);
+                continue;
             }
-            else if (words.Length < groups[matchIndex].Words.Length)
+
+            List<(string Original, string[] Words)> mergedGroup = groups[matchingGroupIndexes[0]];
+            for (int i = matchingGroupIndexes.Count - 1; i >= 1; i--)
             {
-                groups[matchIndex] = (raw, words);
+                mergedGroup.AddRange(groups[matchingGroupIndexes[i]]);
+                groups.RemoveAt(matchingGroupIndexes[i]);
             }
+
+            mergedGroup.Add((raw, words));
         }
 
-        return [.. groups.Select(g => g.Original)];
+        return [.. groups.Select(g => g.OrderBy(member => member.Words.Length).First().Original)];
     }
 
     private static bool IsWordPrefixOfEither(string[] a, string[] b)
@@ -228,7 +262,9 @@ public static partial class RedFlagsEvaluator
     {
         string withoutPunctuation = Punctuation().Replace(value, " ");
         string collapsed = WhitespaceRun().Replace(withoutPunctuation, " ").Trim().ToLowerInvariant();
-        return collapsed.Length == 0 ? [] : collapsed.Split(' ');
+        return collapsed.Length == 0
+            ? []
+            : collapsed.Split(' ');
     }
 
     [GeneratedRegex(@"[^\w\s]")]

@@ -152,6 +152,52 @@ public class RedFlagsEvaluatorTests
     }
 
     [Fact]
+    public void Evaluate_PlaceholderStraddledByARealRollback_StillFlagsIt()
+    {
+        // A placeholder reading between two real readings must not become the baseline for the next
+        // comparison: 85,000 -> 0 (placeholder, excluded) -> 42,000 is a real 43,000-mile rollback
+        // that the placeholder must not be allowed to mask.
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Dealer A", day1, 20000m, 85000),
+            new("Dealer A", day2, 20000m, 0),
+            new("Dealer A", day3, 20000m, 42000),
+        ];
+
+        IReadOnlyList<RedFlag> flags = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        RedFlag flag = Assert.Single(flags);
+        Assert.Equal("mileage-drop", flag.ShortTag);
+        Assert.Contains("mileage dropped from 85,000 to 42,000", flag.Detail);
+    }
+
+    [Fact]
+    public void Evaluate_SameDayBadScrapeStraddledByARealRollback_StillFlagsIt()
+    {
+        // A same-day duplicate scrape must not become the baseline for the next comparison either:
+        // 50,000 (Jan 1) -> 40,000 (Jan 1, excluded as a same-day duplicate) -> 41,000 (Jan 5) is a
+        // real 9,000-mile rollback from the day's first reading that must not be masked.
+        DateTimeOffset sameDayMorning = new(2026, 1, 1, 8, 0, 0, TimeSpan.Zero);
+        DateTimeOffset sameDayEvening = new(2026, 1, 1, 20, 0, 0, TimeSpan.Zero);
+        DateTimeOffset later = new(2026, 1, 5, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Dealer A", sameDayMorning, 20000m, 50000),
+            new("Dealer A", sameDayEvening, 20000m, 40000),
+            new("Dealer B", later, 20000m, 41000),
+        ];
+
+        IReadOnlyList<RedFlag> flags = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        RedFlag flag = Assert.Single(flags);
+        Assert.Equal("mileage-drop", flag.ShortTag);
+        Assert.Contains("mileage dropped from 50,000 to 41,000", flag.Detail);
+    }
+
+    [Fact]
     public void Evaluate_ThreeDealersWithinNinetyDays_FlagsDealerHopping()
     {
         DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -258,6 +304,34 @@ public class RedFlagsEvaluatorTests
         Assert.Equal("34-sellers", flag.ShortTag);
         Assert.Contains("Rooftop 0, Rooftop 1, Rooftop 2 and 31 more", flag.Detail);
         Assert.DoesNotContain("Rooftop 3,", flag.Detail);
+    }
+
+    [Fact]
+    public void Evaluate_LateArrivingBridgeNameMergesAlreadySplitGroups_NoFalseSellerCount()
+    {
+        // "Schaller Honda Subaru" and "Schaller Honda Mitsubishi" diverge at their third word, so
+        // they start as two separate groups; "Schaller Honda" arrives after both and is a
+        // word-prefix of each, so it must merge both groups into one rather than only the first
+        // group it happens to match. A prior version compared a candidate against only a group's
+        // current representative, so this bare name merged into just one of the two groups,
+        // leaving two returned sellers where one was a word-prefix of the other (an outright
+        // invariant violation), and a fourth, genuinely distinct dealer in the same window pushed
+        // the count to 3 and tripped the default threshold as a false positive.
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 1, 20, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day4 = new(2026, 1, 25, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Schaller Honda Subaru", day1, 20000m, 40000),
+            new("Schaller Honda Mitsubishi", day2, 20000m, 40100),
+            new("Schaller Honda", day3, 20000m, 40200),
+            new("CarMax Orlando", day4, 20000m, 40300),
+        ];
+
+        IReadOnlyList<RedFlag> flags = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        Assert.DoesNotContain(flags, f => f.ShortTag.EndsWith("-sellers"));
     }
 
     [Fact]
