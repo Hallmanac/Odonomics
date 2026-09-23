@@ -20,7 +20,7 @@ public class CarEdgeGradeParserTests
     {
         string pageText = await ReadFixtureAsync("dealers-q-daytona-toyota.txt");
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Daytona Toyota");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Daytona Toyota", null);
 
         Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
         // The page also carries a "Grade:" filter row and a "Top-Rated (Grade A) Dealers" footer
@@ -38,7 +38,7 @@ public class CarEdgeGradeParserTests
     {
         string pageText = await ReadFixtureAsync("dealers-q-seminole-toyota.txt");
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Seminole Toyota");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Seminole Toyota", null);
 
         Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
         Assert.Equal("A", result.Grade);
@@ -53,7 +53,7 @@ public class CarEdgeGradeParserTests
     {
         string pageText = await ReadFixtureAsync("dealers-q-carmax-sanford.txt");
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "CarMax Sanford");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "CarMax Sanford", null);
 
         Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
         Assert.Null(result.Grade);
@@ -64,7 +64,7 @@ public class CarEdgeGradeParserTests
     {
         string pageText = await ReadFixtureAsync("dealers-q-holler-drivers-mart-sanford.txt");
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Driver's Mart");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Driver's Mart", null);
 
         Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
         Assert.Null(result.Grade);
@@ -95,7 +95,7 @@ public class CarEdgeGradeParserTests
             See 5 verified quotes →
             """;
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Hyundai");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Hyundai", null);
 
         Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
         Assert.Null(result.Grade);
@@ -134,7 +134,7 @@ public class CarEdgeGradeParserTests
             See 6 verified quotes →
             """;
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Toyota of Orlando");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Toyota of Orlando", null);
 
         Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
         Assert.Equal("C", result.Grade);
@@ -164,7 +164,7 @@ public class CarEdgeGradeParserTests
             See 12 verified quotes →
             """;
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Schaller Honda");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Schaller Honda", null);
 
         Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
         Assert.Equal("B", result.Grade);
@@ -194,7 +194,7 @@ public class CarEdgeGradeParserTests
             See 5 verified quotes →
             """;
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Hyundai");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Hyundai", null);
 
         Assert.Equal(CarEdgeGradeStatus.Unrecognized, result.Status);
         Assert.Null(result.Grade);
@@ -226,10 +226,68 @@ public class CarEdgeGradeParserTests
             See 5 verified quotes →
             """;
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Tesla");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Tesla", null);
 
         Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
         Assert.Null(result.Grade);
+    }
+
+    [Fact]
+    public void Parse_ExactNameMatchIsInADifferentCityThanTheSearchedDealer_ReturnsNotFoundRatherThanTheOtherStoresGrade()
+    {
+        // CarEdge's own search can return a same-named store in a city the ledger dealer was never
+        // seen in (a chain, or a match CarEdge's own fuzzy search considered close enough). A card
+        // whose name is an exact match must still be rejected when the dealer's own known location
+        // disagrees with that card's "City, ST" line, rather than permanently attributing another
+        // store's grade to this dealer.
+        const string pageText = """
+            Search: "Holler Honda Sanford, FL"
+            1 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Holler Honda
+            Columbia, SC · 8 verified quotes
+            $600
+            doc fee
+            No add-ons
+            A
+            91/100
+            Highly transparent
+            See 8 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Sanford, FL");
+
+        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+        Assert.Null(result.Grade);
+    }
+
+    [Fact]
+    public void Parse_ExactNameMatchIsInTheSameCityAsTheSearchedDealer_ReturnsThatCardsGrade()
+    {
+        // The counterpart to the cross-city rejection above: a card whose name and location both
+        // agree with the searched dealer is accepted exactly as a name-only match always was.
+        const string pageText = """
+            Search: "Holler Honda Sanford, FL"
+            1 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Holler Honda
+            Sanford, FL · 8 verified quotes
+            $600
+            doc fee
+            No add-ons
+            A
+            91/100
+            Highly transparent
+            See 8 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Sanford, FL");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("A", result.Grade);
+        Assert.Equal(91, result.Score);
     }
 
     [Fact]
@@ -237,7 +295,7 @@ public class CarEdgeGradeParserTests
     {
         string pageText = await ReadFixtureAsync("search-url-invalid-404.txt");
 
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Any Dealer");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Any Dealer", null);
 
         Assert.Equal(CarEdgeGradeStatus.CarEdgeSearchUrlInvalid, result.Status);
         Assert.Null(result.Grade);
@@ -246,7 +304,7 @@ public class CarEdgeGradeParserTests
     [Fact]
     public void Parse_PageMatchesNoKnownLayoutAtAll_ReturnsUnrecognized()
     {
-        CarEdgeGradeResult result = CarEdgeGradeParser.Parse("Just a moment... checking your browser.", "Holler Honda");
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse("Just a moment... checking your browser.", "Holler Honda", null);
 
         Assert.Equal(CarEdgeGradeStatus.Unrecognized, result.Status);
     }

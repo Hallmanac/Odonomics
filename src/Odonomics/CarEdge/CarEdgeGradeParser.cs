@@ -15,7 +15,7 @@ namespace Odonomics.CarEdge;
 /// recording a permanent (and possibly wrong) outcome.</summary>
 public static partial class CarEdgeGradeParser
 {
-    public static CarEdgeGradeResult Parse(string pageText, string dealerName)
+    public static CarEdgeGradeResult Parse(string pageText, string dealerName, string? dealerLocation)
     {
         if (FourZeroFourLine().IsMatch(pageText) && PageNotFoundText().IsMatch(pageText))
         {
@@ -39,6 +39,8 @@ public static partial class CarEdgeGradeParser
         {
             return CarEdgeGradeResult.Unrecognized;
         }
+
+        string normalizedDealerLocation = DealerNormalizer.Normalize(dealerLocation);
 
         List<(int Start, int End, Match Match, bool Graded)> signals = [];
         foreach (Match match in GradedCard().Matches(pageText))
@@ -76,14 +78,30 @@ public static partial class CarEdgeGradeParser
         // The card's own dealer name always sits on the line immediately above its "City, ST"
         // location line (itself the last comma-plus-state-shaped line in the block: any make lines a
         // not-rated multi-brand card carries sit below it, not above). Collect every card's name line
-        // up front, scoped the same way as before (between the previous card's signal and this one),
-        // before deciding which card to accept.
-        List<(int Start, int End, Match Match, bool Graded, string NameLine)> cards = [];
+        // and that same location line up front, scoped the same way as before (between the previous
+        // card's signal and this one), before deciding which card to accept.
+        List<(int Start, int End, Match Match, bool Graded, string NameLine, string LocationLine)> cards = [];
         foreach ((int start, int end, Match match, bool graded) in signals)
         {
             string precedingBlock = pageText[precedingStart..start];
             precedingStart = end;
-            cards.Add((start, end, match, graded, DealerNameLineAboveLocation(precedingBlock)));
+            (string nameLine, string locationLine) = DealerCardIdentity(precedingBlock);
+            cards.Add((start, end, match, graded, nameLine, locationLine));
+        }
+
+        // A card whose own "City, ST" line doesn't match the searched dealer's known location is
+        // never this dealer, even when the name matches exactly: CarEdge's search can return
+        // same-named dealers in other cities (a chain, or an unrelated store CarEdge's own matching
+        // considered close enough), and taking one of those permanently mislabels the searched
+        // dealer's grade. Only enforced when both sides actually carry a location to compare, so a
+        // dealer or a card with no location on record falls back to the name-only check below exactly
+        // as before.
+        bool locationMatches(string cardLocationLine)
+        {
+            string normalizedCardLocation = DealerNormalizer.Normalize(cardLocationLine);
+            return normalizedDealerLocation.Length == 0
+                || normalizedCardLocation.Length == 0
+                || string.Equals(normalizedCardLocation, normalizedDealerLocation, StringComparison.Ordinal);
         }
 
         // Prefer a card whose name line is exactly the searched name: a page that returns a fuzzy
@@ -96,9 +114,10 @@ public static partial class CarEdgeGradeParser
         // legitimately extends the searched name is the best available match rather than a
         // permanent, possibly wrong, "not on CarEdge".
         (int Start, int End, Match Match, bool Graded, string NameLine)? chosen = null;
-        foreach ((int start, int end, Match match, bool graded, string nameLine) in cards)
+        foreach ((int start, int end, Match match, bool graded, string nameLine, string locationLine) in cards)
         {
-            if (string.Equals(DealerNormalizer.Normalize(nameLine), normalizedDealerName, StringComparison.Ordinal))
+            if (string.Equals(DealerNormalizer.Normalize(nameLine), normalizedDealerName, StringComparison.Ordinal)
+                && locationMatches(locationLine))
             {
                 chosen = (start, end, match, graded, nameLine);
                 break;
@@ -108,10 +127,10 @@ public static partial class CarEdgeGradeParser
         if (chosen is null)
         {
             Regex nameBoundary = new($@"\b{Regex.Escape(normalizedDealerName)}\b");
-            foreach ((int start, int end, Match match, bool graded, string nameLine) in cards)
+            foreach ((int start, int end, Match match, bool graded, string nameLine, string locationLine) in cards)
             {
                 string normalizedNameLine = DealerNormalizer.Normalize(nameLine);
-                if (normalizedNameLine.Length > 0 && nameBoundary.IsMatch(normalizedNameLine))
+                if (normalizedNameLine.Length > 0 && nameBoundary.IsMatch(normalizedNameLine) && locationMatches(locationLine))
                 {
                     chosen = (start, end, match, graded, nameLine);
                     break;
@@ -150,12 +169,12 @@ public static partial class CarEdgeGradeParser
             : CarEdgeGradeResult.Unrecognized;
     }
 
-    private static string DealerNameLineAboveLocation(string block)
+    private static (string NameLine, string LocationLine) DealerCardIdentity(string block)
     {
         Match? locationLine = CardLocationLine().Matches(block).LastOrDefault();
         if (locationLine is not { Success: true })
         {
-            return "";
+            return ("", "");
         }
 
         string[] linesAboveLocation = block[..locationLine.Index].Split('\n');
@@ -164,11 +183,11 @@ public static partial class CarEdgeGradeParser
             string line = linesAboveLocation[i].Trim();
             if (line.Length > 0)
             {
-                return line;
+                return (line, locationLine.Value);
             }
         }
 
-        return "";
+        return ("", locationLine.Value);
     }
 
     [GeneratedRegex(@"^\s*404\s*$", RegexOptions.Multiline)]

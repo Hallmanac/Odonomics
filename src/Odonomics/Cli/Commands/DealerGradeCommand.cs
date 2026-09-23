@@ -106,7 +106,7 @@ public static class DealerGradeCommand
                 string bodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
                 await recorder.WriteAsync($"dealer-{dealer.Id}.txt", bodyText, cancellationToken);
 
-                CarEdgeGradeResult result = CarEdgeGradeParser.Parse(bodyText, dealer.Name);
+                CarEdgeGradeResult result = CarEdgeGradeParser.Parse(bodyText, dealer.Name, dealer.Location);
                 switch (result.Status)
                 {
                     case CarEdgeGradeStatus.Graded:
