@@ -286,6 +286,12 @@ ranked and over-budget lines, and as a Grade column in the insurance-unknown and
 tables. It also lists any vehicle whose only postings come from F-range-graded dealers under its
 own warning heading, still ranked, never hidden.
 
+`odo rank` also says so, in one line above the Ranked section, when no ranked vehicle's expected
+during-loan monthly cost meets one or more of the scenario's target monthly budgets. The line names
+only the unmet targets and the cheapest ranked vehicle's during-loan range, then points at
+`odo budget` for the purchase price each target allows. It reads the targets from the scenario, not
+from `--budget`, and it is not printed when every target is met.
+
 ## Scenario
 
 `scenarios/daughter.json` is the shipped scenario: target models, hard filters, and every cost assumption (APR, gas price, insurance, mpg, fees, residual value, and so on), each either a single pinned value or a loose min/max range. A loose input makes every cost line in `odo rank` and `odo show` a band instead of a point. Edit the file directly; there is no `odo scenario set` in v0.
