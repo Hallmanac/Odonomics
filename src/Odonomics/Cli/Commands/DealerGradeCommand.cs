@@ -86,8 +86,7 @@ public static class DealerGradeCommand
         int graded = 0;
         int ungraded = 0;
         int failed = 0;
-        int consecutiveDeadSearchUrls = 0;
-        bool stoppedOnDeadSearchUrl = false;
+        var deadSearchUrlGate = new ConsecutiveDeadSearchUrlGate();
         for (int i = 0; i < targets.Count; i++)
         {
             if (i > 0)
@@ -115,37 +114,33 @@ public static class DealerGradeCommand
                         dealer.GradeReason = result.Reason;
                         dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
                         graded++;
-                        consecutiveDeadSearchUrls = 0;
+                        deadSearchUrlGate.RecordOtherOutcome();
                         AnsiConsole.MarkupLineInterpolated($"{dealer.Name}: {result.Grade}");
                         await db.SaveChangesAsync(cancellationToken);
                         break;
                     case CarEdgeGradeStatus.NotFound:
                         dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
                         ungraded++;
-                        consecutiveDeadSearchUrls = 0;
+                        deadSearchUrlGate.RecordOtherOutcome();
                         AnsiConsole.MarkupLineInterpolated($"[grey]{dealer.Name}: not on CarEdge[/]");
                         await db.SaveChangesAsync(cancellationToken);
                         break;
                     case CarEdgeGradeStatus.Unrecognized:
                         failed++;
-                        consecutiveDeadSearchUrls = 0;
+                        deadSearchUrlGate.RecordOtherOutcome();
                         AnsiConsole.MarkupLineInterpolated($"[yellow]{dealer.Name}: page didn't match a known CarEdge layout, will retry later[/]");
                         break;
                     case CarEdgeGradeStatus.CarEdgeSearchUrlInvalid:
                         failed++;
-                        consecutiveDeadSearchUrls++;
+                        deadSearchUrlGate.RecordDeadSearchUrl();
                         AnsiConsole.MarkupLineInterpolated($"[red]{dealer.Name}: CarEdge search returned its own 404, search URL is dead: {url}[/]");
-                        if (consecutiveDeadSearchUrls >= 3)
-                        {
-                            stoppedOnDeadSearchUrl = true;
-                        }
                         break;
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 failed++;
-                consecutiveDeadSearchUrls = 0;
+                deadSearchUrlGate.RecordOtherOutcome();
                 AnsiConsole.MarkupLineInterpolated($"[yellow]{dealer.Name}: failed to check ({ex.Message})[/]");
             }
             finally
@@ -153,7 +148,7 @@ public static class DealerGradeCommand
                 await page.CloseAsync();
             }
 
-            if (stoppedOnDeadSearchUrl)
+            if (deadSearchUrlGate.ShouldStop)
             {
                 AnsiConsole.MarkupLine("[red]stopping: 3 consecutive CarEdge search pages came back dead[/]");
                 break;
@@ -161,7 +156,7 @@ public static class DealerGradeCommand
         }
 
         AnsiConsole.MarkupLineInterpolated($"graded {graded}, recorded {ungraded} ungraded, {failed} failed");
-        return stoppedOnDeadSearchUrl ? 1 : 0;
+        return deadSearchUrlGate.ShouldStop ? 1 : 0;
     }
 
     private static void PrintGrade(DealerEntity dealer)
