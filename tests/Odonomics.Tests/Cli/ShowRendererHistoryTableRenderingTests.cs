@@ -5,6 +5,7 @@ using Spectre.Console.Testing;
 
 namespace Odonomics.Tests.Cli;
 
+[Collection(NoColorEnvironmentCollection.Name)]
 public class ShowRendererHistoryTableRenderingTests
 {
     [Fact]
@@ -130,6 +131,52 @@ public class ShowRendererHistoryTableRenderingTests
     }
 
     [Fact]
+    public void BuildGroupedHistoryTable_ThirtySixSellerGroupAndThreeSellerGroupWithLongNames_NeverTruncatesTheDealerCell()
+    {
+        string original = Environment.GetEnvironmentVariable("NO_COLOR") ?? "";
+        try
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", "1");
+
+            DateTimeOffset start = new(2025, 10, 16, 0, 0, 0, TimeSpan.Zero);
+            DateTimeOffset end = new(2026, 1, 5, 0, 0, 0, TimeSpan.Zero);
+            DateTimeOffset laterStart = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+            DateTimeOffset laterEnd = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+            List<VinHistoryPoint> points =
+            [
+                .. Enumerable.Range(1, 36).Select(i => new VinHistoryPoint(
+                    i == 1 ? "Mercedes-Benz Of South Orlando" : $"Mercedes-Benz Of Rooftop {i}", start, end, 22489m, 85960)),
+                new("Kahlig Auto Group", laterStart, laterEnd, 21990m, 86663),
+                new("Kahlig Auto Group Hyundai", laterStart, laterEnd, 21990m, 86663),
+                new("Kahlig Auto Group Kia", laterStart, laterEnd, 21990m, 86663),
+            ];
+
+            IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
+            Assert.Equal(2, groups.Count);
+
+            string[] lines = Render(groups);
+            string output = string.Join('\n', lines);
+
+            Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+            Assert.DoesNotContain('…', output);
+            Assert.DoesNotContain('\u001b', output);
+            Assert.Contains("36 sellers", output);
+            Assert.Contains("and 33 more", output);
+            Assert.Contains("3 sellers", output);
+            Assert.Contains("Mercedes-Benz Of South Orlando", Unwrap(lines));
+            Assert.Contains("Kahlig Auto Group", Unwrap(lines));
+            Assert.Contains("$22,489", output);
+            Assert.Contains("85,960", output);
+            Assert.Contains("$21,990", output);
+            Assert.Contains("86,663", output);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", original.Length == 0 ? null : original);
+        }
+    }
+
+    [Fact]
     public void BuildGroupedHistoryTable_WithNoColorSet_HasNoAnsiCodes()
     {
         List<VinHistoryPoint> points =
@@ -146,6 +193,11 @@ public class ShowRendererHistoryTableRenderingTests
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.DoesNotContain(lines, line => line.Contains('\u001b'));
     }
+
+    /// <summary>The dealer column's text with its wrapped continuation lines joined back into one
+    /// string, so an assertion can look for a whole name that wrapping split across two lines.</summary>
+    private static string Unwrap(string[] lines) =>
+        string.Join(' ', lines.Select(line => line.Split('│')[0].Trim()).Where(cell => cell.Length > 0));
 
     private static string[] Render(IReadOnlyList<SellerGroupSummary> groups)
     {
