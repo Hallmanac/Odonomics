@@ -67,7 +67,7 @@ odo dealer grade [--all | <vin>]    look up each ungraded dealer's CarEdge grade
 odo rank [--budget N] [--term M]    score every vehicle in the ledger against the scenario
 odo show <vin> [--refresh]          NHTSA decode, recalls, complaints, safety ratings, Marketcheck
                                      VIN history, red flags, postings, notes, finalist status
-odo research [<vin> ...] [--refresh]
+odo research [<vin> ...] [--refresh] [--quiet]
                                      NHTSA safety ratings and Marketcheck VIN history for every
                                      vehicle in the ledger that passes the scenario's filters (or
                                      just the given VINs), with a red-flags summary (see below)
@@ -104,22 +104,34 @@ that piece (if any) stays on display and in `odo rank`'s red-flag math. One bad 
 fails the whole vehicle, and one bad vehicle never fails the batch.
 
 `odo research` runs that lookup for many vehicles in one go, with a short pause between each so as
-not to hammer either API, printing one line per vehicle as it finishes: `researched` or `cached`
-with a red-flag count when every piece came back, or a yellow line naming which piece(s) failed and
-which data is still stored when only some did. It ends with a summary line ("N fully researched, M
-partially researched, K unreachable") followed by a one-line-per-vehicle summary: year, make,
-model, VIN, and its flags as short tags (`mileage-drop`, `5-sellers`, `no-remedy-recall`, or
-`none`), each line bounded to 80 columns so a batch of dozens of vehicles reads as a compact scan
-rather than a wall of dealer lists and full-text reasons; full detail for any one vehicle is what
-`odo show <vin>` is for. A vehicle with one or more failed pieces this run also carries a `partial`
-tag alongside its flags, so a summary line never reads as a clean, fully-checked vehicle when part
-of its data is actually stale or missing. With no VINs given, `odo research` covers every vehicle in
-the ledger that passes the scenario's hard filters (allowed model, minimum year, maximum mileage,
-not new stock; a vehicle with no current asking price is still eligible) and needs a refresh (see
-above: stale, never refreshed, missing its Marketcheck history, or missing a piece of NHTSA data). A
-vehicle NHTSA and Marketcheck could not be reached for at all is reported inline as unreachable
-(tagged `unreachable` in the summary) and the rest of the batch continues; the command exits
-non-zero only when every vehicle in the batch was unreachable.
+not to hammer either API. With no VINs given, it covers every vehicle in the ledger that passes the
+scenario's hard filters (allowed model, minimum year, maximum mileage, not new stock; a vehicle with
+no current asking price is still eligible), whether or not that vehicle needs a refresh, so the run
+always works the whole filtered set rather than only the slice that happened to be stale.
+
+While it runs, the progress output prints one line per vehicle actually fetched this run (not one
+served from the cache, since nothing happened for that vehicle): `researched` followed by its flags
+as short tags inline, e.g. `2025 Toyota Camry Hybrid (4T1...): researched, 12-sellers,
+mileage-drop`, or a yellow line naming which piece(s) failed and which data is still stored when
+only some of a vehicle's pieces came back this run. A vehicle NHTSA and Marketcheck could not be
+reached for at all prints a red "could not be reached" line and the rest of the batch continues; the
+command exits non-zero only when every vehicle in the batch was unreachable. Pass `--quiet` to
+replace all of that with a single counter line that overwrites itself in place
+(`researching 12/84 (8 fetched, 4 cached, 0 unreachable)`) instead of scrolling.
+
+The run ends with a tally line ("N fully researched, M partially researched, K unreachable") and
+then the summary: a header stating the whole filtered set's counts (`84 vehicles, 40 fetched, 44
+cached, 0 unreachable`) followed by one line per vehicle in that set, fetched or cached alike, so
+the summary is the one place the whole filtered set's flags are visible together rather than only
+the vehicles fetched this run. Each line starts with a one-letter marker for where that vehicle's
+data came from this run, `F` fetched, `C` cached, or `U` unreachable, then year, make, model, VIN,
+and its flags as short tags (`mileage-drop`, `5-sellers`, `no-remedy-recall`, or `none`), bounded to
+80 columns so a batch of dozens of vehicles reads as a compact scan rather than a wall of dealer
+lists and full-text reasons; full detail for any one vehicle is what `odo show <vin>` is for. A
+vehicle with one or more failed pieces this run also carries a `partial` tag alongside its flags, so
+a summary line never reads as a clean, fully-checked vehicle when part of its data is actually stale
+or missing. A run where every vehicle in the filtered set is already cached still prints the full
+summary, not an empty one; the cache only skips the network calls, never the reporting.
 
 The red-flags section (shown in full by `odo show`, as short tags by `odo research`) lists, with a
 reason, anything the data shows:
