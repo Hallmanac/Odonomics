@@ -48,7 +48,7 @@ public static class RankCommand
             research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), lowestCurrentPrice);
         }
 
-        RankRenderer.Render(AnsiConsole.Console, scores, budget, research);
+        RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets);
         return 0;
     }
 
