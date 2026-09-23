@@ -165,6 +165,22 @@ public static class ShowRenderer
 
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Postings[/]");
+        AnsiConsole.Write(BuildPostingsTable(vehicle.Postings));
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLineInterpolated($"[bold]Notes ({vehicle.Notes.Count})[/]");
+        foreach (NoteEntity note in vehicle.Notes.OrderBy(n => n.CreatedAt))
+        {
+            AnsiConsole.MarkupLineInterpolated($"  [[{note.CreatedAt:yyyy-MM-dd}]] {note.Text}");
+        }
+    }
+
+    /// <summary>The ledger's own postings for one vehicle, one row per posting with its source,
+    /// first and last seen dates, price history, and dealer. Built without writing it, so a
+    /// rendering test can capture it against a fixed-width console, the same as
+    /// <see cref="BuildGroupedHistoryTable"/>.</summary>
+    public static Table BuildPostingsTable(IEnumerable<PostingEntity> postings)
+    {
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
         table.AddColumn("Source");
@@ -172,7 +188,7 @@ public static class ShowRenderer
         table.AddColumn("Last");
         table.AddColumn("Price history");
         table.AddColumn("Dealer");
-        foreach (PostingEntity posting in vehicle.Postings)
+        foreach (PostingEntity posting in postings)
         {
             string priceHistory = PriceHistory([.. posting.PriceObservations.OrderBy(o => o.ObservedAt).Select(o => o.Price)]);
             table.AddRow(
@@ -183,14 +199,7 @@ public static class ShowRenderer
                 Format.Cell(DealerCell(posting.Dealer)));
         }
 
-        AnsiConsole.Write(table);
-
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLineInterpolated($"[bold]Notes ({vehicle.Notes.Count})[/]");
-        foreach (NoteEntity note in vehicle.Notes.OrderBy(n => n.CreatedAt))
-        {
-            AnsiConsole.MarkupLineInterpolated($"  [[{note.CreatedAt:yyyy-MM-dd}]] {note.Text}");
-        }
+        return table;
     }
 
     /// <summary>A recall's report date as yyyy-MM-dd. NHTSA's recallsByVehicle endpoint reports it as
