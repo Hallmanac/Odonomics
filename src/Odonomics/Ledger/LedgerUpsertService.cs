@@ -47,7 +47,11 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
             .Where(p => p.VehicleVin == candidate.Vin && p.Source == candidate.Source && p.Url == candidate.Url)
             .FirstOrDefaultAsync(cancellationToken);
 
-        DealerEntity? dealer = await FindOrCreateDealerAsync(candidate.DealerName, candidate.DealerLocation, cancellationToken);
+        // A fallback name says the source named no dealer, so it must not replace a link an earlier
+        // sighting made to a real one, nor mint a dealer row a posting will never use.
+        DealerEntity? dealer = candidate.DealerNameIsFallback && posting?.DealerId is not null
+            ? null
+            : await FindOrCreateDealerAsync(candidate.DealerName, candidate.DealerLocation, cancellationToken);
 
         bool postingIsNew = posting is null;
         decimal? previousPrice = null;

@@ -182,7 +182,7 @@ public static class DealerGradeCommand
                 return new DealerGradeOutcome($"{dealer.Name}: not on CarEdge", Color.Grey, DealerGradeTally.Ungraded, Stamped: true);
             case CarEdgeGradeStatus.Ambiguous:
                 return new DealerGradeOutcome(
-                    $"{dealer.Name}: several CarEdge dealers share this name and the location on record is too partial to pick one, left ungraded until a fuller location is known",
+                    $"{dealer.Name}: several CarEdge dealers share this name and the location on record is missing or too partial to pick one, left ungraded until a fuller location is known",
                     Color.Yellow,
                     DealerGradeTally.Unmatched,
                     Stamped: false);

@@ -31,7 +31,21 @@ public sealed record WalkSite(
         string.IsNullOrWhiteSpace(extractedDealerName)
             ? FallbackDealerName
             : extractedDealerName.Trim();
+
+    /// <summary>The dealer a candidate from this site is stored with, given what extraction returned.
+    /// When the fallback name applies, the location is dropped and <see cref="ResolvedDealer.IsFallback"/>
+    /// is set: the fallback is one dealer, "Carvana" with no location, rather than a row per pickup
+    /// city the page happened to print, and the upsert uses the flag so a sighting that named no hub
+    /// never replaces a link to a more specific dealer an earlier sighting established.</summary>
+    public ResolvedDealer ResolveDealer(string? extractedDealerName, string? extractedDealerLocation) =>
+        FallbackDealerName is not null && string.IsNullOrWhiteSpace(extractedDealerName)
+            ? new ResolvedDealer(FallbackDealerName, null, IsFallback: true)
+            : new ResolvedDealer(ResolveDealerName(extractedDealerName), extractedDealerLocation, IsFallback: false);
 }
+
+/// <summary>The dealer name and location a walked candidate is stored with, and whether the name is
+/// the site's fallback rather than one the page gave.</summary>
+public readonly record struct ResolvedDealer(string? Name, string? Location, bool IsFallback);
 
 /// <summary>Search-URL shapes and detail-link patterns for the two v0 walk targets. The spike's
 /// SPIKE-FINDINGS.md recorded both sites as having no working hybrid facet, but that recording

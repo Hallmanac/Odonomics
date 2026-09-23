@@ -7,9 +7,9 @@ namespace Odonomics.CarEdge;
 /// matched no known shape at all (a slow render, a challenge, a layout change) and should be
 /// retried rather than recorded as either outcome. <see cref="CarEdgeSearchUrlInvalid"/> means the
 /// page is CarEdge's own 404, which means the search URL itself is dead, not this one dealer.
-/// <see cref="Ambiguous"/> means the dealer's location is only a city or only a state and more than
-/// one same-named card on the page fits it, so no card can be picked safely; a later run with a
-/// fuller location can. <see cref="LocationMismatch"/> means a card matched the dealer's name but
+/// <see cref="Ambiguous"/> means the dealer's location is missing, only a city, or only a state and
+/// more than one same-named card on the page fits it, so no card can be picked safely; a later run
+/// with a fuller location can. <see cref="LocationMismatch"/> means a card matched the dealer's name but
 /// every such card sat in a different city or state; that is not proof CarEdge lacks this dealer
 /// (the location on record may be wrong or stale), so it is retried rather than stamped.</summary>
 public enum CarEdgeGradeStatus

@@ -238,6 +238,7 @@ public static class WalkCommand
                     return DetailPageOutcome.MissingFields;
                 }
 
+                ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation);
                 var candidate = new ListingCandidate
                 {
                     Vin = outcome.Result.Vin,
@@ -261,8 +262,9 @@ public static class WalkCommand
                     Trim = outcome.Result.Trim,
                     Price = outcome.Result.Price.Value,
                     Mileage = outcome.Result.Mileage.Value,
-                    DealerName = site.ResolveDealerName(outcome.Result.DealerName),
-                    DealerLocation = outcome.Result.DealerLocation,
+                    DealerName = dealer.Name,
+                    DealerLocation = dealer.Location,
+                    DealerNameIsFallback = dealer.IsFallback,
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);

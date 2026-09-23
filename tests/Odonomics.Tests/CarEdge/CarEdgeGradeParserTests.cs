@@ -471,6 +471,20 @@ public class CarEdgeGradeParserTests
     }
 
     [Fact]
+    public void Parse_DealerWithNoLocationMatchesSeveralStoresOfAChainByContainedName_ReturnsAmbiguousRatherThanTheFirstCard()
+    {
+        string pageText = PageText(
+            2,
+            CardText("Carvana Orlando", "Orlando, FL", "F", 20),
+            CardText("Carvana Atlanta", "Atlanta, GA", "A", 95));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Carvana", null);
+
+        Assert.Equal(CarEdgeGradeStatus.Ambiguous, result.Status);
+        Assert.Null(result.Grade);
+    }
+
+    [Fact]
     public void Parse_StateOnlyDealerLocationAndOnlyOneExactNameCardIsInThatState_ReturnsThatCard()
     {
         string pageText = PageText(

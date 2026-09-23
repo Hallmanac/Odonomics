@@ -15,4 +15,9 @@ public sealed record ListingCandidate
     public required int Mileage { get; init; }
     public string? DealerName { get; init; }
     public string? DealerLocation { get; init; }
+
+    /// <summary>True when <see cref="DealerName"/> is a site's stand-in for a page that named no
+    /// dealer (carvana's "Carvana"), not a name the source gave. The upsert then links it only to a
+    /// posting that has no dealer yet.</summary>
+    public bool DealerNameIsFallback { get; init; }
 }
