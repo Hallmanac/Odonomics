@@ -13,6 +13,7 @@ public static class LedgerDataMigrations
     private const string CanonicalizeWalkedPostingUrlsName = "CanonicalizeWalkedPostingUrls";
     private const string StampCarvanaFallbackDealerName = "StampCarvanaFallbackDealer";
     private const string ResolveCarvanaHubDealersName = "ResolveCarvanaHubDealers";
+    private const string MergeDealersByExpandedLocationName = "MergeDealersByExpandedLocation";
 
     private static readonly string[] WalkedSources = [WalkSites.CarsCom.Name, WalkSites.Carvana.Name];
 
@@ -21,6 +22,7 @@ public static class LedgerDataMigrations
         ApplyOnce(db, CanonicalizeWalkedPostingUrlsName, CanonicalizeWalkedPostingUrls);
         ApplyOnce(db, StampCarvanaFallbackDealerName, StampCarvanaFallbackDealer);
         ApplyOnce(db, ResolveCarvanaHubDealersName, ResolveCarvanaHubDealers);
+        ApplyOnce(db, MergeDealersByExpandedLocationName, MergeDealersByExpandedLocation);
     }
 
     private static void ApplyOnce(OdonomicsDbContext db, string name, Action<OdonomicsDbContext> migration)
@@ -200,6 +202,76 @@ public static class LedgerDataMigrations
             }
 
             posting.Dealer = hub;
+        }
+    }
+
+    /// <summary>Re-keys every dealer's location the way <see cref="DealerNormalizer.NormalizeLocation"/>
+    /// now does (Ft., Mt. and St. expanded in the city) and merges the rows that key collapses: a
+    /// dealer two sources located as "Saint Augustine, FL" and "St. Augustine, FL" had one row per
+    /// spelling. The oldest row of a name and location survives, every posting of the others is
+    /// re-pointed to it, and the others are removed. A survivor with no grade takes the grade, reason
+    /// and checked stamp of the oldest removed duplicate that has a grade, or failing that the
+    /// checked stamp of one that was looked up, so a dealer CarEdge already answered for is not
+    /// fetched again. Every surviving row's stored key is rewritten too, since a lone "St." row
+    /// would otherwise never be found by the upsert's new key.</summary>
+    private static void MergeDealersByExpandedLocation(OdonomicsDbContext db)
+    {
+        List<DealerEntity> dealers = [.. db.Dealers.OrderBy(d => d.Id)];
+        List<DealerEntity> duplicates = [];
+        Dictionary<int, DealerEntity> survivorByDuplicateId = [];
+        Dictionary<DealerEntity, string> keyBySurvivor = [];
+
+        foreach (IGrouping<(string Name, string Location), DealerEntity> sameDealer in dealers
+            .GroupBy(d => (d.NormalizedName, Location: DealerNormalizer.NormalizeLocation(d.Location ?? d.NormalizedLocation))))
+        {
+            DealerEntity survivor = sameDealer.First();
+            keyBySurvivor[survivor] = sameDealer.Key.Location;
+            foreach (DealerEntity duplicate in sameDealer.Skip(1))
+            {
+                InheritGrade(survivor, duplicate);
+                survivorByDuplicateId[duplicate.Id] = survivor;
+                duplicates.Add(duplicate);
+            }
+        }
+
+        if (duplicates.Count > 0)
+        {
+            int[] duplicateIds = [.. survivorByDuplicateId.Keys];
+            foreach (PostingEntity posting in db.Postings.Where(p => p.DealerId != null && duplicateIds.Contains(p.DealerId.Value)))
+            {
+                if (posting.DealerId is int dealerId)
+                {
+                    posting.Dealer = survivorByDuplicateId[dealerId];
+                }
+            }
+
+            // Removed and saved before any key is rewritten: a survivor's new key can be the one a
+            // duplicate still holds, which the unique index would reject.
+            db.Dealers.RemoveRange(duplicates);
+            db.SaveChanges();
+        }
+
+        foreach ((DealerEntity survivor, string key) in keyBySurvivor)
+        {
+            survivor.NormalizedLocation = key;
+        }
+    }
+
+    /// <summary>Copies a removed duplicate's grade verdict onto a survivor that lacks one, without
+    /// ever replacing a grade the survivor has. The duplicates are visited oldest first, so the
+    /// first one carrying a grade (or, failing that, a checked stamp) wins.</summary>
+    private static void InheritGrade(DealerEntity survivor, DealerEntity duplicate)
+    {
+        if (survivor.Grade is null && duplicate.Grade is not null)
+        {
+            survivor.Grade = duplicate.Grade;
+            survivor.GradeReason = duplicate.GradeReason;
+            survivor.GradeCheckedAt = duplicate.GradeCheckedAt;
+        }
+        else if (survivor.GradeCheckedAt is null && duplicate.GradeCheckedAt is not null && survivor.Grade is null)
+        {
+            survivor.GradeReason = duplicate.GradeReason;
+            survivor.GradeCheckedAt = duplicate.GradeCheckedAt;
         }
     }
 
