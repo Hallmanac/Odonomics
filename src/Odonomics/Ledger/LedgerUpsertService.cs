@@ -110,7 +110,7 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     /// dealer, and a posting that already has one keeps it: a fallback name says the source named no
     /// dealer, so it must not replace a link to a real one, nor mint a dealer row a posting will
     /// never use.</summary>
-    private async Task<DealerEntity?> ResolveFallbackDealerAsync(ListingCandidate candidate, PostingEntity? posting, DateTimeOffset now, CancellationToken cancellationToken)
+    private async ValueTask<DealerEntity?> ResolveFallbackDealerAsync(ListingCandidate candidate, PostingEntity? posting, DateTimeOffset now, CancellationToken cancellationToken)
     {
         bool mayMove = posting?.Dealer is null || CarvanaDealers.IsChain(posting.Dealer);
         if (!mayMove)

@@ -346,6 +346,62 @@ public class LedgerDataMigrationsTests
     }
 
     [Fact]
+    public async Task ApplyAll_LocatedHubRowsExist_FoldsThemIntoOneLocationLessRowPerHubKeepingItsGrade()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var run = Run(WalkedAt, sources: "carvana:Prius");
+        db.Runs.Add(run);
+        DateTimeOffset gradedAt = new(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
+        // The older walk stored the pickup city beside a named hub. Winder has a located row and a
+        // location-less twin; Fairburn has only located rows (two of them); Belton has one located
+        // row that the VIN history of an undealered posting also names.
+        DealerEntity winderTwin = new() { Name = "Carvana Winder", NormalizedName = "CARVANA WINDER", NormalizedLocation = "", Grade = "B", GradeCheckedAt = gradedAt };
+        DealerEntity winderLocated = new() { Name = "Carvana Winder", Location = "Orlando, FL", NormalizedName = "CARVANA WINDER", NormalizedLocation = "ORLANDO FL", Grade = "F", GradeCheckedAt = gradedAt };
+        DealerEntity fairburnOrlando = new() { Name = "Carvana Fairburn", Location = "Orlando, FL", NormalizedName = "CARVANA FAIRBURN", NormalizedLocation = "ORLANDO FL", Grade = "A", GradeCheckedAt = gradedAt };
+        DealerEntity fairburnAtlanta = new() { Name = "Carvana Fairburn", Location = "Atlanta, GA", NormalizedName = "CARVANA FAIRBURN", NormalizedLocation = "ATLANTA GA" };
+        DealerEntity beltonLocated = new() { Name = "Carvana Belton", Location = "Orlando, FL", NormalizedName = "CARVANA BELTON", NormalizedLocation = "ORLANDO FL" };
+        db.Dealers.AddRange(winderTwin, winderLocated, fairburnOrlando, fairburnAtlanta, beltonLocated);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        var upsert = new LedgerUpsertService(db);
+        foreach (string vin in new[] { "JTDEAMDE3NJ058833", "JTDEBRBE8LJ019584", "JTDBCMFE9PJ003977", "4T1B21HK8KU518914", "5YFBURHE5HP600000" })
+        {
+            await upsert.UpsertAsync(CarvanaCandidate(vin), run, CancellationToken.None);
+        }
+
+        Dictionary<string, PostingEntity> postingByVin = db.Postings.ToDictionary(p => p.VehicleVin);
+        postingByVin["JTDEAMDE3NJ058833"].Dealer = winderLocated;
+        postingByVin["JTDEBRBE8LJ019584"].Dealer = fairburnOrlando;
+        postingByVin["JTDBCMFE9PJ003977"].Dealer = fairburnAtlanta;
+        postingByVin["4T1B21HK8KU518914"].Dealer = beltonLocated;
+        // Undealered until the stamp migration puts it on the bare row; history then names Belton.
+        AddHistory(db, "5YFBURHE5HP600000", Stay("Carvana Belton", new DateTimeOffset(2026, 9, 22, 2, 28, 0, TimeSpan.Zero), new DateTimeOffset(2026, 9, 23, 1, 34, 0, TimeSpan.Zero)));
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        Assert.All(db.Dealers, d => Assert.Equal("", d.NormalizedLocation));
+        Assert.Equal(["Carvana", "Carvana Belton", "Carvana Fairburn", "Carvana Winder"], db.Dealers.Select(d => d.Name).OrderBy(n => n).ToList());
+
+        DealerEntity winder = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana Winder"));
+        Assert.Equal(winderTwin.Id, winder.Id);
+        Assert.Equal("B", winder.Grade);
+        Assert.Equal(1, db.Postings.Count(p => p.DealerId == winder.Id));
+
+        DealerEntity fairburn = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana Fairburn"));
+        Assert.Equal(fairburnOrlando.Id, fairburn.Id);
+        Assert.Null(fairburn.Location);
+        Assert.Equal("A", fairburn.Grade);
+        Assert.Equal(2, db.Postings.Count(p => p.DealerId == fairburn.Id));
+
+        DealerEntity belton = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana Belton"));
+        Assert.Equal(beltonLocated.Id, belton.Id);
+        Assert.Null(belton.Location);
+        Assert.Equal(2, db.Postings.Count(p => p.DealerId == belton.Id));
+    }
+
+    [Fact]
     public async Task ApplyAll_ALaterStartupAfterTheHubMigrationRan_LeavesAPostingHistoryNowNamesAHubForUntouched()
     {
         using var testDb = new LedgerTestDatabase();
