@@ -77,6 +77,37 @@ public class CarEdgeGradeParserTests
         // above the results themselves, which always contains the searched dealer's own name. This
         // pins that the searched dealer's name check is scoped to the card bodies, not that echo, so
         // a fuzzy first result graded for some other dealer is never mistaken for the searched one.
+        // The declared count matches the one card the page actually carries, so the "no card named
+        // this dealer" fallthrough is trustworthy here rather than a partial parse.
+        const string pageText = """
+            Search: "Holler Hyundai Winter Park, FL"
+            1 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Graded Motors
+            Orlando, FL · 5 verified quotes
+            $500
+            doc fee
+            No add-ons
+            D
+            62/100
+            Below average
+            See 5 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Hyundai");
+
+        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+        Assert.Null(result.Grade);
+    }
+
+    [Fact]
+    public void Parse_DeclaredCountExceedsCardsThatParsed_ReturnsUnrecognized()
+    {
+        // The page claims two dealers but only one card matches a known card layout: the searched
+        // dealer's own card may be a render variant the regexes don't cover, so this must come back
+        // Unrecognized and be retried rather than a permanent "not on CarEdge" for a dealer CarEdge
+        // may well have graded.
         const string pageText = """
             Search: "Holler Hyundai Winter Park, FL"
             2 dealers found
@@ -94,6 +125,38 @@ public class CarEdgeGradeParserTests
             """;
 
         CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Hyundai");
+
+        Assert.Equal(CarEdgeGradeStatus.Unrecognized, result.Status);
+        Assert.Null(result.Grade);
+    }
+
+    [Fact]
+    public void Parse_DealerNamedAfterAMakeInTheFilterChrome_DoesNotMatchTheFirstCard()
+    {
+        // The results page always carries a "All MakesAcura...Tesla...Volvo" filter row between the
+        // results-found line and the first card. A dealer whose own name is a bare make (a listing
+        // feed emits single-token names like "Tesla") must not match that chrome and be handed the
+        // first card's grade.
+        const string pageText = """
+            Search: "Tesla Orlando, FL"
+            1 dealers found
+            Grade:
+            AllABCDFCertified
+            All MakesAcuraAlfa RomeoAudiBMWTeslaToyotaVolvo
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Graded Motors
+            Orlando, FL · 5 verified quotes
+            $500
+            doc fee
+            No add-ons
+            D
+            62/100
+            Below average
+            See 5 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Tesla");
 
         Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
         Assert.Null(result.Grade);

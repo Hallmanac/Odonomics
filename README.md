@@ -279,8 +279,9 @@ challenge, or a layout change, is left unstamped and retried on the next run rat
 either outcome. A page that is CarEdge's own 404 means the search URL itself is dead, not that this
 one dealer is unrateable: the run prints the dead URL and keeps going, but stops and exits non-zero
 after three such pages in a row, leaving every dealer it never got to ungraded for the next run.
-`odo show <vin>` prints the grade beside each posting; the current dealer card carries no "why this
-grade" text, so no reason is shown alongside it. `odo rank` shows a Grade column and lists any
+`odo show <vin>` prints the grade beside each posting; on the graded pages recorded so far, the
+current dealer card carries no "why this grade" text, so no reason is shown alongside it. No F-grade
+page has been recorded, so whether an F still carries one is unknown. `odo rank` shows a Grade column and lists any
 vehicle whose only postings come from F-range-graded dealers under its own warning heading, still
 ranked, never hidden.
 
