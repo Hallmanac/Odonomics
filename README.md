@@ -65,8 +65,11 @@ odo walk [cars.com|carvana] [--model "Make Model"] [--max N]
                                      an operator-assisted walk (see below)
 odo dealer grade [--all | <vin>]    look up each ungraded dealer's CarEdge grade (see below)
 odo rank [--budget N] [--term M]    score every vehicle in the ledger against the scenario
-odo show <vin> [--refresh]          NHTSA decode, recalls, complaints, safety ratings, Marketcheck
-                                     VIN history, red flags, postings, notes, finalist status
+odo show <vin> [--refresh] [--all-history]
+                                     NHTSA decode, recalls, complaints, safety ratings, Marketcheck
+                                     VIN history (grouped by seller; pass --all-history for the raw
+                                     one-row-per-sighting list too), red flags, postings, notes,
+                                     finalist status
 odo research [<vin> ...] [--refresh] [--quiet]
                                      NHTSA safety ratings and Marketcheck VIN history for every
                                      vehicle in the ledger that passes the scenario's filters (or
@@ -87,7 +90,11 @@ VIN, on top of the NHTSA decode/recalls/complaints `odo show` has always fetched
   ratings for that year, make, and model.
 - **Marketcheck VIN history**: every prior listing recorded for the VIN (dealer, first/last seen
   dates, price, mileage) and the current listing's days on market. Needs `Marketcheck:ApiKey`; with
-  no key set, this degrades to a "could not fetch" line rather than failing the command.
+  no key set, this degrades to a "could not fetch" line rather than failing the command. `odo show`
+  renders this history grouped by seller (see the seller-group rule below): one row per group with
+  its first/last seen dates, dealer name(s) (capped at three plus "and N more"), price range, and
+  mileage range, so a syndicated 50-row history still reads as a handful of lines. Pass
+  `--all-history` to also print the raw, one-row-per-sighting list underneath.
 
 Both are cached on the vehicle's ledger row with a fetched-at stamp, and are only re-fetched when
 the cached research is more than seven days old, `--refresh` is passed, the Marketcheck VIN
@@ -142,19 +149,39 @@ full summary, not an empty one; the cache only skips the network calls, never th
 The red-flags section (shown in full by `odo show`, as short tags by `odo research`) lists, with a
 reason, anything the data shows:
 
+Both rules below start from the same seller-group clustering of the listing history: two listings
+belong to the same seller group when their windows (first seen to last seen) overlap, or touch
+within two days, AND their mileage is identical, regardless of what dealer name either one carries.
+This is what catches a dealer-group syndication feed relisting one physical car under a dozen-plus
+rooftop names at once. As a secondary merge, two listings also belong to the same group
+when their dealer names share a word-for-word stem case-insensitively (e.g. "Schaller Honda" of
+"Schaller Honda Subaru Mitsubishi", or "Alm Hyundai Florence" of "ALM Hyundai Florence"), which
+catches the same dealer spelled or franchised differently across sightings even when the mileage
+moved between them.
+
 - **mileage that decreased between two listings of the same VIN** (`mileage-drop`), ignoring a drop
   to zero or nearly zero (a placeholder/reset value, not a real odometer reading), a drop between
   two listings first seen on the same calendar day (the same snapshot re-scraped, not two real
   readings), and a drop smaller than the larger of 500 miles or 1% of the prior mileage (rounding
   and minor re-entry noise). Both the 500-mile floor and the 1% figure are constants in
-  `RedFlagsEvaluator`; no scenario field or CLI flag exposes them yet.
-- **three or more distinct sellers within a 90-day window of the listing history** (`N-sellers`),
-  after normalizing dealer names: case and punctuation are ignored, and a name that is a leading
-  word-for-word prefix of another (e.g. "Schaller Honda" of "Schaller Honda Subaru Mitsubishi") is
-  treated as the same seller under two spellings rather than two sellers. The seller-count threshold
-  (default three) is also a constant in `RedFlagsEvaluator`, not a scenario or CLI setting. The
-  printed list caps at three names followed by "and N more" so a syndication feed's 30-plus rooftop
-  names never dominates the line.
+  `RedFlagsEvaluator`; no scenario field or CLI flag exposes them yet. A drop that survives all of
+  that but sits between two listings in the *same seller group* whose windows are on consecutive or
+  overlapping days is judged a same-listing odometer correction rather than a real rollback (e.g.
+  Daytona Toyota's own listing corrected from 4,703 to 3,852 miles between Sep 9 and Sep 10 on a demo
+  car): it's recorded as a note on the vehicle instead (`mileage corrected 4,703 to 3,852 at Daytona
+  Toyota on Sep 10`), the same as an operator's own `odo note` would, and does not raise a flag. A
+  drop across two different seller groups, or across a real gap even at the same seller, still flags.
+- **three or more distinct sellers within a 90-day window of the listing history** (`N-sellers`).
+  Sellers are counted from the seller groups above, walked in chronological order: the first group is
+  seller one, and every later group counts as a new seller only when its window starts after the
+  previous counted group's own last window ended AND the mileage moved between them. A group
+  that overlaps the previous one, or resumes at the same mileage, is folded in rather than counted as
+  a seller change, since neither shape tells it apart from the same car sitting with the same owner.
+  This is what a real dealer-to-dealer flip looks like (sequential windows, mileage that actually
+  moved) as opposed to syndication (overlapping windows, identical mileage) even when a shared-stem
+  name never ties the rooftops together at all. The seller-count threshold (default three) is a
+  constant in `RedFlagsEvaluator`, not a scenario or CLI setting. The printed list caps at three names
+  followed by "and N more" so a syndication feed's 30-plus rooftop names never dominates the line.
 - **one or more open NHTSA recalls with no remedy published yet** (`no-remedy-recall`). An open
   recall with a remedy already available does not raise a flag on its own; `odo rank` shows the
   total open-recall count in its own `Recalls` column instead (see below), and NHTSA's free
