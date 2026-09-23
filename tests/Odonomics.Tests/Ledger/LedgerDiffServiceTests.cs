@@ -357,6 +357,40 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_KnownVinDroppedPriceOnTwoSourcesUnderUnchangedUrlsInTheSameRun_BothAreReportedAsPriceDrops()
+    {
+        // The ordinary price-drop path (posting untouched by URL, just a lower observation
+        // appended) hit by the same VIN on two sources in one run: auto.dev and marketcheck cover
+        // the same dealer inventory, so both existing postings can legitimately get a lower price
+        // in the same RunEntity. Each is its own drop, not just whichever source's Id sorts first.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev:Prius,marketcheck:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://autodev.com/a"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://marketcheck.com/a", "marketcheck"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev:Prius,marketcheck:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://autodev.com/a"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 16000m, "https://marketcheck.com/a", "marketcheck"), run2, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+
+        Assert.Equal(2, diff.PriceDrops.Count);
+        Assert.Contains(diff.PriceDrops, e => e.Source == "auto.dev" && e.PreviousPrice == 18000m && e.CurrentPrice == 17000m);
+        Assert.Contains(diff.PriceDrops, e => e.Source == "marketcheck" && e.PreviousPrice == 18000m && e.CurrentPrice == 16000m);
+        Assert.Empty(diff.New);
+        Assert.Empty(diff.Moved);
+        Assert.Empty(diff.Gone);
+    }
+
+    [Fact]
     public async Task ComputeAsync_MovedPostingWhosePriceAlsoDropped_IsFoldedIntoPriceDropsNotMoved()
     {
         using var testDb = new LedgerTestDatabase();

@@ -55,7 +55,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         var newSourceSightings = new HashSet<(string Vin, string Source)>();
         var movedSightings = new HashSet<(string Vin, string Source)>();
         var newSourcePriceDropSightings = new HashSet<(string Vin, string Source)>();
-        var priceDropVins = new HashSet<string>();
+        var priceDropSightings = new HashSet<(string Vin, string Source)>();
 
         // A brand-new posting row for a vehicle the ledger already knew about might be the same
         // listing back under a changed URL; the only way to tell is to find whatever stale posting
@@ -139,9 +139,11 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             // A dropped price only belongs to this run when this run is the one that appended the
             // newer of the two observations; otherwise the price was already reported dropped on
             // whichever earlier run actually saw it change, and repeating it here would be stale
-            // news every run after until the price moves again.
+            // news every run after until the price moves again. Deduped by (VIN, source), the same
+            // reasoning as the branches above: the same already-known VIN can drop price on two
+            // different sources' untouched-URL postings in one run, and each is its own drop.
             if (observations.Count >= 2 && observations[^1].ObservedAt == currentRun.StartedAt && observations[^2].Price > currentPrice
-                && priceDropVins.Add(vehicle.Vin))
+                && priceDropSightings.Add((vehicle.Vin, posting.Source)))
             {
                 priceDrops.Add(new PriceDropEntry(
                     vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url,
