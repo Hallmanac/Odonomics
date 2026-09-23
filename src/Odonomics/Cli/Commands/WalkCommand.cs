@@ -312,7 +312,10 @@ public static class WalkCommand
     // more than 80 columns: 8 + 22 + 5 + 5 + 15 + 6 + (3 * 6 + 1) = 80. Site and Model are also
     // truncated to their column's width before they reach the table, since Spectre wraps a cell
     // that overflows its declared width onto a second line rather than cropping it, which would
-    // split one pair's row across two lines of the table.
+    // split one pair's row across two lines of the table. Dropped is the one column that's
+    // allowed to wrap: its own reason breakdown can run longer than 15 columns, and none of the
+    // reason words themselves are wider than that, so Spectre folds it onto a continuation line
+    // under the same row at a space rather than mid-word.
     private const int SiteColumnWidth = 8;
     private const int ModelColumnWidth = 22;
     private const int PagesColumnWidth = 5;
@@ -330,7 +333,7 @@ public static class WalkCommand
         table.AddColumn(new TableColumn("Model") { Width = ModelColumnWidth, NoWrap = true });
         table.AddColumn(new TableColumn("Pages") { Width = PagesColumnWidth, NoWrap = true });
         table.AddColumn(new TableColumn("Saved") { Width = SavedColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Dropped") { Width = DroppedColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Dropped") { Width = DroppedColumnWidth });
         table.AddColumn(new TableColumn("Status") { Width = StatusColumnWidth, NoWrap = true });
         foreach (WalkPairSummary summary in summaries)
         {
@@ -339,7 +342,7 @@ public static class WalkCommand
                 Format.Cell(Format.Truncate(summary.Model, ModelColumnWidth)),
                 summary.DetailPagesVisited.ToString(),
                 summary.Upserted.ToString(),
-                Format.Cell(WalkPairSummaryLine.TableCell(summary.Dropped, DroppedColumnWidth)),
+                Format.Cell(WalkPairSummaryLine.TableCell(summary.Dropped)),
                 summary.Completed ? "ok" : "[yellow]failed[/]");
         }
 
