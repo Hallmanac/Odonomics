@@ -219,12 +219,6 @@ public static class WalkCommand
                     return DetailPageOutcome.Repeat;
                 }
 
-                if (outcome.Result.Year is null || outcome.Result.Price is null || outcome.Result.Mileage is null)
-                {
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage; {outcome.Result.Vin})[/]");
-                    return DetailPageOutcome.MissingFields;
-                }
-
                 if (!query.MatchesExtractedVehicle(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year))
                 {
                     int? gasOnlyBeforeYear = query.GasOnlyBeforeHybridYear(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year);
@@ -235,6 +229,12 @@ public static class WalkCommand
                         : $"doesn't match {make} {model}: {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}";
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NotMatching)} ({detail})[/]");
                     return DetailPageOutcome.NotMatching;
+                }
+
+                if (outcome.Result.Year is null || outcome.Result.Price is null || outcome.Result.Mileage is null)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage; {outcome.Result.Vin})[/]");
+                    return DetailPageOutcome.MissingFields;
                 }
 
                 var candidate = new ListingCandidate
