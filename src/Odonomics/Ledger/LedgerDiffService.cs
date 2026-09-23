@@ -18,14 +18,16 @@ public sealed record SearchDiff(
 
 /// <summary>
 /// Diffs one run against whatever ran before it, per source and model. A vehicle counts as "new"
-/// only when this run is the one that first created its ledger row (its FirstSeen matches the
-/// run's own timestamp), never merely because one of its postings did: a VIN the ledger already
-/// knew about is never "new" again just because it turned up under a fresh posting row (a relisted
-/// URL, or, before URL canonicalization, a per-run query-string change). When this run creates a
-/// brand-new posting row for an already-known vehicle, that's either "moved" (the same source's
-/// posting reappeared under a different URL, price unchanged or higher) or folded into
-/// "price-dropped" (same shape, but the new posting's price is actually lower than the stale
-/// posting's last known price) rather than "new". A posting is "price-dropped" when this run
+/// because this run is the one that first created its ledger row (its FirstSeen matches the run's
+/// own timestamp), or because this run created its first-ever posting on a source that VIN has
+/// never been seen on before: a VIN the ledger already knew about through one source is still
+/// "new" the first time a different source turns up a posting for it, since that's genuinely new
+/// information about where the car is listed. What a VIN the ledger already knew about never gets
+/// reported as "new" for is a fresh posting row on a source it was already known on (a relisted
+/// URL, or, before URL canonicalization, a per-run query-string change); that's either "moved"
+/// (the same source's posting reappeared under a different URL, price unchanged or higher) or
+/// folded into "price-dropped" (same shape, but the new posting's price is actually lower than the
+/// stale posting's last known price) rather than "new". A posting is "price-dropped" when this run
 /// itself appended a lower price than the one before it on that same posting row, and "gone" when
 /// the last run to cover that posting's own source and model before this one had it active but
 /// this run never touched it. See LedgerUpsertService: every posting touched by a run is stamped
@@ -98,8 +100,15 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                 if (stale is null)
                 {
                     // First time this already-known VIN has ever been seen on this source: not a
-                    // move (nothing on this source to have moved from) and not "new" (the vehicle
-                    // itself isn't), so this posting isn't reported under any heading.
+                    // move (nothing on this source to have moved from), so it's reported under
+                    // "New" alongside genuinely new vehicles, the same heading this posting would
+                    // have landed under before New was keyed on the vehicle's own FirstSeen rather
+                    // than the posting's. The vehicle itself isn't new, but this sighting is.
+                    if (newEntryVins.Add(vehicle.Vin))
+                    {
+                        newEntries.Add(new NewPostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, currentPrice));
+                    }
+
                     continue;
                 }
 
