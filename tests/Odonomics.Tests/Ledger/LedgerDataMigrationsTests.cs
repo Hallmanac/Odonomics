@@ -437,6 +437,29 @@ public class LedgerDataMigrationsTests
     }
 
     [Fact]
+    public async Task ApplyAll_TheSurvivingHubRowHasNoGradeButARemovedRowDoes_TheSurvivorInheritsThatGrade()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        DateTimeOffset checkedAt = new(2026, 9, 23, 5, 0, 0, TimeSpan.Zero);
+        DateTimeOffset gradedAt = new(2026, 9, 22, 5, 0, 0, TimeSpan.Zero);
+        // A CarEdge run stamped the location-less row as checked without finding a card for it, while
+        // the legacy located row of the same hub carries a grade. The location-less row survives.
+        DealerEntity winderTwin = new() { Name = "Carvana Winder", NormalizedName = "CARVANA WINDER", NormalizedLocation = "", GradeCheckedAt = checkedAt };
+        DealerEntity winderLocated = new() { Name = "Carvana Winder", Location = "Orlando, FL", NormalizedName = "CARVANA WINDER", NormalizedLocation = "ORLANDO FL", Grade = "A", GradeReason = "4.8 stars", GradeCheckedAt = gradedAt };
+        db.Dealers.AddRange(winderTwin, winderLocated);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        DealerEntity winder = Assert.Single(db.Dealers.Where(d => d.Name == "Carvana Winder"));
+        Assert.Equal(winderTwin.Id, winder.Id);
+        Assert.Equal("A", winder.Grade);
+        Assert.Equal("4.8 stars", winder.GradeReason);
+        Assert.Equal(gradedAt, winder.GradeCheckedAt);
+    }
+
+    [Fact]
     public async Task ApplyAll_ALaterStartupAfterTheHubMigrationRan_LeavesAPostingHistoryNowNamesAHubForUntouched()
     {
         using var testDb = new LedgerTestDatabase();

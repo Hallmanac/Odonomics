@@ -118,7 +118,9 @@ public static class LedgerDataMigrations
     /// with no location; a posting whose history names no hub stays on the bare row. The bare row's
     /// grade is cleared whenever this runs, since a grade it holds came from the old grader accepting
     /// whichever hub's card matched, and the dealer grade run then records its own verdict on the
-    /// row afresh. A hub row keeps the grade it earned under its own name.</summary>
+    /// row afresh. A hub row keeps the grade it earned under its own name; when the surviving row of a
+    /// hub holds no grade, it takes the grade, reason, and checked stamp of the first removed row
+    /// that has one, so folding never discards a grade.</summary>
     private static void ResolveCarvanaHubDealers(OdonomicsDbContext db)
     {
         List<DealerEntity> chainRows = [.. db.Dealers.Where(d => d.NormalizedName == CarvanaDealers.ChainNormalizedName
@@ -137,6 +139,13 @@ public static class LedgerDataMigrations
             DealerEntity survivor = rows[0];
             survivor.Location = null;
             survivor.NormalizedLocation = "";
+            if (survivor.Grade is null && rows.Skip(1).FirstOrDefault(d => d.Grade is not null) is { } graded)
+            {
+                survivor.Grade = graded.Grade;
+                survivor.GradeReason = graded.GradeReason;
+                survivor.GradeCheckedAt = graded.GradeCheckedAt;
+            }
+
             dealersByNormalizedName[sameName.Key] = survivor;
             foreach (DealerEntity row in rows)
             {
