@@ -2,6 +2,7 @@ using Odonomics.Domain;
 using Odonomics.Ledger;
 using Odonomics.Marketcheck;
 using Odonomics.Nhtsa;
+using System.Globalization;
 using Spectre.Console;
 
 namespace Odonomics.Cli;
@@ -16,23 +17,24 @@ public static class ShowRenderer
     // "95,000-150,000", 14 characters, or "$95,000-$150,000", 16 characters); reserving that width
     // unconditionally starves the Dealer column, the one the grouping feature exists to make
     // readable, of space it needs far more. So price and mileage width are computed per render call
-    // from what the actual groups need (floored at their header text's own length so the header
+    // from what the actual groups need (floored at their short header's own length so the header
     // itself is never truncated, capped at the six-digit worst case so a wide range still survives),
-    // and whatever they don't use goes to Dealer. Every cell is also truncated to its column's width
-    // before it reaches the table, since Spectre wraps a cell that overflows its declared width onto
-    // a second line rather than cropping it, which would turn one seller group's row into two lines
-    // and defeat the "readable at a glance" point of grouping in the first place; DealerNamesCell
-    // leads with the seller count for a multi-seller group specifically so that fact survives even
-    // when the name list itself has to be cut short.
+    // and whatever they don't use goes to Dealer. The price, mileage, and date cells are truncated to
+    // their column's width before they reach the table, since Spectre wraps a cell that overflows its
+    // declared width onto a second line rather than cropping it. The Dealer cell is the one exception:
+    // it is never truncated, because cutting a seller group's names short hides the very thing the
+    // grouping exists to show. It wraps instead, so a long name list continues on lines under the
+    // group's row while the other columns stay on the first line; DealerNamesCell still leads with the
+    // seller count for a multi-seller group so that fact sits at the front of the cell.
     private const int TableOverheadWidth = 16;
     private const int DateColumnWidth = 10;
-    private const int PriceHeaderWidth = 11;
-    private const int MileageHeaderWidth = 11;
+    private const int PriceHeaderWidth = 5;
+    private const int MileageHeaderWidth = 5;
     private const int PriceColumnMaxWidth = 16;
     private const int MileageColumnMaxWidth = 14;
     private const int MaxDealerNamesShown = 3;
 
-    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory)
+    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory, TimeProvider? timeProvider = null)
     {
         (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
@@ -66,7 +68,7 @@ public static class ShowRenderer
                 string remedyClause = recall.RemedyAvailable
                     ? "remedy available"
                     : "[red]no remedy yet[/]";
-                string prefix = Markup.Escape($"  {recall.CampaignNumber} ({recall.ReportReceivedDate}): {recall.Component} - ");
+                string prefix = Markup.Escape($"  {recall.CampaignNumber} ({RecallDate(recall.ReportReceivedDate)}): {recall.Component} - ");
                 AnsiConsole.MarkupLine($"{prefix}{remedyClause}");
             }
         }
@@ -108,16 +110,17 @@ public static class ShowRenderer
         }
         else
         {
-            AnsiConsole.MarkupLineInterpolated($"  days on market (current listing): {(history.CurrentListingDaysOnMarket is int dom ? dom.ToString("N0") : "(unknown)")}");
+            IReadOnlyList<VinHistoryPoint> points = [.. history.PriorListings
+                .Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))];
+            IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
+            DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+            AnsiConsole.MarkupLineInterpolated($"  days on market (current listing): {DaysOnMarket(history.CurrentListingDaysOnMarket, groups, now)}");
             if (history.PriorListings.Count == 0)
             {
                 AnsiConsole.MarkupLine("  no prior listings on file");
             }
             else
             {
-                IReadOnlyList<VinHistoryPoint> points = [.. history.PriorListings
-                    .Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))];
-                IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
                 int undated = points.Count(p => p.FirstSeen is null);
                 if (groups.Count == 0)
                 {
@@ -169,9 +172,7 @@ public static class ShowRenderer
         table.AddColumn("Dealer");
         foreach (PostingEntity posting in vehicle.Postings)
         {
-            string priceHistory = string.Join(" -> ", posting.PriceObservations
-                .OrderBy(o => o.ObservedAt)
-                .Select(o => Format.Money(o.Price)));
+            string priceHistory = PriceHistory([.. posting.PriceObservations.OrderBy(o => o.ObservedAt).Select(o => o.Price)]);
             table.AddRow(
                 Format.Cell(posting.Source),
                 posting.FirstSeen.ToString("yyyy-MM-dd"),
@@ -190,10 +191,51 @@ public static class ShowRenderer
         }
     }
 
+    /// <summary>A recall's report date as yyyy-MM-dd. NHTSA's recallsByVehicle endpoint reports it as
+    /// dd/MM/yyyy text; anything that does not parse as that (an ISO date already, or a blank) is
+    /// returned unchanged rather than guessed at.</summary>
+    public static string RecallDate(string reportReceivedDate) =>
+        DateTime.TryParseExact(reportReceivedDate, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsed)
+            ? parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            : reportReceivedDate;
+
+    /// <summary>A posting's observed prices, oldest first, joined with arrows; consecutive equal
+    /// observations collapse to one, since "$22,489 -> $22,489" only says the price did not move.</summary>
+    public static string PriceHistory(IReadOnlyList<decimal> pricesOldestFirst)
+    {
+        List<decimal> changes = [];
+        foreach (decimal price in pricesOldestFirst)
+        {
+            if (changes.Count == 0 || changes[^1] != price)
+            {
+                changes.Add(price);
+            }
+        }
+
+        return string.Join(" -> ", changes.Select(Format.Money));
+    }
+
+    /// <summary>Days on market for the current listing: Marketcheck's own figure when it reported one,
+    /// otherwise the days since the current seller group (the group whose window ends last) was first
+    /// seen, and "(unknown)" only when neither exists.</summary>
+    public static string DaysOnMarket(int? reportedDays, IReadOnlyList<SellerGroupSummary> groups, DateTimeOffset now)
+    {
+        if (reportedDays is int reported)
+        {
+            return reported.ToString("N0");
+        }
+
+        SellerGroupSummary? current = groups.MaxBy(g => g.LastSeen);
+        return current is null
+            ? "(unknown)"
+            : Math.Max(0, (now.UtcDateTime.Date - current.FirstSeen.UtcDateTime.Date).Days).ToString("N0");
+    }
+
     /// <summary>The listing history grouped by seller (see <see cref="RedFlagsEvaluator.GroupBySeller"/>),
     /// one row per group: dealer name(s), led by the seller count for a multi-seller group and capped
-    /// at <see cref="MaxDealerNamesShown"/> names plus "and N more" (see <see cref="DealerNamesCell"/>),
-    /// the group's overall first/last seen dates, and its price and mileage ranges. Built without
+    /// at <see cref="MaxDealerNamesShown"/> names plus "and N more" (see <see cref="DealerNamesCell"/>)
+    /// and wrapped, never truncated, within its column, the group's overall first/last seen dates, and
+    /// its price and mileage ranges. Built without
     /// writing it, so a rendering test can capture it against a fixed-width console instead of the
     /// real one, the same as <c>WalkCommand.BuildSummaryTable</c>.</summary>
     public static Table BuildGroupedHistoryTable(IReadOnlyList<SellerGroupSummary> groups)
@@ -208,15 +250,15 @@ public static class ShowRenderer
 
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
-        table.AddColumn(new TableColumn("Dealer(s)") { Width = dealerColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Dealer(s)") { Width = dealerColumnWidth });
         table.AddColumn(new TableColumn("First") { Width = DateColumnWidth, NoWrap = true });
         table.AddColumn(new TableColumn("Last") { Width = DateColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Price range") { Width = priceColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Miles range") { Width = mileageColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Price") { Width = priceColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Miles") { Width = mileageColumnWidth, NoWrap = true });
         foreach (SellerGroupSummary group in groups)
         {
             table.AddRow(
-                Format.Cell(Format.Truncate(DealerNamesCell(group.DealerNames), dealerColumnWidth)),
+                Format.Cell(DealerNamesCell(group.DealerNames)),
                 group.FirstSeen.ToString("yyyy-MM-dd"),
                 group.LastSeen.ToString("yyyy-MM-dd"),
                 Format.Cell(Format.Truncate(RangeCell(group.MinPrice, group.MaxPrice, Format.Money), priceColumnWidth)),
@@ -253,9 +295,7 @@ public static class ShowRenderer
 
     /// <summary>Leads a multi-seller group's cell with its seller count ("N sellers: ...") before the
     /// capped name list, so the one fact this table exists to surface (how many rooftops a group
-    /// spans) survives <see cref="Format.Truncate"/> even when the name list itself has to be cut
-    /// short to fit the dealer column's width: truncation always cuts from the end, so whatever
-    /// sits at the front of the string is what the column-width-limited cell keeps.</summary>
+    /// spans) is the first thing in the cell. The cell is never truncated; the dealer column wraps it.</summary>
     private static string DealerNamesCell(IReadOnlyList<string> names)
     {
         if (names.Count == 0)
