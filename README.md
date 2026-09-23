@@ -316,7 +316,7 @@ checked, since the fetched-at timestamp is what the cache rule keys off, not the
 is never looked up again on a later run. A page that merely failed to parse, a slow render, a
 challenge, or a layout change, is left unstamped and retried on the next run rather than recorded as
 either outcome. A card is only taken for a dealer when the dealer's location agrees with the card's
-"City, ST" line one part at a time: both are split into a city and a state, lowercased, stripped of
+"City, ST" line one part at a time: both are split into a city and a state, case-folded, stripped of
 punctuation and any trailing zip code, and "Ft.", "Mt." and "St." are read as Fort, Mount and Saint,
 so the walk's "Winter Park, FL 32792" still finds its own "Winter Park, FL" card while a bare "Palm
 Beach" never matches "West Palm Beach, FL". Two more outcomes leave the dealer unstamped and
