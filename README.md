@@ -274,15 +274,32 @@ Both cars.com and Carvana do have a working hybrid facet: an earlier build read 
 normalized name and location, when the source names one: Auto.dev and Marketcheck carry a dealer
 name and city/state in their API response, and the walk's own extraction reads a dealer name and
 location off the page text the same way it reads the vehicle's own fields. A carvana detail page
-usually names no dealer, so the walk stores such a posting with the dealer "Carvana" (with no
-location, even when the page prints a pickup city) rather than none; a page that does name a hub,
-such as "Carvana Winder", keeps that name. A later sighting that names no hub never replaces a
-posting's existing dealer link, so a posting stored under a hub stays under it. Existing carvana
-postings with no dealer are stamped "Carvana" once, on the first startup after the update. The
-dealer grade pass treats "Carvana" like any other dealer name: it looks the name up on CarEdge, and
-a result of not found or ungraded stamps it checked the same way. A dealer with no location on
-record that matches more than one CarEdge card (the many "Carvana ..." stores) comes back
-ambiguous and is left ungraded rather than taking whichever card is listed first.
+usually names no dealer, so the walk stores such a posting with the dealer "Carvana" rather than
+none; a page that does name a hub, such as "Carvana Winder", keeps that name. Carvana is one dealer
+row per name and never per city: a Carvana page prints the buyer's pickup city, not where the hub
+is, so the ledger keys every Carvana dealer ("Carvana" or a hub such as "Carvana Winder") on its
+name alone and drops any location a walk or an API source reports for it. When the page names no
+hub, the walk still looks in the Marketcheck VIN history the ledger already stores for that VIN: if
+a Carvana hub's listing overlaps the posting's own sighting window (give or take two days, since
+Marketcheck's dates trail the walk by about a day), the posting is linked to that hub, and the most
+recent such listing wins. A later sighting that names no hub moves a posting only off the bare
+"Carvana" row (or a legacy located one) and only onto a hub the history names; it never replaces a
+link to any other dealer, so a posting stored under a hub the page named stays under it. On the
+first startup after the update, existing carvana postings with no dealer are stamped "Carvana",
+every located "Carvana, <city>" row an older walk left behind is folded into the bare row (its
+postings re-pointed, the row removed), and every carvana posting on the bare row moves to the hub
+its VIN history names for its window, so `odo show` never prints "Carvana Winder" in the prior
+listings and a different Carvana beside it in Postings. A posting whose history names no hub stays
+on the bare row, and the bare row's grade is cleared so the next dealer grade run records its own
+verdict on it.
+
+The dealer grade pass has one rule for Carvana: the bare "Carvana" row is never looked up.
+CarEdge lists Carvana as a card per hub ("Carvana Orlando" and so on), so a search for the bare name
+returns hub cards, and taking one would grade the chain by an arbitrary hub. The run stamps the row checked with a recorded reason
+and no grade (`odo show` prints it as "Carvana (ungraded)"), and every hub row is graded by its hub
+name like any other dealer. The parser backs that up: a search for the bare name "Carvana" only
+accepts a card named exactly "Carvana", never a hub's card that merely contains it, whatever
+location the dealer row has.
 
 `odo dealer grade --all` connects over CDP to the same operator-launched browser `odo walk` uses
 (see above); if nothing is listening on the debugging port, it prints the identical launch-line
