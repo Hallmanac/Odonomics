@@ -107,69 +107,96 @@ public static class LedgerDataMigrations
     }
 
     /// <summary>Gives every carvana posting the most specific Carvana dealer the ledger knows, and
-    /// leaves one dealer row named exactly "Carvana". Two steps, in this order. First, a located
-    /// "Carvana" row (the older walk stored the pickup city the page printed as the dealer's
-    /// location) is folded into the bare one: its postings are re-pointed, the row is removed, and
-    /// the bare row is created if it did not exist. Second, every carvana posting on the bare row is
-    /// re-linked to the hub the vehicle's stored Marketcheck history names for the posting's own
-    /// window (see <see cref="CarvanaDealers.HubNameFromHistory"/>), reusing that hub's dealer row or
-    /// creating it with no location; a posting whose history names no hub stays on the bare row.
-    /// The bare row's grade is cleared whenever this runs, since a grade it holds came from the old
-    /// grader accepting whichever hub's card matched, and the dealer grade run then records its own
-    /// verdict on the row afresh.</summary>
+    /// leaves one location-less dealer row per Carvana name. Two steps, in this order. First, the
+    /// Carvana rows are folded by name: the older walk stored the pickup city the page printed as the
+    /// dealer's location, on "Carvana" and on a named hub such as "Carvana Winder" alike, so a name
+    /// can have several rows. The location-less row survives (or, when every row of a name has a
+    /// location, the oldest one, stripped of it), the others have their postings re-pointed to it
+    /// and are removed. Second, every carvana posting on the bare "Carvana" row is re-linked to the
+    /// hub the vehicle's stored Marketcheck history names for the posting's own window (see
+    /// <see cref="CarvanaDealers.HubNameFromHistory"/>), reusing that hub's dealer row or creating it
+    /// with no location; a posting whose history names no hub stays on the bare row. The bare row's
+    /// grade is cleared whenever this runs, since a grade it holds came from the old grader accepting
+    /// whichever hub's card matched, and the dealer grade run then records its own verdict on the
+    /// row afresh. A hub row keeps the grade it earned under its own name.</summary>
     private static void ResolveCarvanaHubDealers(OdonomicsDbContext db)
     {
-        List<DealerEntity> chainRows = [.. db.Dealers.Where(d => d.NormalizedName == CarvanaDealers.ChainNormalizedName)];
+        List<DealerEntity> chainRows = [.. db.Dealers.Where(d => d.NormalizedName == CarvanaDealers.ChainNormalizedName
+            || d.NormalizedName.StartsWith(CarvanaDealers.ChainNormalizedName + " "))];
         if (chainRows.Count == 0)
         {
             return;
         }
 
-        DealerEntity bare = chainRows.FirstOrDefault(CarvanaDealers.IsBareChain)
-            ?? db.Dealers.Add(new DealerEntity
-            {
-                Name = WalkSites.CarvanaDealerName,
-                NormalizedName = CarvanaDealers.ChainNormalizedName,
-                NormalizedLocation = "",
-            }).Entity;
-        HashSet<int> locatedIds = [.. chainRows.Where(d => !CarvanaDealers.IsBareChain(d)).Select(d => d.Id)];
-
-        int[] chainIds = [.. chainRows.Select(d => d.Id)];
-        List<PostingEntity> chainPostings = [.. db.Postings.Where(p => p.DealerId != null && chainIds.Contains(p.DealerId.Value))];
-        foreach (PostingEntity posting in chainPostings.Where(p => p.DealerId is int id && locatedIds.Contains(id)))
+        Dictionary<string, DealerEntity> dealersByNormalizedName = [];
+        Dictionary<int, DealerEntity> survivorById = [];
+        List<DealerEntity> duplicates = [];
+        foreach (IGrouping<string, DealerEntity> sameName in chainRows.GroupBy(d => d.NormalizedName))
         {
-            posting.Dealer = bare;
+            List<DealerEntity> rows = [.. sameName.OrderBy(d => d.NormalizedLocation != "").ThenBy(d => d.Id)];
+            DealerEntity survivor = rows[0];
+            survivor.Location = null;
+            survivor.NormalizedLocation = "";
+            dealersByNormalizedName[sameName.Key] = survivor;
+            foreach (DealerEntity row in rows)
+            {
+                survivorById[row.Id] = survivor;
+            }
+
+            duplicates.AddRange(rows.Skip(1));
         }
 
-        db.Dealers.RemoveRange(chainRows.Where(d => locatedIds.Contains(d.Id)));
-        bare.Grade = null;
-        bare.GradeReason = null;
-        bare.GradeCheckedAt = null;
+        DealerEntity? bare = dealersByNormalizedName.GetValueOrDefault(CarvanaDealers.ChainNormalizedName);
+        if (bare is not null)
+        {
+            bare.Grade = null;
+            bare.GradeReason = null;
+            bare.GradeCheckedAt = null;
+        }
 
-        List<PostingEntity> carvanaPostings = [.. chainPostings.Where(p => p.Source == WalkSites.Carvana.Name)];
-        string[] vins = [.. carvanaPostings.Select(p => p.VehicleVin).Distinct()];
+        int[] chainIds = [.. survivorById.Keys];
+        List<PostingEntity> chainPostings = [.. db.Postings.Where(p => p.DealerId != null && chainIds.Contains(p.DealerId.Value))];
+        List<PostingEntity> barePostings = [];
+        foreach (PostingEntity posting in chainPostings)
+        {
+            if (posting.DealerId is not int dealerId)
+            {
+                continue;
+            }
+
+            DealerEntity survivor = survivorById[dealerId];
+            posting.Dealer = survivor;
+            if (survivor == bare && posting.Source == WalkSites.Carvana.Name)
+            {
+                barePostings.Add(posting);
+            }
+        }
+
+        // Removed only after every posting is re-pointed: deleting a tracked dealer nulls the link of
+        // any posting already tracked against it.
+        db.Dealers.RemoveRange(duplicates);
+
+        string[] vins = [.. barePostings.Select(p => p.VehicleVin).Distinct()];
         Dictionary<string, string?> historyByVin = db.VinRecords
             .Where(r => vins.Contains(r.Vin))
             .Select(r => new { r.Vin, r.HistoryRawJson })
             .ToDictionary(r => r.Vin, r => r.HistoryRawJson);
 
-        Dictionary<string, DealerEntity> hubsByNormalizedName = [];
-        foreach (PostingEntity posting in carvanaPostings)
+        foreach (PostingEntity posting in barePostings)
         {
             string? hubName = CarvanaDealers.HubNameFromHistory(
                 historyByVin.GetValueOrDefault(posting.VehicleVin), posting.FirstSeen, posting.LastSeen);
             if (hubName is null)
             {
-                posting.Dealer = bare;
                 continue;
             }
 
+            // Every existing hub row was loaded and folded above, so a name missing here has no row yet.
             string normalizedHubName = DealerNormalizer.Normalize(hubName);
-            if (!hubsByNormalizedName.TryGetValue(normalizedHubName, out DealerEntity? hub))
+            if (!dealersByNormalizedName.TryGetValue(normalizedHubName, out DealerEntity? hub))
             {
-                hub = db.Dealers.FirstOrDefault(d => d.NormalizedName == normalizedHubName && d.NormalizedLocation == "")
-                    ?? db.Dealers.Add(new DealerEntity { Name = hubName, NormalizedName = normalizedHubName, NormalizedLocation = "" }).Entity;
-                hubsByNormalizedName[normalizedHubName] = hub;
+                hub = db.Dealers.Add(new DealerEntity { Name = hubName, NormalizedName = normalizedHubName, NormalizedLocation = "" }).Entity;
+                dealersByNormalizedName[normalizedHubName] = hub;
             }
 
             posting.Dealer = hub;

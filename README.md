@@ -288,10 +288,13 @@ link to any other dealer, so a posting stored under a hub the page named stays u
 first startup after the update, existing carvana postings with no dealer are stamped "Carvana",
 every located "Carvana, <city>" row an older walk left behind is folded into the bare row (its
 postings re-pointed, the row removed), and every carvana posting on the bare row moves to the hub
-its VIN history names for its window, so `odo show` never prints "Carvana Winder" in the prior
-listings and a different Carvana beside it in Postings. A posting whose history names no hub stays
-on the bare row, and the bare row's grade is cleared so the next dealer grade run records its own
-verdict on it.
+its VIN history names for its window, so `odo show` does not print "Carvana Winder" in the prior
+listings and a different Carvana beside it in Postings for any posting the migration saw. The same
+fold applies to a located hub row ("Carvana Winder, Orlando FL"): it is merged into the hub's row
+with no location, so each Carvana name ends up with one row. A posting whose history names no hub
+stays on the bare row, and the bare row's grade is cleared so the next dealer grade run records its
+own verdict on it. A posting walked later for a VIN whose history the ledger did not yet hold stays
+on the bare row until the next carvana walk moves it, so the two can briefly disagree until then.
 
 The dealer grade pass has one rule for Carvana: the bare "Carvana" row is never looked up.
 CarEdge lists Carvana as a card per hub ("Carvana Orlando" and so on), so a search for the bare name
