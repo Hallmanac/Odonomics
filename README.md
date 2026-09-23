@@ -103,11 +103,13 @@ once; if it still fails, that piece alone (recalls, complaints, or safety rating
 that piece (if any) stays on display and in `odo rank`'s red-flag math. One bad NHTSA answer never
 fails the whole vehicle, and one bad vehicle never fails the batch.
 
-`odo research` runs that lookup for many vehicles in one go, with a short pause between each so as
-not to hammer either API. With no VINs given, it covers every vehicle in the ledger that passes the
-scenario's hard filters (allowed model, minimum year, maximum mileage, not new stock; a vehicle with
-no current asking price is still eligible), whether or not that vehicle needs a refresh, so the run
-always works the whole filtered set rather than only the slice that happened to be stale.
+`odo research` runs that lookup for many vehicles in one go, with a short pause after each vehicle it
+actually fetches so as not to hammer either API; a cached vehicle makes no network call, so it adds
+no pause, and a run over an entirely-cached filtered set finishes in a moment rather than one second
+per vehicle. With no VINs given, it covers every vehicle in the ledger that passes the scenario's
+hard filters (allowed model, minimum year, maximum mileage, not new stock; a vehicle with no current
+asking price is still eligible), whether or not that vehicle needs a refresh, so the run always works
+the whole filtered set rather than only the slice that happened to be stale.
 
 While it runs, the progress output prints one line per vehicle actually fetched this run (not one
 served from the cache, since nothing happened for that vehicle): `researched` followed by its flags
@@ -115,23 +117,27 @@ as short tags inline, e.g. `2025 Toyota Camry Hybrid (4T1...): researched, 12-se
 mileage-drop`, or a yellow line naming which piece(s) failed and which data is still stored when
 only some of a vehicle's pieces came back this run. A vehicle NHTSA and Marketcheck could not be
 reached for at all prints a red "could not be reached" line and the rest of the batch continues; the
-command exits non-zero only when every vehicle in the batch was unreachable. Pass `--quiet` to
-replace all of that with a single counter line that overwrites itself in place
-(`researching 12/84 (8 fetched, 4 cached, 0 unreachable)`) instead of scrolling.
+command exits non-zero only when at least one vehicle was unreachable and no vehicle fetched this run
+came back with any data at all, fully or partially (a cached vehicle needs no fetch, so it never
+counts toward either side of that check). Pass `--quiet` to replace all of that with a single counter
+line that overwrites itself in place (`researching 12/84 (8 fetched, 4 cached, 0 unreachable)`)
+instead of scrolling; redirected to a file or a pipe, where there's no line to overwrite, each update
+prints on its own line instead.
 
-The run ends with a tally line ("N fully researched, M partially researched, K unreachable") and
-then the summary: a header stating the whole filtered set's counts (`84 vehicles, 40 fetched, 44
-cached, 0 unreachable`) followed by one line per vehicle in that set, fetched or cached alike, so
-the summary is the one place the whole filtered set's flags are visible together rather than only
-the vehicles fetched this run. Each line starts with a one-letter marker for where that vehicle's
-data came from this run, `F` fetched, `C` cached, or `U` unreachable, then year, make, model, VIN,
-and its flags as short tags (`mileage-drop`, `5-sellers`, `no-remedy-recall`, or `none`), bounded to
-80 columns so a batch of dozens of vehicles reads as a compact scan rather than a wall of dealer
-lists and full-text reasons; full detail for any one vehicle is what `odo show <vin>` is for. A
-vehicle with one or more failed pieces this run also carries a `partial` tag alongside its flags, so
-a summary line never reads as a clean, fully-checked vehicle when part of its data is actually stale
-or missing. A run where every vehicle in the filtered set is already cached still prints the full
-summary, not an empty one; the cache only skips the network calls, never the reporting.
+The run ends with a tally line ("N fully researched, M partially researched, K unreachable") counting
+only the vehicles actually fetched this run, not cached ones (a cached vehicle did no work this run
+to tally), and then the summary: a header stating the whole filtered set's counts (`84 vehicles, 40
+fetched, 44 cached, 0 unreachable`) followed by one line per vehicle in that set, fetched or cached
+alike, so the summary is the one place the whole filtered set's flags are visible together rather
+than only the vehicles fetched this run. Each line starts with a one-letter marker for where that
+vehicle's data came from this run, `F` fetched, `C` cached, or `U` unreachable, then year, make,
+model, VIN, and its flags as short tags (`mileage-drop`, `5-sellers`, `no-remedy-recall`, or `none`),
+bounded to 80 columns so a batch of dozens of vehicles reads as a compact scan rather than a wall of
+dealer lists and full-text reasons; full detail for any one vehicle is what `odo show <vin>` is for.
+A vehicle with one or more failed pieces this run also carries a `partial` tag alongside its flags,
+so a summary line never reads as a clean, fully-checked vehicle when part of its data is actually
+stale or missing. A run where every vehicle in the filtered set is already cached still prints the
+full summary, not an empty one; the cache only skips the network calls, never the reporting.
 
 The red-flags section (shown in full by `odo show`, as short tags by `odo research`) lists, with a
 reason, anything the data shows:
