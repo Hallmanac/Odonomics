@@ -1,4 +1,7 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Odonomics.Ledger;
+using Odonomics.Marketcheck;
 
 namespace Odonomics.Tests.Ledger;
 
@@ -217,5 +220,169 @@ public class LedgerUpsertServiceTests
         Assert.Equal("Carvana", dealer.Name);
         Assert.Null(dealer.Location);
         Assert.Equal(dealer.Id, Assert.Single(db.Postings).DealerId);
+    }
+
+    private static readonly DateTimeOffset FirstWalk = new(2026, 9, 22, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset LaterWalk = new(2026, 9, 23, 3, 0, 0, TimeSpan.Zero);
+
+    private static ListingCandidate CarvanaFallbackSighting(string vin) =>
+        Candidate(vin, 18000m, source: "carvana", dealerName: "Carvana") with { DealerNameIsFallback = true };
+
+    private static async Task AddHistoryAsync(OdonomicsDbContext db, string vin, string hub, DateTimeOffset firstSeen, DateTimeOffset lastSeen)
+    {
+        List<VinHistoryListing> listings = [new VinHistoryListing(hub, null, null, firstSeen, lastSeen, 18000m, 40000, null)];
+        db.VinRecords.Add(new VinRecordEntity { Vin = vin, DecodedAt = lastSeen, DecodeRawJson = "", HistoryRawJson = JsonSerializer.Serialize(listings) });
+        await db.SaveChangesAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_LaterWalkOfAPostingOnTheBareCarvanaRowAndHistoryNamesAHub_MovesItToTheHubRow()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        const string vin = "1HGCM82633A004352";
+
+        RunEntity run1 = Run(FirstWalk);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(CarvanaFallbackSighting(vin), run1, CancellationToken.None);
+        Assert.Equal("Carvana", db.Postings.Include(p => p.Dealer).Single().Dealer!.Name);
+
+        await AddHistoryAsync(db, vin, "Carvana Winder", FirstWalk.AddDays(-4), FirstWalk.AddHours(13));
+        RunEntity run2 = Run(LaterWalk);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(CarvanaFallbackSighting(vin), run2, CancellationToken.None);
+
+        PostingEntity posting = db.Postings.Include(p => p.Dealer).Single();
+        Assert.Equal("Carvana Winder", posting.Dealer!.Name);
+        Assert.Null(posting.Dealer.Location);
+        Assert.Equal("", posting.Dealer.NormalizedLocation);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_LaterWalkOfAPostingOnALocatedCarvanaRowAndHistoryNamesAHub_MovesItToTheHubRow()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        const string vin = "1HGCM82633A004352";
+
+        RunEntity run1 = Run(FirstWalk);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate(vin, 18000m, source: "carvana", dealerName: "Carvana", dealerLocation: "Orlando, FL"), run1, CancellationToken.None);
+        await AddHistoryAsync(db, vin, "Carvana Winder", FirstWalk.AddDays(-4), FirstWalk.AddHours(13));
+
+        RunEntity run2 = Run(LaterWalk);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(CarvanaFallbackSighting(vin), run2, CancellationToken.None);
+
+        Assert.Equal("Carvana Winder", db.Postings.Include(p => p.Dealer).Single().Dealer!.Name);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_FirstWalkOfACarvanaPostingWhoseHistoryNamesAHub_LinksTheHubAndMintsNoBareCarvanaRow()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        const string vin = "1HGCM82633A004352";
+        db.Vehicles.Add(new VehicleEntity { Vin = vin, Year = 2020, Make = "Toyota", Model = "Prius", Mileage = 40000, FirstSeen = FirstWalk, LastSeen = FirstWalk });
+        await db.SaveChangesAsync(CancellationToken.None);
+        await AddHistoryAsync(db, vin, "Carvana Winder", FirstWalk.AddDays(-4), FirstWalk.AddHours(13));
+        RunEntity run = Run(LaterWalk);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(CarvanaFallbackSighting(vin), run, CancellationToken.None);
+
+        DealerEntity dealer = Assert.Single(db.Dealers);
+        Assert.Equal("Carvana Winder", dealer.Name);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_LaterWalkOfAPostingOnTheBareCarvanaRowAndHistoryNamesNoHubForItsWindow_KeepsTheBareRow()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        const string vin = "1HGCM82633A004352";
+
+        RunEntity run1 = Run(FirstWalk);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(CarvanaFallbackSighting(vin), run1, CancellationToken.None);
+        await AddHistoryAsync(db, vin, "Carvana Fairburn", new DateTimeOffset(2026, 1, 7, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 2, 26, 0, 0, 0, TimeSpan.Zero));
+
+        RunEntity run2 = Run(LaterWalk);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(CarvanaFallbackSighting(vin), run2, CancellationToken.None);
+
+        DealerEntity dealer = Assert.Single(db.Dealers);
+        Assert.Equal("Carvana", dealer.Name);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_FallbackSightingOfAPostingOnANamedHubWhoseHistoryNamesAnotherHub_KeepsTheHubTheEarlierSightingNamed()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        const string vin = "1HGCM82633A004352";
+
+        RunEntity run1 = Run(FirstWalk);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate(vin, 18000m, source: "carvana", dealerName: "Carvana Belton"), run1, CancellationToken.None);
+        await AddHistoryAsync(db, vin, "Carvana Winder", FirstWalk.AddDays(-4), FirstWalk.AddHours(13));
+
+        RunEntity run2 = Run(LaterWalk);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(CarvanaFallbackSighting(vin), run2, CancellationToken.None);
+
+        Assert.Equal("Carvana Belton", db.Postings.Include(p => p.Dealer).Single().Dealer!.Name);
+        Assert.DoesNotContain(db.Dealers, d => d.Name == "Carvana Winder");
+    }
+
+    [Theory]
+    [InlineData("Carvana", "Phoenix, AZ")]
+    [InlineData("Carvana Winder", "Winder, GA")]
+    public async Task UpsertAsync_CarvanaSellerReportedWithACity_IsKeyedByNameAloneSoTwoCitiesShareOneRow(string dealerName, string dealerLocation)
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://example.com/a", dealerName: dealerName, dealerLocation: dealerLocation), run, CancellationToken.None);
+        await service.UpsertAsync(Candidate("5YJ3E1EA1KF000000", 22000m, "https://example.com/b", dealerName: dealerName, dealerLocation: "Orlando, FL"), run, CancellationToken.None);
+        await service.UpsertAsync(Candidate("2T1BURHE0JC000000", 19000m, "https://example.com/c", dealerName: dealerName), run, CancellationToken.None);
+
+        DealerEntity dealer = Assert.Single(db.Dealers);
+        Assert.Null(dealer.Location);
+        Assert.Equal("", dealer.NormalizedLocation);
+        Assert.Equal(3, db.Postings.Count(p => p.DealerId == dealer.Id));
+    }
+
+    [Fact]
+    public async Task UpsertAsync_NonCarvanaDealerWithACity_StillKeepsItsLocation()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, dealerName: "Carvanaville Motors", dealerLocation: "Sanford, FL"), run, CancellationToken.None);
+
+        Assert.Equal("Sanford, FL", Assert.Single(db.Dealers).Location);
     }
 }

@@ -44,13 +44,12 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
 
         PostingEntity? posting = await db.Postings
             .Include(p => p.PriceObservations)
+            .Include(p => p.Dealer)
             .Where(p => p.VehicleVin == candidate.Vin && p.Source == candidate.Source && p.Url == candidate.Url)
             .FirstOrDefaultAsync(cancellationToken);
 
-        // A fallback name says the source named no dealer, so it must not replace a link an earlier
-        // sighting made to a real one, nor mint a dealer row a posting will never use.
-        DealerEntity? dealer = candidate.DealerNameIsFallback && posting?.DealerId is not null
-            ? null
+        DealerEntity? dealer = candidate.DealerNameIsFallback
+            ? await ResolveFallbackDealerAsync(candidate, posting, now, cancellationToken)
             : await FindOrCreateDealerAsync(candidate.DealerName, candidate.DealerLocation, cancellationToken);
 
         bool postingIsNew = posting is null;
@@ -103,6 +102,37 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         return new UpsertOutcome(vehicleIsNew, postingIsNew, priceChanged && !postingIsNew, previousPrice);
     }
 
+    /// <summary>The dealer a sighting whose source named none (<see cref="ListingCandidate.DealerNameIsFallback"/>,
+    /// carvana's "Carvana") links its posting to, or null to leave the posting's link as it is. The
+    /// VIN history the ledger already stores may name the hub the car sits in for this posting's
+    /// window (see <see cref="CarvanaDealers.HubNameFromHistory"/>): a posting with no dealer, or one
+    /// on a "Carvana" row, moves to that hub. Otherwise a posting with no dealer gets the fallback
+    /// dealer, and a posting that already has one keeps it: a fallback name says the source named no
+    /// dealer, so it must not replace a link to a real one, nor mint a dealer row a posting will
+    /// never use.</summary>
+    private async Task<DealerEntity?> ResolveFallbackDealerAsync(ListingCandidate candidate, PostingEntity? posting, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        bool mayMove = posting?.Dealer is null || CarvanaDealers.IsChain(posting.Dealer);
+        if (!mayMove)
+        {
+            return null;
+        }
+
+        string? historyJson = await db.VinRecords
+            .Where(r => r.Vin == candidate.Vin)
+            .Select(r => r.HistoryRawJson)
+            .FirstOrDefaultAsync(cancellationToken);
+        string? hubName = CarvanaDealers.HubNameFromHistory(historyJson, posting?.FirstSeen ?? now, now);
+        if (hubName is not null)
+        {
+            return await FindOrCreateDealerAsync(hubName, null, cancellationToken);
+        }
+
+        return posting?.Dealer is null
+            ? await FindOrCreateDealerAsync(candidate.DealerName, candidate.DealerLocation, cancellationToken)
+            : null;
+    }
+
     /// <summary>Finds the dealer matching <paramref name="dealerName"/> and
     /// <paramref name="dealerLocation"/> by their normalized form, or creates one. Returns null
     /// when the candidate carries no dealer name at all, the common case for a source that hasn't
@@ -112,6 +142,13 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         if (string.IsNullOrWhiteSpace(dealerName))
         {
             return null;
+        }
+
+        // A Carvana seller is keyed by its name alone, so a walk's pickup city or an API's city for the
+        // same seller can't split "Carvana" or one hub into a row per location (see CarvanaDealers).
+        if (CarvanaDealers.IsChainOrHubName(dealerName))
+        {
+            dealerLocation = null;
         }
 
         string normalizedName = DealerNormalizer.Normalize(dealerName);
