@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Odonomics.Walk;
 
 namespace Odonomics.Tests.Walk;
@@ -10,18 +12,52 @@ public class WalkSitesTests
         string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla", "32114", 50);
 
         Assert.Equal(
-            "https://www.cars.com/shopping/results/?makes[]=toyota&models[]=toyota-corolla&maximum_distance=50&zip=32114&stock_type=used",
+            "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla&zip=32114&maximum_distance=50",
             url);
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_StripsHybridSuffixSinceNoSeparateFacetIsConfirmed()
+    public void CarsCom_BuildSearchUrl_CorollaHybrid_MatchesOperatorsBrowserUrl()
     {
-        string hybridUrl = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla Hybrid", "32114", 50);
-        string baseUrl = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla", "32114", 50);
+        // The exact facet value Brian's Edge browser built ticking "Corolla Hybrid"
+        // (notes/run-session-2026-09-22.md, "Facet URLs from Brian"), minus its sid and sort.
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla Hybrid", "32833", 50);
 
-        Assert.Equal(baseUrl, hybridUrl);
-        Assert.Contains("models[]=toyota-corolla&", hybridUrl);
+        Assert.Equal(
+            "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla_hybrid&zip=32833&maximum_distance=50",
+            url);
+    }
+
+    [Fact]
+    public void CarsCom_BuildSearchUrl_CamryHybrid_UnderscoresHybridWord()
+    {
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Camry Hybrid", "32114", 50);
+
+        Assert.Contains("models[]=toyota-camry_hybrid&", url);
+    }
+
+    [Fact]
+    public void CarsCom_BuildSearchUrl_MultiWordNonHybridModel_UnderscoresEveryWord()
+    {
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Corolla Cross", "32114", 50);
+
+        Assert.Contains("models[]=toyota-corolla_cross&", url);
+    }
+
+    [Fact]
+    public void CarsCom_BuildSearchUrl_HondaInsight_Unchanged()
+    {
+        string url = WalkSites.CarsCom.BuildSearchUrl("Honda", "Insight", "32114", 50);
+
+        Assert.Contains("models[]=honda-insight&", url);
+    }
+
+    [Fact]
+    public void CarsCom_BuildSearchUrl_ToyotaPrius_Unchanged()
+    {
+        string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Prius", "32114", 50);
+
+        Assert.Contains("models[]=toyota-prius&", url);
     }
 
     [Fact]
@@ -32,37 +68,68 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void CarsCom_DetailLinkOverfetchMultiplier_IsGreaterThanOne()
+    public void CarsCom_DetailLinkOverfetchMultiplier_IsOne()
     {
-        Assert.True(WalkSites.CarsCom.DetailLinkOverfetchMultiplier > 1);
+        Assert.Equal(1, WalkSites.CarsCom.DetailLinkOverfetchMultiplier);
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_UsesMakeModelSlugAndZip()
+    public void Carvana_BuildSearchUrl_NonHybridModel_HasNoFuelTypesFilter()
     {
         string url = WalkSites.Carvana.BuildSearchUrl("Honda", "Insight", "32114", 50);
 
-        Assert.Equal("https://www.carvana.com/cars/honda-insight?zip=32114", url);
+        JsonElement filters = DecodeCvnaid(url);
+        JsonElement makes = filters.GetProperty("filters").GetProperty("makes");
+        Assert.Equal("Honda", makes[0].GetProperty("name").GetString());
+        Assert.Equal("Insight", makes[0].GetProperty("parentModels")[0].GetProperty("name").GetString());
+        Assert.False(filters.GetProperty("filters").TryGetProperty("fuelTypes", out _));
+        Assert.StartsWith("https://www.carvana.com/cars/filters?zip=32114&cvnaid=", url);
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_StripsHybridSuffixSinceNoSeparateFacetIsConfirmed()
+    public void Carvana_BuildSearchUrl_HybridModel_FiltersByBaseModelAndFuelType()
     {
         string url = WalkSites.Carvana.BuildSearchUrl("Toyota", "Corolla Hybrid", "32114", 50);
 
-        Assert.Equal("https://www.carvana.com/cars/toyota-corolla?zip=32114", url);
+        JsonElement filters = DecodeCvnaid(url);
+        JsonElement makes = filters.GetProperty("filters").GetProperty("makes");
+        Assert.Equal("Toyota", makes[0].GetProperty("name").GetString());
+        Assert.Equal("Corolla", makes[0].GetProperty("parentModels")[0].GetProperty("name").GetString());
+        Assert.Equal("Hybrid", filters.GetProperty("filters").GetProperty("fuelTypes")[0].GetString());
     }
 
     [Fact]
-    public void Carvana_DetailLinkOverfetchMultiplier_IsGreaterThanOne()
+    public void Carvana_BuildSearchUrl_CorollaHybridAtBriansZip_MatchesOperatorsBrowserUrl()
     {
-        Assert.True(WalkSites.Carvana.DetailLinkOverfetchMultiplier > 1);
+        // The exact cvnaid Brian's Edge browser built choosing "Corolla Hybrid"
+        // (notes/run-session-2026-09-22.md, "Facet URLs from Brian").
+        string url = WalkSites.Carvana.BuildSearchUrl("Toyota", "Corolla Hybrid", "32114", 50);
+
+        Assert.Equal(
+            "https://www.carvana.com/cars/filters?zip=32114&cvnaid=" +
+            "eyJmaWx0ZXJzIjp7Im1ha2VzIjpbeyJuYW1lIjoiVG95b3RhIiwicGFyZW50TW9kZWxzIjpbeyJuYW1lIjoiQ29yb2xsYSJ9XX1dLCJmdWVsVHlwZXMiOlsiSHlicmlkIl19fQ",
+            url);
+    }
+
+    [Fact]
+    public void Carvana_DetailLinkOverfetchMultiplier_IsOne()
+    {
+        Assert.Equal(1, WalkSites.Carvana.DetailLinkOverfetchMultiplier);
     }
 
     [Fact]
     public void Carvana_DetailUrlPattern_MatchesVehicleLinks()
     {
         Assert.Matches(WalkSites.Carvana.DetailUrlPattern, "https://www.carvana.com/vehicle/4754913");
+    }
+
+    private static JsonElement DecodeCvnaid(string url)
+    {
+        string cvnaid = url[(url.IndexOf("cvnaid=", StringComparison.Ordinal) + "cvnaid=".Length)..];
+        string base64 = cvnaid.Replace('-', '+').Replace('_', '/');
+        base64 = base64.PadRight(base64.Length + ((4 - (base64.Length % 4)) % 4), '=');
+        string json = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+        return JsonDocument.Parse(json).RootElement;
     }
 
     [Theory]
