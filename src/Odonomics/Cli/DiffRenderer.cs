@@ -33,6 +33,11 @@ public static class DiffRenderer
         AnsiConsole.Write(table);
     }
 
+    private const int MovedVinColumnWidth = 17;
+    private const int MovedModelColumnWidth = 12;
+    private const int MovedSourceColumnWidth = 8;
+    private const int MovedUrlColumnWidth = 14;
+
     private static void RenderMoved(IReadOnlyList<MovedPostingEntry> entries)
     {
         AnsiConsole.MarkupLine($"[bold]Moved ({entries.Count})[/]");
@@ -42,10 +47,21 @@ public static class DiffRenderer
             return;
         }
 
-        Table table = NarrowTable("VIN", "Model", "Source", "Old URL", "New URL");
+        var table = new Table { Border = TableBorder.Minimal };
+        table.Width(80);
+        table.AddColumn(new TableColumn("VIN") { Width = MovedVinColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Model") { Width = MovedModelColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Source") { Width = MovedSourceColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Old URL") { Width = MovedUrlColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("New URL") { Width = MovedUrlColumnWidth, NoWrap = true });
         foreach (MovedPostingEntry entry in entries)
         {
-            table.AddRow(Format.Cell(entry.Vin), Format.Cell($"{entry.Make} {entry.Model}"), Format.Cell(entry.Source), Format.Cell(entry.OldUrl), Format.Cell(entry.NewUrl));
+            table.AddRow(
+                Format.Cell(Format.Truncate(entry.Vin, MovedVinColumnWidth)),
+                Format.Cell(Format.Truncate($"{entry.Make} {entry.Model}", MovedModelColumnWidth)),
+                Format.Cell(Format.Truncate(entry.Source, MovedSourceColumnWidth)),
+                Format.Cell(Format.Truncate(entry.OldUrl, MovedUrlColumnWidth)),
+                Format.Cell(Format.Truncate(entry.NewUrl, MovedUrlColumnWidth)));
         }
 
         AnsiConsole.Write(table);

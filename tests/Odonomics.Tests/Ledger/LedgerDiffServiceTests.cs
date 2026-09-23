@@ -322,11 +322,13 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
-    public async Task ComputeAsync_KnownVinFirstSeenOnANewSource_IsNeitherNewNorMoved()
+    public async Task ComputeAsync_KnownVinFirstSeenOnANewSource_IsReportedNewNotDropped()
     {
         // A VIN already known through one source (auto.dev) turning up for the first time on a
-        // different source (cars.com) is not "moved" (nothing on cars.com to have moved from) and
-        // the vehicle itself isn't new, so this posting isn't reported under either heading.
+        // different source (cars.com) is not "moved" (nothing on cars.com to have moved from), but
+        // it is a genuinely new sighting: the operator's routine is search (auto.dev/marketcheck)
+        // then walk (cars.com/carvana), so this is the walk's most common real result and has to
+        // show up somewhere. It's reported under "New" even though the vehicle row itself isn't.
         using var testDb = new LedgerTestDatabase();
         using OdonomicsDbContext db = testDb.CreateContext();
         var upsert = new LedgerUpsertService(db);
@@ -345,7 +347,10 @@ public class LedgerDiffServiceTests
 
         SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
 
-        Assert.Empty(diff.New);
+        NewPostingEntry entry = Assert.Single(diff.New);
+        Assert.Equal("1HGCM82633A004352", entry.Vin);
+        Assert.Equal("cars.com", entry.Source);
+        Assert.Equal("https://cars.com/a", entry.Url);
         Assert.Empty(diff.Moved);
         Assert.Empty(diff.Gone);
         Assert.Empty(diff.PriceDrops);
