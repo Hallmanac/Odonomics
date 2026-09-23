@@ -291,6 +291,87 @@ public class CarEdgeGradeParserTests
     }
 
     [Fact]
+    public void Parse_DealerLocationIsCityOnly_StillMatchesACardCarryingCityAndState()
+    {
+        // An upstream source can report only a dealer's city (DealerLocationFormat.Build returns a
+        // bare city when the API record has no state), while CarEdge's own card always renders
+        // "City, ST". The city-only location must still match its own card rather than being
+        // permanently rejected for lacking the state half the card always carries.
+        const string pageText = """
+            Search: "Holler Honda Sanford"
+            1 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Holler Honda
+            Sanford, FL · 8 verified quotes
+            $600
+            doc fee
+            No add-ons
+            A
+            91/100
+            Highly transparent
+            See 8 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Sanford");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("A", result.Grade);
+    }
+
+    [Fact]
+    public void Parse_DealerLocationIsStateOnly_StillMatchesACardCarryingCityAndState()
+    {
+        const string pageText = """
+            Search: "Holler Honda FL"
+            1 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Holler Honda
+            Sanford, FL · 8 verified quotes
+            $600
+            doc fee
+            No add-ons
+            A
+            91/100
+            Highly transparent
+            See 8 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "FL");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("A", result.Grade);
+    }
+
+    [Fact]
+    public void Parse_DealerLocationIsCityOnlyAndDisagreesWithTheCard_ReturnsNotFound()
+    {
+        // The partial-location match must still reject a genuinely different city: a bare city
+        // that isn't a whole-word match against the card's "City, ST" line is not this dealer.
+        const string pageText = """
+            Search: "Holler Honda Orlando"
+            1 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Holler Honda
+            Sanford, FL · 8 verified quotes
+            $600
+            doc fee
+            No add-ons
+            A
+            91/100
+            Highly transparent
+            See 8 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Orlando");
+
+        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+        Assert.Null(result.Grade);
+    }
+
+    [Fact]
     public async Task Parse_CarEdgeOwn404Page_ReturnsSearchUrlInvalid()
     {
         string pageText = await ReadFixtureAsync("search-url-invalid-404.txt");

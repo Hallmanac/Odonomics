@@ -93,15 +93,27 @@ public static partial class CarEdgeGradeParser
         // never this dealer, even when the name matches exactly: CarEdge's search can return
         // same-named dealers in other cities (a chain, or an unrelated store CarEdge's own matching
         // considered close enough), and taking one of those permanently mislabels the searched
-        // dealer's grade. Only enforced when both sides actually carry a location to compare, so a
-        // dealer or a card with no location on record falls back to the name-only check below exactly
-        // as before.
-        bool locationMatches(string cardLocationLine)
+        // dealer's grade. The dealer's own location is often partial (an upstream API can report only
+        // a city or only a state), while a card's location line always carries both, so the check
+        // requires the dealer's known location text to appear as a whole word within the card's
+        // "City, ST" line rather than requiring the two strings to be identical outright: a city-only
+        // or state-only dealer location still matches its own card, while a card genuinely in a
+        // different city still fails to contain it and is rejected. Skipped entirely when the dealer
+        // has no location on record, so that case still falls back to the name-only check below
+        // exactly as before.
+        Regex? dealerLocationBoundary = normalizedDealerLocation.Length > 0
+            ? new Regex($@"\b{Regex.Escape(normalizedDealerLocation)}\b")
+            : null;
+
+        bool LocationMatches(string cardLocationLine)
         {
+            if (dealerLocationBoundary is null)
+            {
+                return true;
+            }
+
             string normalizedCardLocation = DealerNormalizer.Normalize(cardLocationLine);
-            return normalizedDealerLocation.Length == 0
-                || normalizedCardLocation.Length == 0
-                || string.Equals(normalizedCardLocation, normalizedDealerLocation, StringComparison.Ordinal);
+            return normalizedCardLocation.Length == 0 || dealerLocationBoundary.IsMatch(normalizedCardLocation);
         }
 
         // Prefer a card whose name line is exactly the searched name: a page that returns a fuzzy
@@ -117,7 +129,7 @@ public static partial class CarEdgeGradeParser
         foreach ((int start, int end, Match match, bool graded, string nameLine, string locationLine) in cards)
         {
             if (string.Equals(DealerNormalizer.Normalize(nameLine), normalizedDealerName, StringComparison.Ordinal)
-                && locationMatches(locationLine))
+                && LocationMatches(locationLine))
             {
                 chosen = (start, end, match, graded, nameLine);
                 break;
@@ -130,7 +142,7 @@ public static partial class CarEdgeGradeParser
             foreach ((int start, int end, Match match, bool graded, string nameLine, string locationLine) in cards)
             {
                 string normalizedNameLine = DealerNormalizer.Normalize(nameLine);
-                if (normalizedNameLine.Length > 0 && nameBoundary.IsMatch(normalizedNameLine) && locationMatches(locationLine))
+                if (normalizedNameLine.Length > 0 && nameBoundary.IsMatch(normalizedNameLine) && LocationMatches(locationLine))
                 {
                     chosen = (start, end, match, graded, nameLine);
                     break;
