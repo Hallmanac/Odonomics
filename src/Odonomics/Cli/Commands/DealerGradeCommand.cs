@@ -11,7 +11,11 @@ namespace Odonomics.Cli.Commands;
 /// same operator-launched browser connection `odo walk` uses (see <see cref="CdpConnection"/>),
 /// paced like the walk and pausing on a bot-defense challenge the same way. A dealer CarEdge
 /// positively says it has no rating for is stamped as checked, so it is never looked up again on a
-/// later run; a page that merely failed to parse is left unstamped so a later run retries it.</summary>
+/// later run; a page that merely failed to parse is left unstamped so a later run retries it. Three
+/// consecutive CarEdge 404 pages mean the search URL itself is dead, not that three dealers in a row
+/// are unrateable, so the run stops there and exits non-zero rather than burning through the rest of
+/// the list against a URL that will keep failing; every dealer it never got to stays ungraded and
+/// eligible for the next run.</summary>
 public static class DealerGradeCommand
 {
     public static async Task<int> RunAsync(bool all, string? vin, CancellationToken cancellationToken)
@@ -82,6 +86,8 @@ public static class DealerGradeCommand
         int graded = 0;
         int ungraded = 0;
         int failed = 0;
+        int consecutiveDeadSearchUrls = 0;
+        bool stoppedOnDeadSearchUrl = false;
         for (int i = 0; i < targets.Count; i++)
         {
             if (i > 0)
@@ -109,34 +115,53 @@ public static class DealerGradeCommand
                         dealer.GradeReason = result.Reason;
                         dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
                         graded++;
+                        consecutiveDeadSearchUrls = 0;
                         AnsiConsole.MarkupLineInterpolated($"{dealer.Name}: {result.Grade}");
                         await db.SaveChangesAsync(cancellationToken);
                         break;
                     case CarEdgeGradeStatus.NotFound:
                         dealer.GradeCheckedAt = DateTimeOffset.UtcNow;
                         ungraded++;
+                        consecutiveDeadSearchUrls = 0;
                         AnsiConsole.MarkupLineInterpolated($"[grey]{dealer.Name}: not on CarEdge[/]");
                         await db.SaveChangesAsync(cancellationToken);
                         break;
                     case CarEdgeGradeStatus.Unrecognized:
                         failed++;
+                        consecutiveDeadSearchUrls = 0;
                         AnsiConsole.MarkupLineInterpolated($"[yellow]{dealer.Name}: page didn't match a known CarEdge layout, will retry later[/]");
+                        break;
+                    case CarEdgeGradeStatus.CarEdgeSearchUrlInvalid:
+                        failed++;
+                        consecutiveDeadSearchUrls++;
+                        AnsiConsole.MarkupLineInterpolated($"[red]{dealer.Name}: CarEdge search returned its own 404, search URL is dead: {url}[/]");
+                        if (consecutiveDeadSearchUrls >= 3)
+                        {
+                            stoppedOnDeadSearchUrl = true;
+                        }
                         break;
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 failed++;
+                consecutiveDeadSearchUrls = 0;
                 AnsiConsole.MarkupLineInterpolated($"[yellow]{dealer.Name}: failed to check ({ex.Message})[/]");
             }
             finally
             {
                 await page.CloseAsync();
             }
+
+            if (stoppedOnDeadSearchUrl)
+            {
+                AnsiConsole.MarkupLine("[red]stopping: 3 consecutive CarEdge search pages came back dead[/]");
+                break;
+            }
         }
 
         AnsiConsole.MarkupLineInterpolated($"graded {graded}, recorded {ungraded} ungraded, {failed} failed");
-        return 0;
+        return stoppedOnDeadSearchUrl ? 1 : 0;
     }
 
     private static void PrintGrade(DealerEntity dealer)
