@@ -166,9 +166,10 @@ catches the same dealer spelled or franchised differently across sightings even 
 moved between them.
 
 - **mileage that decreased between two listings of the same VIN** (`mileage-drop`), ignoring a drop
-  to zero or nearly zero (a placeholder/reset value, not a real odometer reading), a drop between
-  two listings first seen on the same calendar day (the same snapshot re-scraped, not two real
-  readings), and a drop smaller than the larger of 500 miles or 1% of the prior mileage (rounding
+  to zero or nearly zero (a placeholder/reset value, not a real odometer reading) and any sighting
+  with no mileage at all (both are skipped, so a rollback that straddles one still flags), a drop
+  between two listings first seen on the same calendar day (the same snapshot re-scraped, not two
+  real readings), and a drop smaller than the larger of 500 miles or 1% of the prior mileage (rounding
   and minor re-entry noise). Both the 500-mile floor and the 1% figure are constants in
   `RedFlagsEvaluator`; no scenario field or CLI flag exposes them yet. A drop that survives all of
   that but sits between two listings in the *same seller group* whose windows are on consecutive or

@@ -150,6 +150,58 @@ public class RedFlagsEvaluatorTests
     }
 
     [Fact]
+    public void Evaluate_MileageDropStraddlingANullMileageSighting_StillFlagsIt()
+    {
+        // The null sighting (a "new" inventory entry, or a scrape with no miles) must not become the
+        // baseline that hides the real 181,407 -> 86,663 rollback either side of it.
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings =
+        [
+            new("Dealer A", day1, day1, 20000m, 181407),
+            new("Dealer B", day2, day2, 20000m, null),
+            new("Dealer C", day3, day3, 20000m, 86663),
+        ];
+
+        EvaluationResult result = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        RedFlag flag = Assert.Single(result.Flags);
+        Assert.Equal("mileage-drop", flag.ShortTag);
+        Assert.Contains("mileage dropped from 181,407 to 86,663 between listings (2026-01-01 to 2026-06-01)", flag.Detail);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Evaluate_MileageDropWithANullMileageSightingFirstOrLast_StillFlagsIt(bool nullFirst)
+    {
+        DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day2 = new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        DateTimeOffset day3 = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        List<VinHistoryPoint> listings = nullFirst
+            ?
+            [
+                new("Dealer A", day1, day1, 20000m, null),
+                new("Dealer B", day2, day2, 20000m, 181407),
+                new("Dealer C", day3, day3, 20000m, 86663),
+            ]
+            :
+            [
+                new("Dealer A", day1, day1, 20000m, 181407),
+                new("Dealer B", day2, day2, 20000m, 86663),
+                new("Dealer C", day3, day3, 20000m, null),
+            ];
+
+        EvaluationResult result = RedFlagsEvaluator.Evaluate([], null, listings, null);
+
+        RedFlag flag = Assert.Single(result.Flags);
+        Assert.Equal("mileage-drop", flag.ShortTag);
+        Assert.Contains("181,407", flag.Detail);
+        Assert.Contains("86,663", flag.Detail);
+    }
+
+    [Fact]
     public void Evaluate_MileageNeverDecreases_NoFlag()
     {
         DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
