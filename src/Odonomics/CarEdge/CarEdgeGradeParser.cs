@@ -60,9 +60,10 @@ public static partial class CarEdgeGradeParser
         // Scope the dealer-name check to the text between the previous card's own signal (or the
         // page chrome above the first card) and this one, so a multi-result page can't match this
         // card's letter to a dealer named lower down in a different result's card, and so the
-        // first card isn't matched against the page's own "Search: "<query>"" echo, disclaimer,
-        // grade/make filter rows, or sort options, all of which sit between the results-found line
-        // and the first card and can themselves contain a dealer's bare name (a make like "Tesla").
+        // first card's own name line isn't preceded only by the page's own "Search: "<query>""
+        // echo, disclaimer, grade/make filter rows, or sort options, all of which sit between the
+        // results-found line and the first card and can themselves contain a dealer's bare name (a
+        // make like "Tesla").
         int precedingStart = resultsFound.Index + resultsFound.Length;
         Match sortOptionsLine = SortOptionsLine().Match(pageText, precedingStart);
         if (sortOptionsLine.Success)
@@ -74,7 +75,18 @@ public static partial class CarEdgeGradeParser
         {
             string precedingBlock = pageText[precedingStart..start];
             precedingStart = end;
-            if (!DealerNormalizer.Normalize(precedingBlock).Contains(normalizedDealerName, StringComparison.Ordinal))
+
+            // The card's own dealer name always sits on the line immediately above its "City, ST"
+            // location line (itself the last comma-plus-state-shaped line in the block: any make
+            // lines a not-rated multi-brand card carries sit below it, not above). Anchoring on that
+            // location line and comparing the name line to the searched name with exact equality,
+            // rather than testing whether the whole block merely contains the searched name, is
+            // deliberate: a page that returns a fuzzy match like "Toyota of Orlando South" ahead of
+            // the searched "Toyota of Orlando" must not have that longer name's card accepted, since
+            // normalization collapses newlines to spaces and would otherwise make "Toyota of
+            // Orlando" a boundary-clean substring of "Toyota of Orlando South".
+            string dealerNameLine = DealerNameLineAboveLocation(precedingBlock);
+            if (!string.Equals(DealerNormalizer.Normalize(dealerNameLine), normalizedDealerName, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -106,6 +118,27 @@ public static partial class CarEdgeGradeParser
             : CarEdgeGradeResult.Unrecognized;
     }
 
+    private static string DealerNameLineAboveLocation(string block)
+    {
+        Match? locationLine = CardLocationLine().Matches(block).LastOrDefault();
+        if (locationLine is not { Success: true })
+        {
+            return "";
+        }
+
+        string[] linesAboveLocation = block[..locationLine.Index].Split('\n');
+        for (int i = linesAboveLocation.Length - 1; i >= 0; i--)
+        {
+            string line = linesAboveLocation[i].Trim();
+            if (line.Length > 0)
+            {
+                return line;
+            }
+        }
+
+        return "";
+    }
+
     [GeneratedRegex(@"^\s*404\s*$", RegexOptions.Multiline)]
     private static partial Regex FourZeroFourLine();
 
@@ -117,6 +150,9 @@ public static partial class CarEdgeGradeParser
 
     [GeneratedRegex(@"Sort:\s*\r?\n[^\r\n]*\r?\n")]
     private static partial Regex SortOptionsLine();
+
+    [GeneratedRegex(@"^[^\r\n,]*,\s*[A-Z]{2}\b", RegexOptions.Multiline)]
+    private static partial Regex CardLocationLine();
 
     [GeneratedRegex(
         @"(?:·\s*(?<quotes>\d+)\s*verified quotes\s*\r?\n\s*)?" +

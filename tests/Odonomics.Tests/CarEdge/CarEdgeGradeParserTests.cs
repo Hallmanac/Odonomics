@@ -102,6 +102,46 @@ public class CarEdgeGradeParserTests
     }
 
     [Fact]
+    public void Parse_FirstCardNameIsTheSearchedDealerNamePrefixExtended_SkipsToTheDealersOwnCard()
+    {
+        // A dealer whose name is a prefix of a differently named dealer's card must not have that
+        // other card's grade attributed to it: "Toyota of Orlando South" contains "Toyota of
+        // Orlando" as a boundary-clean substring once newlines normalize to spaces, so a plain
+        // containment check on the card block wrongly accepts the first card here. The searched
+        // dealer's own card, second and graded C, is the one that must win.
+        const string pageText = """
+            Search: "Toyota of Orlando"
+            2 dealers found
+            Sort:
+            Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+            Toyota of Orlando South
+            Orlando, FL · 20 verified quotes
+            $700
+            doc fee
+            No add-ons
+            A
+            95/100
+            Highly transparent
+            See 20 verified quotes →
+            Toyota of Orlando
+            Orlando, FL · 6 verified quotes
+            $900
+            doc fee
+            No add-ons
+            C
+            70/100
+            Below average
+            See 6 verified quotes →
+            """;
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Toyota of Orlando");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("C", result.Grade);
+        Assert.Equal(70, result.Score);
+    }
+
+    [Fact]
     public void Parse_DeclaredCountExceedsCardsThatParsed_ReturnsUnrecognized()
     {
         // The page claims two dealers but only one card matches a known card layout: the searched
