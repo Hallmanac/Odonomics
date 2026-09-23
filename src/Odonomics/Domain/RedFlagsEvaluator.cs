@@ -156,12 +156,12 @@ public static partial class RedFlagsEvaluator
     }
 
     /// <summary>The first mileage decrease between consecutive listings, after two deliberate
-    /// exclusions applied to the ordered history itself, not to each pair: a placeholder value (see
-    /// <see cref="PlaceholderMileageMax"/>) is dropped from the sequence entirely rather than merely
-    /// skipped as an endpoint, so it can never become the baseline for the next comparison and mask a
-    /// real rollback that straddles it; and listings first seen on the same calendar day (almost
-    /// always the same snapshot re-scraped, not two real odometer readings) collapse to that day's
-    /// first reading, for the same reason. What survives still needs a drop of at least the larger of
+    /// exclusions applied to the ordered history itself, not to each pair: a sighting with no real
+    /// reading, meaning a placeholder value (see <see cref="PlaceholderMileageMax"/>) or no mileage at
+    /// all, is dropped from the sequence entirely rather than merely skipped as an endpoint, so it can
+    /// never become the baseline for the next comparison and mask a real rollback that straddles it;
+    /// and listings first seen on the same calendar day (almost always the same snapshot re-scraped,
+    /// not two real odometer readings) collapse to that day's first reading, for the same reason. What survives still needs a drop of at least the larger of
     /// <paramref name="mileageDropMinMiles"/> and <paramref name="mileageDropMinPercent"/> of the
     /// prior mileage (rounding and minor re-entry noise, not a rolled-back odometer). A drop between
     /// two points in the same <see cref="SellerGroup"/> (see <paramref name="sellerGroups"/>) whose
@@ -222,16 +222,16 @@ public static partial class RedFlagsEvaluator
     private static SellerGroup? FindContainingGroup(List<SellerGroup> groups, VinHistoryPoint point) =>
         groups.FirstOrDefault(g => g.Points.Contains(point));
 
-    /// <summary>Drops placeholder-mileage points (see <see cref="PlaceholderMileageMax"/>) entirely,
-    /// and collapses a run of same-calendar-day points down to the first reading of that day, so
-    /// neither kind of bogus reading can ever end up as the baseline or endpoint of a pair comparison
-    /// in <see cref="FindMileageDrop"/>.</summary>
+    /// <summary>Drops placeholder-mileage points (see <see cref="PlaceholderMileageMax"/>) and points
+    /// with no mileage at all entirely, and collapses a run of same-calendar-day points down to the
+    /// first reading of that day, so none of them can ever end up as the baseline or endpoint of a
+    /// pair comparison in <see cref="FindMileageDrop"/>.</summary>
     private static List<VinHistoryPoint> FilterMileagePoints(IReadOnlyList<VinHistoryPoint> ordered)
     {
         List<VinHistoryPoint> filtered = [];
         foreach (VinHistoryPoint point in ordered)
         {
-            if (point.Mileage is int mileage && mileage <= PlaceholderMileageMax)
+            if (point.Mileage is not int mileage || mileage <= PlaceholderMileageMax)
             {
                 continue;
             }
