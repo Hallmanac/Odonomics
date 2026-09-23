@@ -83,6 +83,40 @@ public class ShowRendererHistoryTableRenderingTests
     }
 
     [Fact]
+    public void BuildGroupedHistoryTable_MileageRangeWithTwoSixDigitReadings_RendersBothInFullAndStillWrapsTheDealerCell()
+    {
+        string original = Environment.GetEnvironmentVariable("NO_COLOR") ?? "";
+        try
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", "1");
+
+            DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+            DateTimeOffset day2 = new(2026, 12, 1, 0, 0, 0, TimeSpan.Zero);
+            const string longName = "Mercedes-Benz Of South Orlando Certified Pre-Owned";
+            List<VinHistoryPoint> points =
+            [
+                new(longName, day1, day1, 19394m, 105000),
+                new(longName, day2, day2, 27995m, 150000),
+            ];
+
+            IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
+            Assert.Single(groups);
+
+            string[] lines = Render(groups);
+            string output = string.Join('\n', lines);
+
+            Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+            Assert.Contains(lines, line => line.Contains("105,000-150,000"));
+            Assert.DoesNotContain('…', output);
+            Assert.Contains(longName, Unwrap(lines));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", original.Length == 0 ? null : original);
+        }
+    }
+
+    [Fact]
     public void BuildGroupedHistoryTable_PriceRangeWithSixDigitHighEnd_RendersBothInFull()
     {
         // The same defect shape as the mileage six-digit case above, one field over: a price range
