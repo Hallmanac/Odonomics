@@ -23,15 +23,18 @@ public class LedgerDataMigrationsTests
     [Fact]
     public async Task ApplyAll_TwoStalePostingsCollapseToTheSameCanonicalUrl_MergesThemKeepingEarliestFirstSeenAndEveryPriceObservation()
     {
-        // The exact fixture shape from the task: one VIN, one cars.com posting URL stored two
-        // ways (a sid-bearing href and its canonical form), the way a ledger written before URL
-        // canonicalization looks today.
+        // The real pre-existing ledger shape: one row written before the walk started storing
+        // canonical URLs (a sid-bearing href) and one row written after (the bare canonical URL
+        // the walk now stores directly). The survivor is the earlier, sid-bearing row, so the
+        // migration has to update its Url to a value the row it's about to delete already holds
+        // under the (VehicleVin, Source, Url) unique index, exercising that ordering against a
+        // real SQLite database rather than a fixture where neither row already sits on the
+        // canonical value.
         using var testDb = new LedgerTestDatabase();
         using OdonomicsDbContext db = testDb.CreateContext();
         var upsert = new LedgerUpsertService(db);
 
         const string sidBearingUrl = "https://www.cars.com/vehicledetail/abc123/?sid=xyz789";
-        const string otherSidBearingUrl = "https://www.cars.com/vehicledetail/abc123/?sid=different";
         const string canonicalUrl = "https://www.cars.com/vehicledetail/abc123/";
 
         var run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
@@ -42,7 +45,7 @@ public class LedgerDataMigrationsTests
         var run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
         db.Runs.Add(run2);
         await db.SaveChangesAsync(CancellationToken.None);
-        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, otherSidBearingUrl), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, canonicalUrl), run2, CancellationToken.None);
 
         LedgerDataMigrations.ApplyAll(db);
 
@@ -55,7 +58,38 @@ public class LedgerDataMigrationsTests
         Assert.Contains(survivor.PriceObservations, o => o.Price == 18000m);
         Assert.Contains(survivor.PriceObservations, o => o.Price == 17000m);
 
-        Assert.Single(db.LedgerMigrations, m => m.Name == "CanonicalizeCarsComPostingUrls");
+        Assert.Single(db.LedgerMigrations, m => m.Name == "CanonicalizeWalkedPostingUrls");
+    }
+
+    [Fact]
+    public async Task ApplyAll_CarvanaStalePostingCollapsesToItsCanonicalUrl_MergesItTooNotOnlyCarsCom()
+    {
+        // Carvana's own detail links carry the same kind of per-search-session id cars.com's do
+        // (see WalkSites.CanonicalDetailUrl), so a ledger walked on carvana before the URL fix
+        // needs the same merge cars.com gets, not just cars.com's own rows.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        const string sidBearingUrl = "https://www.carvana.com/vehicle/4754913?refSource=srp";
+        const string canonicalUrl = "https://www.carvana.com/vehicle/4754913";
+
+        var run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "carvana:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, sidBearingUrl, "carvana"), run1, CancellationToken.None);
+
+        var run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "carvana:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, canonicalUrl, "carvana"), run2, CancellationToken.None);
+
+        LedgerDataMigrations.ApplyAll(db);
+
+        PostingEntity survivor = Assert.Single(db.Postings.Where(p => p.VehicleVin == "1HGCM82633A004352"));
+        Assert.Equal(canonicalUrl, survivor.Url);
+        Assert.Equal(run1.StartedAt, survivor.FirstSeen);
+        Assert.Equal(run2.StartedAt, survivor.LastSeen);
     }
 
     [Fact]
@@ -96,7 +130,7 @@ public class LedgerDataMigrationsTests
 
         const string sidBearingUrl = "https://www.cars.com/vehicledetail/abc123/?sid=xyz789";
 
-        db.LedgerMigrations.Add(new LedgerMigrationEntity { Name = "CanonicalizeCarsComPostingUrls", AppliedAt = DateTimeOffset.UtcNow });
+        db.LedgerMigrations.Add(new LedgerMigrationEntity { Name = "CanonicalizeWalkedPostingUrls", AppliedAt = DateTimeOffset.UtcNow });
         await db.SaveChangesAsync(CancellationToken.None);
 
         var run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
@@ -108,6 +142,6 @@ public class LedgerDataMigrationsTests
 
         PostingEntity posting = Assert.Single(db.Postings.Where(p => p.VehicleVin == "1HGCM82633A004352"));
         Assert.Equal(sidBearingUrl, posting.Url);
-        Assert.Single(db.LedgerMigrations, m => m.Name == "CanonicalizeCarsComPostingUrls");
+        Assert.Single(db.LedgerMigrations, m => m.Name == "CanonicalizeWalkedPostingUrls");
     }
 }

@@ -48,7 +48,7 @@ public class LedgerFactoryTests
             {
                 PostingEntity posting = Assert.Single(db.Postings.Where(p => p.VehicleVin == "1HGCM82633A004352"));
                 Assert.Equal(canonicalUrl, posting.Url);
-                Assert.Single(db.LedgerMigrations, m => m.Name == "CanonicalizeCarsComPostingUrls");
+                Assert.Single(db.LedgerMigrations, m => m.Name == "CanonicalizeWalkedPostingUrls");
 
                 // A row that would need canonicalizing, added after the migration already ran and
                 // recorded itself: proves the next Open() skips it entirely rather than rescanning.
