@@ -16,17 +16,26 @@ public static class BudgetSolver
     private const decimal PriceTolerance = 0.01m;
     private const decimal SearchCeiling = 10_000_000m;
 
+    /// <summary>The monthly figures charged before any loan payment. They do not depend on the
+    /// purchase price, so the solver computes them once and `odo budget` prints the same figures.</summary>
+    public static MonthlyRunningCosts RunningCosts(Scenario scenario, decimal insuranceMonthly, decimal mpg)
+    {
+        decimal fuel = FinanceMath.MonthlyFuelCost(scenario.AnnualMiles.Expected, mpg, scenario.GasPricePerGallon.Expected);
+        decimal maintenance = scenario.MaintenancePerMile.Expected * scenario.AnnualMiles.Expected / 12m;
+        return new MonthlyRunningCosts(insuranceMonthly, fuel, maintenance, scenario.EmergencyReservePerMonth.Expected);
+    }
+
     public static decimal MaxPurchasePrice(Scenario scenario, decimal targetMonthlyBudget, decimal insuranceMonthly, decimal mpg)
     {
+        MonthlyRunningCosts running = RunningCosts(scenario, insuranceMonthly, mpg);
+
         decimal DuringLoanAt(decimal price)
         {
             decimal tax = FinanceMath.FloridaSalesTax(price, scenario.SalesTaxStateRate, scenario.CountySurtaxRate);
             decimal purchaseCost = price + tax + scenario.Fees.Expected;
             decimal principal = Math.Max(0m, purchaseCost - scenario.DownPayment.Expected);
             decimal payment = FinanceMath.AmortizedPayment(principal, scenario.Apr.Expected, scenario.TermMonths);
-            decimal fuel = FinanceMath.MonthlyFuelCost(scenario.AnnualMiles.Expected, mpg, scenario.GasPricePerGallon.Expected);
-            decimal maintenance = scenario.MaintenancePerMile.Expected * scenario.AnnualMiles.Expected / 12m;
-            return FinanceMath.DuringLoanMonthly(payment, insuranceMonthly, fuel, maintenance, scenario.EmergencyReservePerMonth.Expected);
+            return FinanceMath.DuringLoanMonthly(payment, running.Insurance, running.Fuel, running.Maintenance, running.Reserve);
         }
 
         if (DuringLoanAt(0m) > targetMonthlyBudget)
@@ -56,6 +65,12 @@ public static class BudgetSolver
 
         return Math.Round(low, 2);
     }
+}
+
+/// <summary>Insurance, fuel, maintenance, and the emergency reserve, per month, before any loan payment.</summary>
+public readonly record struct MonthlyRunningCosts(decimal Insurance, decimal Fuel, decimal Maintenance, decimal Reserve)
+{
+    public decimal Total => FinanceMath.AfterPayoffMonthly(Insurance, Fuel, Maintenance, Reserve);
 }
 
 /// <summary>Model-agnostic stand-ins for <see cref="BudgetSolver"/> when no specific vehicle's
