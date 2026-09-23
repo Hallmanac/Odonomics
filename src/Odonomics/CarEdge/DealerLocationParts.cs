@@ -7,9 +7,9 @@ namespace Odonomics.CarEdge;
 /// locations can be compared part by part instead of as raw text. Either part can be empty: an API
 /// source can report only a city or only a state, and a bare part is read as a state only when it is
 /// a two-letter code, since a card's own state is always one. The normalization case-folds, drops
-/// punctuation and any trailing zip code, and expands a city's leading "Ft.", "Mt." and "St." to
-/// Fort, Mount and Saint (a bare "MT" location is Montana, so the expansion never touches the state
-/// part).</summary>
+/// punctuation and any trailing zip code, and expands "Ft.", "Mt." and "St." anywhere in a city
+/// to Fort, Mount and Saint (a bare "MT" location is Montana, so the expansion never touches the
+/// state part).</summary>
 public readonly partial record struct DealerLocationParts(string City, string State)
 {
     public bool IsEmpty => City.Length == 0 && State.Length == 0;
