@@ -5,7 +5,6 @@ using Spectre.Console.Testing;
 
 namespace Odonomics.Tests.Cli;
 
-[Collection(NoColorEnvironmentCollection.Name)]
 public class ShowRendererHistoryTableRenderingTests
 {
     [Fact]

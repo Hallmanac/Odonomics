@@ -10,24 +10,23 @@ public static class ShowRenderer
 {
     // Column widths are chosen so that, added to Border.Minimal's per-column padding and separators
     // (3 chars per column plus 1 for the table's own edges: 3 * 5 + 1 = 16 for five columns), the
-    // grouped-history table never needs more than 80 columns: 16 + 12 + 10 + 10 + 17 + 15 = 80.
-    // MileageColumnWidth fits a six-digit-vs-six-digit range ("150,000-999,999" is 15 characters,
-    // and every 6-digit reading formats to the same 7 characters) without ellipsizing the high end
-    // into a misleadingly smaller number; a used car crossing the 100k-mile mark during a relisting
-    // is routine, not an edge case. PriceColumnWidth fits the same shape of range one field over:
-    // a Money-formatted 6-digit price is 8 characters (the leading "$" costs one more than a bare
-    // 6-digit mileage reading), so "$150,000-$999,999" needs 17. DealerColumnWidth gives up four of
-    // those characters to stay within the 80-column budget, which only shortens the truncated name
-    // list a little further. Every cell is also truncated to its column's width before it reaches
-    // the table, since Spectre wraps a cell that overflows its declared width onto a second line
-    // rather than cropping it, which would turn one seller group's row into two lines and defeat the
-    // "readable at a glance" point of grouping in the first place; DealerNamesCell leads with the
-    // seller count for a multi-seller group specifically so that fact survives even when the name
-    // list itself has to be cut short.
-    private const int DealerColumnWidth = 12;
+    // grouped-history table never needs more than 80 columns: 16 + 14 + 10 + 10 + 16 + 14 = 80.
+    // MileageColumnWidth and PriceColumnWidth are sized for the realistic worst case this tool's own
+    // recorded scenarios exercise, a group whose mileage or price crosses from five digits to six
+    // (e.g. "95,000-150,000", 14 characters, or "$95,000-$150,000", 16 characters) rather than a
+    // six-digit-vs-six-digit range ("$150,000-$999,999"), a spread a single seller group's readings
+    // do not produce for a used car within this tool's budget; reserving width for that shape only
+    // starves DealerColumnWidth, the column the grouping feature exists to make readable, of space it
+    // needs far more. Every cell is also truncated to its column's width before it reaches the table,
+    // since Spectre wraps a cell that overflows its declared width onto a second line rather than
+    // cropping it, which would turn one seller group's row into two lines and defeat the "readable at
+    // a glance" point of grouping in the first place; DealerNamesCell leads with the seller count for
+    // a multi-seller group specifically so that fact survives even when the name list itself has to
+    // be cut short.
+    private const int DealerColumnWidth = 14;
     private const int DateColumnWidth = 10;
-    private const int PriceColumnWidth = 17;
-    private const int MileageColumnWidth = 15;
+    private const int PriceColumnWidth = 16;
+    private const int MileageColumnWidth = 14;
     private const int MaxDealerNamesShown = 3;
 
     public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory)
@@ -119,12 +118,14 @@ public static class ShowRenderer
                 int undated = points.Count(p => p.FirstSeen is null);
                 if (groups.Count == 0)
                 {
-                    AnsiConsole.MarkupLine("  no prior listings have a known first-seen date; pass --all-history to see them");
+                    AnsiConsole.MarkupLine(allHistory
+                        ? "  no prior listings have a known first-seen date"
+                        : "  no prior listings have a known first-seen date; pass --all-history to see them");
                 }
                 else
                 {
                     AnsiConsole.Write(BuildGroupedHistoryTable(groups));
-                    if (undated > 0)
+                    if (undated > 0 && !allHistory)
                     {
                         AnsiConsole.MarkupLineInterpolated(
                             $"  {undated} listing{(undated == 1 ? "" : "s")} without a known first-seen date not shown above; pass --all-history to see {(undated == 1 ? "it" : "them")}");
