@@ -162,6 +162,32 @@ public class RankRendererRenderingTests
     }
 
     [Fact]
+    public void Render_InsuranceUnknownVehiclesWithSameStemDifferentTrim_KeepsBothNamesDistinguishable()
+    {
+        Score le = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid LE", 22000m, insuranceUnknown: true);
+        Score xle = BuildScore("4T1G11AK0LU654321", 2020, "Toyota", "Corolla Hybrid XLE", 23000m, insuranceUnknown: true);
+
+        string[] lines = Render([le, xle], budget: null);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Contains(lines, line => line.Contains("2020 Toyota Corolla Hybrid LE"));
+        Assert.Contains(lines, line => line.Contains("2020 Toyota Corolla Hybrid XLE"));
+    }
+
+    [Fact]
+    public void Render_DealerGradeJoinsSeveralRooftops_TruncatesRatherThanWrappingOrOverflowing()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 590m, 590m), new Band(612m, 612m, 612m));
+        Score ranked = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, cost: cost, dealerGrade: "A+/B+/C-/D");
+        Score fGraded = BuildScore("1HGCM82633A004352", 2019, "Honda", "Insight", 18000m, cost: cost, dealerGrade: "A+/B+/C-/D", onlyFGraded: true);
+
+        string[] lines = Render([ranked, fGraded], budget: null);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.DoesNotContain(lines, line => line.Contains("A+/B+/C-/D"));
+    }
+
+    [Fact]
     public void Render_ExcludedVehicle_KeepsVinAndVehicleUnbrokenAt80Columns()
     {
         Score score = BuildScore(
