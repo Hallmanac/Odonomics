@@ -341,4 +341,19 @@ public class RankRendererRenderingTests
             "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
     }
+
+    [Fact]
+    public void Render_BudgetFlagSplitsVehiclesIntoRankedAndOverBudget_NamesTheCheapestAcrossBoth()
+    {
+        Score ranked = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Prius", 17897m, cost: BuildCost(new Band(410m, 420m, 430m), new Band(500m, 500m, 500m)));
+        Score overBudget = BuildScore("1HGCM82633A004352", 2019, "Honda", "Insight", 18000m, cost: BuildCost(new Band(590m, 600m, 610m), new Band(400m, 400m, 400m)));
+
+        string[] lines = Render([overBudget, ranked], budget: 500m, targets: [300m, 350m, 400m]);
+
+        Assert.Contains(lines, line => line.StartsWith("Ranked (1)"));
+        Assert.Contains(lines, line => line.StartsWith("Over the $500 budget (1)"));
+        Assert.Equal(
+            "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $410-$430 a month. Run odo budget for the purchase price each target allows.",
+            UnmetTargetsText(lines));
+    }
 }
