@@ -160,11 +160,11 @@ public class ShowRendererHistoryTableRenderingTests
     }
 
     [Fact]
-    public void BuildGroupedHistoryTable_ManyRooftopGroup_ShowsSellerCountEvenWhenNamesAreTruncated()
+    public void BuildGroupedHistoryTable_ManyRooftopGroup_LeadsTheWrappedDealerCellWithTheSellerCount()
     {
         // The dealer cell for a multi-seller group must lead with the seller count, so the one fact
-        // the grouping exists to surface survives even when the column is too narrow for the full
-        // "name1, name2, name3 and N more" list.
+        // the grouping exists to surface sits at the front of the cell even when the full
+        // "name1, name2, name3 and N more" list wraps onto several lines.
         string[] rooftops =
         [
             "Carrollton Hyundai", "Alm Hyundai Florence", "ALM Chevrolet South", "Alm Kia Perry",
