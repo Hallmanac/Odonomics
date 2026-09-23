@@ -74,7 +74,7 @@ public static class LedgerDataMigrations
     }
 
     /// <summary>Links every carvana posting with no dealer to the "Carvana" dealer, the same one the
-    /// walk now stamps when a detail page names no hub (see <see cref="WalkSite.ResolveDealerName"/>),
+    /// walk now stamps when a detail page names no hub (see <see cref="WalkSite.ResolveDealer"/>),
     /// so a ledger walked before that change shows a dealer without a fresh walk. A posting that
     /// already has a dealer, such as a named hub, is left alone. The dealer is the one with no
     /// location, which is also the only one the walk stamps as the fallback (it drops any location the

@@ -13,7 +13,8 @@ namespace Odonomics.Cli.Commands;
 /// positively says it has no rating for is stamped as checked, so it is never looked up again on a
 /// later run; a page that merely failed to parse is left unstamped so a later run retries it, and
 /// so is one whose name-matched cards were all in another city or state, or that matched several
-/// same-named cards a partial location could not tell apart. Three consecutive CarEdge 404 pages
+/// same-named cards its location (partial, or absent as on the "Carvana" fallback dealer) could
+/// not tell apart. Three consecutive CarEdge 404 pages
 /// mean the search URL itself is dead, not that three dealers in a row are unrateable, so the run
 /// stops there and exits non-zero rather than burning through the rest of the list against a URL
 /// that will keep failing; every dealer it never got to stays ungraded and eligible for the next
