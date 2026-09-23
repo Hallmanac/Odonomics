@@ -233,7 +233,7 @@ public class CarEdgeGradeParserTests
     }
 
     [Fact]
-    public void Parse_ExactNameMatchIsInADifferentCityThanTheSearchedDealer_ReturnsNotFoundRatherThanTheOtherStoresGrade()
+    public void Parse_ExactNameMatchIsInADifferentCityThanTheSearchedDealer_ReturnsLocationMismatchRatherThanTheOtherStoresGrade()
     {
         // CarEdge's own search can return a same-named store in a city the ledger dealer was never
         // seen in (a chain, or a match CarEdge's own fuzzy search considered close enough). A card
@@ -258,7 +258,7 @@ public class CarEdgeGradeParserTests
 
         CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Sanford, FL");
 
-        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+        Assert.Equal(CarEdgeGradeStatus.LocationMismatch, result.Status);
         Assert.Null(result.Grade);
     }
 
@@ -345,7 +345,7 @@ public class CarEdgeGradeParserTests
     }
 
     [Fact]
-    public void Parse_DealerLocationIsCityOnlyAndDisagreesWithTheCard_ReturnsNotFound()
+    public void Parse_DealerLocationIsCityOnlyAndDisagreesWithTheCard_ReturnsLocationMismatch()
     {
         // The partial-location match must still reject a genuinely different city: a bare city
         // that isn't a whole-word match against the card's "City, ST" line is not this dealer.
@@ -367,8 +367,135 @@ public class CarEdgeGradeParserTests
 
         CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Orlando");
 
-        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+        Assert.Equal(CarEdgeGradeStatus.LocationMismatch, result.Status);
         Assert.Null(result.Grade);
+    }
+
+    private static string CardText(string name, string location, string grade, int score) => $"""
+        {name}
+        {location} · 8 verified quotes
+        $600
+        doc fee
+        No add-ons
+        {grade}
+        {score}/100
+        Highly transparent
+        See 8 verified quotes →
+        """;
+
+    private static string PageText(int count, params string[] cards) => $"""
+        Search: "query"
+        {count} dealers found
+        Sort:
+        Highest ScoreLowest ScoreMost QuotesLowest Doc FeeHighest Doc FeeLowest MarkupHighest Markup
+        {string.Join("\n", cards)}
+        """;
+
+    [Theory]
+    [InlineData("Winter Park, FL 32792", "Winter Park, FL")]
+    [InlineData("Winter Park, FL 32792-1234", "Winter Park, FL")]
+    [InlineData("Winter Park FL", "Winter Park, FL")]
+    [InlineData("Ft. Lauderdale, FL", "Fort Lauderdale, FL")]
+    [InlineData("Fort Lauderdale, FL", "Ft. Lauderdale, FL")]
+    [InlineData("St. Petersburg, FL", "Saint Petersburg, FL")]
+    [InlineData("Mt. Pleasant, SC", "Mount Pleasant, SC")]
+    [InlineData("winter park, fl", "Winter Park, FL")]
+    [InlineData("FL", "Orlando, FL")]
+    [InlineData("MT", "Billings, MT")]
+    [InlineData("Orlando", "Orlando, FL")]
+    [InlineData("Orlando, FL", "Orlando, FL")]
+    [InlineData("", "Orlando, FL")]
+    [InlineData(null, "Orlando, FL")]
+    public void Parse_DealerLocationAgreesWithTheCardComponentByComponent_ReturnsThatCardsGrade(string? dealerLocation, string cardLocation)
+    {
+        string pageText = PageText(1, CardText("Holler Honda", cardLocation, "A", 91));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", dealerLocation);
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("A", result.Grade);
+    }
+
+    [Theory]
+    [InlineData("MT", "Mt. Pleasant, SC")]
+    [InlineData("Palm Beach", "West Palm Beach, FL")]
+    [InlineData("York", "New York, NY")]
+    [InlineData("Winter Park, FL", "Winter Park, CO")]
+    [InlineData("Orlando, FL", "Orlando, KY")]
+    [InlineData("GA", "Orlando, FL")]
+    public void Parse_DealerLocationDisagreesWithTheCardInAnyComponent_ReturnsLocationMismatch(string dealerLocation, string cardLocation)
+    {
+        string pageText = PageText(1, CardText("Holler Honda", cardLocation, "A", 91));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", dealerLocation);
+
+        Assert.Equal(CarEdgeGradeStatus.LocationMismatch, result.Status);
+        Assert.Null(result.Grade);
+    }
+
+    [Fact]
+    public void Parse_NoCardNamesTheDealerAtAll_StillReturnsNotFoundRatherThanLocationMismatch()
+    {
+        string pageText = PageText(1, CardText("Some Other Dealer", "Orlando, FL", "A", 91));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Sanford, FL");
+
+        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+    }
+
+    [Fact]
+    public void Parse_StateOnlyDealerLocationMatchesTwoExactNameCardsInThatState_ReturnsAmbiguous()
+    {
+        string pageText = PageText(
+            2,
+            CardText("Holler Honda", "Sanford, FL", "A", 91),
+            CardText("Holler Honda", "Tampa, FL", "C", 60));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "FL");
+
+        Assert.Equal(CarEdgeGradeStatus.Ambiguous, result.Status);
+        Assert.Null(result.Grade);
+    }
+
+    [Fact]
+    public void Parse_CityOnlyDealerLocationMatchesTwoExactNameCardsInThatCity_ReturnsAmbiguous()
+    {
+        string pageText = PageText(
+            2,
+            CardText("Holler Honda", "Springfield, IL", "A", 91),
+            CardText("Holler Honda", "Springfield, MO", "C", 60));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Springfield");
+
+        Assert.Equal(CarEdgeGradeStatus.Ambiguous, result.Status);
+    }
+
+    [Fact]
+    public void Parse_StateOnlyDealerLocationAndOnlyOneExactNameCardIsInThatState_ReturnsThatCard()
+    {
+        string pageText = PageText(
+            2,
+            CardText("Holler Honda", "Columbia, SC", "C", 60),
+            CardText("Holler Honda", "Sanford, FL", "A", 91));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "FL");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("A", result.Grade);
+    }
+
+    [Fact]
+    public void Parse_FullDealerLocationPicksItsOwnCardAmongSeveralSameNamedCards()
+    {
+        string pageText = PageText(
+            2,
+            CardText("Holler Honda", "Tampa, FL", "C", 60),
+            CardText("Holler Honda", "Sanford, FL", "A", 91));
+
+        CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "Holler Honda", "Sanford, FL 32771");
+
+        Assert.Equal(CarEdgeGradeStatus.Graded, result.Status);
+        Assert.Equal("A", result.Grade);
     }
 
     [Fact]
