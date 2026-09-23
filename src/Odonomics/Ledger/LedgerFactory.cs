@@ -2,8 +2,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Odonomics.Ledger;
 
-/// <summary>Opens the ledger at the resolved data directory and applies any pending migrations,
-/// per "the CLI applies pending migrations on startup."</summary>
+/// <summary>Opens the ledger at the resolved data directory, applies any pending schema
+/// migrations, then applies any pending one-time data migrations (see
+/// <see cref="LedgerDataMigrations"/>), per "the CLI applies pending migrations on startup."</summary>
 public static class LedgerFactory
 {
     public static OdonomicsDbContext Open()
@@ -14,6 +15,7 @@ public static class LedgerFactory
             .Options;
         var db = new OdonomicsDbContext(options);
         db.Database.Migrate();
+        LedgerDataMigrations.ApplyAll(db);
         return db;
     }
 }
