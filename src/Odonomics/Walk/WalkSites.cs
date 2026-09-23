@@ -6,12 +6,12 @@ namespace Odonomics.Walk;
 /// <summary>One walk target's search-URL builder, detail-link pattern, and how much the walk
 /// should over-fetch candidate links. <see cref="DetailLinkOverfetchMultiplier"/> stays above 1
 /// even for a site whose search URL isolates the requested model, since a page rejected as
-/// <see cref="Odonomics.Walk.DetailPageOutcome.Repeat"/> or (rarely, for a hybrid-only-from-year
-/// model, see <see cref="BuildSearchUrl"/>'s hybridOnlyFromModelYear parameter)
-/// <see cref="Odonomics.Walk.DetailPageOutcome.NotMatching"/> needs a spare link to replace it
-/// with rather than shortening the pair; see README.md's walk section for the full reasoning.
-/// <paramref name="BuildSearchUrl"/> takes make, model, zip, radius, and whether the scenario
-/// marks this model's base model as hybrid-only from some year onward (see
+/// <see cref="Odonomics.Walk.DetailPageOutcome.Repeat"/> or <see cref="Odonomics.Walk.DetailPageOutcome.NotMatching"/>
+/// (the latter now also expected for cars.com's base-model bucket on a hybrid-only-from-year
+/// model, see <see cref="BuildSearchUrl"/>'s hybridOnlyFromModelYear parameter) needs a spare
+/// link to replace it with rather than shortening the pair; see README.md's walk section for the
+/// full reasoning. <paramref name="BuildSearchUrl"/> takes make, model, zip, radius, and whether
+/// the scenario marks this model's base model as hybrid-only from some year onward (see
 /// <see cref="Odonomics.Domain.Scenario.HybridOnlyFromModelYear"/>).</summary>
 public sealed record WalkSite(
     string Name,
@@ -38,14 +38,20 @@ public sealed record WalkSite(
 /// cars.com's hybrid facet is a distinct model bucket, not every hybrid instance of the base
 /// model: a scenario's HybridOnlyFromModelYear rule exists because a base model can go
 /// hybrid-only from some year on without cars.com ever moving those listings into the hybrid
-/// bucket (Toyota's 2025+ Camry is filed under plain "camry", not "camry_hybrid"; the repo's own
-/// recorded walk output confirms it). For a model with that rule set, cars.com's search URL below
-/// queries the base model instead of the hybrid facet, so those listings are in the pool at all;
-/// ListingQuery.MatchesExtractedVehicle is what then accepts the ones at or after the hybrid-only
-/// year and rejects the genuinely-gas ones below it. Carvana needs no equivalent fallback: its
-/// fuelTypes filter matches each listing's actual fuel type, not its title text, so a
-/// hybrid-only-from-year model's newer listings already come back correctly under the base-model
-/// query it always uses.</summary>
+/// bucket (Toyota's 2025+ Camry is filed under plain "camry", not "camry_hybrid"; the operator's
+/// own recorded run confirms it — the base-model query's search.txt, under the walk data
+/// directory outside this repo at
+/// "walks/cars.com/20260922-184927/camry-hybrid/search.txt", lists gas-titled Camrys with zero
+/// case-insensitive "hybrid" occurrences). For a model with that rule set, cars.com's search URL
+/// below queries both the hybrid facet and the base-model facet: models[] is a checkbox array
+/// cars.com's own URL shape accepts more than one value on, so the hybrid facet still reaches the
+/// pre-cutover model years actually filed there while the added base-model facet reaches the
+/// post-cutover years cars.com never moved into the hybrid bucket. ListingQuery.MatchesExtractedVehicle
+/// is what then accepts a base-titled candidate at or after the hybrid-only year and rejects a
+/// genuinely-gas one below it. Carvana needs no equivalent second query: its fuelTypes filter
+/// matches each listing's actual fuel type, not its title text, so a hybrid-only-from-year
+/// model's newer listings already come back correctly under the base-model query it always
+/// uses.</summary>
 public static class WalkSites
 {
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");
@@ -91,10 +97,12 @@ public static class WalkSites
         (make, model, zip, radius, hybridOnlyFromModelYear) =>
         {
             string makeSlug = Slugify(make);
-            string facetModel = hybridOnlyFromModelYear ? BaseModelName(model) : model;
-            string modelSlug = $"{makeSlug}-{ModelFacetWords(facetModel)}";
+            string hybridModelSlug = $"{makeSlug}-{ModelFacetWords(model)}";
+            string modelsQuery = hybridOnlyFromModelYear
+                ? $"models[]={makeSlug}-{ModelFacetWords(BaseModelName(model))}&models[]={hybridModelSlug}"
+                : $"models[]={hybridModelSlug}";
             return $"https://www.cars.com/shopping/results/?stock_type=used&makes[]={makeSlug}" +
-                   $"&models[]={modelSlug}&zip={zip}&maximum_distance={radius}";
+                   $"&{modelsQuery}&zip={zip}&maximum_distance={radius}";
         },
         new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2);

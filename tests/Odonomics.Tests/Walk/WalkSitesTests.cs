@@ -47,9 +47,11 @@ public class WalkSitesTests
     [Fact]
     public void CarsCom_BuildSearchUrl_HyphenatedModel_UnderscoresTheHyphenToo()
     {
-        // cars.com's own model-facet JSON carries "honda-cr_v_hybrid" and "toyota-c_hr", not the
-        // hyphenated "honda-cr-v_hybrid" a plain space-to-underscore replace would produce
-        // (spike/recorded/cars.com/day1/Honda-Insight-search.html).
+        // cars.com's own model-facet JSON carries "honda-cr_v_hybrid"
+        // (spike/recorded/cars.com/day1/Honda-Insight-search.html) and, for the same
+        // hyphen-collapsing rule, "toyota-c_hr"
+        // (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html) — not the hyphenated
+        // "honda-cr-v_hybrid" a plain space-to-underscore replace would produce.
         string url = WalkSites.CarsCom.BuildSearchUrl("Honda", "CR-V Hybrid", "32114", 50, false);
 
         Assert.Contains("models[]=honda-cr_v_hybrid&", url);
@@ -72,19 +74,22 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_HybridOnlyFromModelYear_QueriesBaseModelNotHybridFacet()
+    public void CarsCom_BuildSearchUrl_HybridOnlyFromModelYear_QueriesBothBaseAndHybridFacets()
     {
         // Toyota's 2025+ Camry is hybrid-only but cars.com never moved those listings into the
-        // "camry_hybrid" bucket (they're still filed under plain "camry"); this run's own
-        // recorded search.txt for the "toyota-camry" bucket lists eleven 2025/2026 Camrys with
-        // "Hybrid" nowhere in their titles. Querying the hybrid facet for a HybridOnlyFromModelYear
-        // model would silently exclude all of them, so the walk queries the base model instead and
-        // leaves ListingQuery.MatchesExtractedVehicle to accept the ones at or after the hybrid
-        // year.
+        // "camry_hybrid" bucket (they're still filed under plain "camry"); the operator's own
+        // recorded search.txt for the "toyota-camry" bucket lists Camrys from 2010 through 2024
+        // with zero case-insensitive "hybrid" occurrences. Querying only the hybrid facet for a
+        // HybridOnlyFromModelYear model would silently exclude every post-cutover listing, but
+        // querying only the base facet (the walk's prior behavior) would silently exclude every
+        // pre-cutover Camry Hybrid that cars.com genuinely does file under "camry_hybrid". Since
+        // models[] is a checkbox array, the walk asks for both buckets and leaves
+        // ListingQuery.MatchesExtractedVehicle to accept the base-titled ones at or after the
+        // hybrid year and reject the genuinely-gas ones below it.
         string url = WalkSites.CarsCom.BuildSearchUrl("Toyota", "Camry Hybrid", "32114", 50, true);
 
         Assert.Contains("models[]=toyota-camry&", url);
-        Assert.DoesNotContain("camry_hybrid", url);
+        Assert.Contains("models[]=toyota-camry_hybrid&", url);
     }
 
     [Fact]

@@ -17,10 +17,10 @@ public enum DetailPageOutcome
     /// <summary>The page is some other vehicle than the one this pair asked for. Like
     /// <see cref="Repeat"/>, this never spends any of the per-pair cap: a search page that still
     /// mixes in other models, despite the walk's own search URL now asking each site for the
-    /// exact model in the common case (one deliberate exception: cars.com queries the base model
-    /// for a hybrid-only-from-year model, see <see cref="Odonomics.Walk.WalkSites"/>), still gets
-    /// every real candidate visited, up to the pool <see cref="WalkDetailWalk.RunAsync"/> was
-    /// handed.</summary>
+    /// exact model in the common case (one deliberate exception: cars.com queries both the hybrid
+    /// facet and the base model for a hybrid-only-from-year model, see
+    /// <see cref="Odonomics.Walk.WalkSites"/>), still gets every real candidate visited, up to the
+    /// pool <see cref="WalkDetailWalk.RunAsync"/> was handed.</summary>
     NotMatching,
 
     /// <summary>The page had no VIN to key a ledger row on. Checked before the model-match check
