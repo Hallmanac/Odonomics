@@ -8,7 +8,20 @@ namespace Odonomics.Cli;
 
 public static class ShowRenderer
 {
-    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags)
+    // Column widths are chosen so that, added to Border.Minimal's per-column padding and separators
+    // (3 chars per column plus 1 for the table's own edges: 3 * 5 + 1 = 16 for five columns), the
+    // grouped-history table never needs more than 80 columns: 18 + 10 + 10 + 15 + 11 + 16 = 80.
+    // Every cell is also truncated to its column's width before it reaches the table, since Spectre
+    // wraps a cell that overflows its declared width onto a second line rather than cropping it,
+    // which would turn one seller group's row into two lines and defeat the "readable at a glance"
+    // point of grouping in the first place.
+    private const int DealerColumnWidth = 18;
+    private const int DateColumnWidth = 10;
+    private const int PriceColumnWidth = 15;
+    private const int MileageColumnWidth = 11;
+    private const int MaxDealerNamesShown = 3;
+
+    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory)
     {
         (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
@@ -91,24 +104,17 @@ public static class ShowRenderer
             }
             else
             {
-                var historyTable = new Table { Border = TableBorder.Minimal };
-                historyTable.Width(80);
-                historyTable.AddColumn("Dealer");
-                historyTable.AddColumn("First");
-                historyTable.AddColumn("Last");
-                historyTable.AddColumn("Price");
-                historyTable.AddColumn("Miles");
-                foreach (VinHistoryListing listing in history.PriorListings.OrderBy(l => l.FirstSeen))
-                {
-                    historyTable.AddRow(
-                        Format.Cell(listing.Dealer ?? "(unknown)"),
-                        listing.FirstSeen?.ToString("yyyy-MM-dd") ?? "?",
-                        listing.LastSeen?.ToString("yyyy-MM-dd") ?? "?",
-                        listing.Price is decimal price ? Format.Money(price) : "?",
-                        listing.Mileage is int miles ? miles.ToString("N0") : "?");
-                }
+                IReadOnlyList<VinHistoryPoint> points = [.. history.PriorListings
+                    .Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))];
+                IReadOnlyList<SellerGroupSummary> groups = RedFlagsEvaluator.GroupBySeller(points);
+                AnsiConsole.Write(BuildGroupedHistoryTable(groups));
 
-                AnsiConsole.Write(historyTable);
+                if (allHistory)
+                {
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine("  all listings:");
+                    AnsiConsole.Write(BuildRawHistoryTable(history.PriorListings));
+                }
             }
         }
 
@@ -156,6 +162,80 @@ public static class ShowRenderer
         {
             AnsiConsole.MarkupLineInterpolated($"  [[{note.CreatedAt:yyyy-MM-dd}]] {note.Text}");
         }
+    }
+
+    /// <summary>The listing history grouped by seller (see <see cref="RedFlagsEvaluator.GroupBySeller"/>),
+    /// one row per group: dealer name(s) capped at <see cref="MaxDealerNamesShown"/> plus "and N more",
+    /// the group's overall first/last seen dates, and its price and mileage ranges. Built without
+    /// writing it, so a rendering test can capture it against a fixed-width console instead of the
+    /// real one, the same as <c>WalkCommand.BuildSummaryTable</c>.</summary>
+    public static Table BuildGroupedHistoryTable(IReadOnlyList<SellerGroupSummary> groups)
+    {
+        var table = new Table { Border = TableBorder.Minimal };
+        table.Width(80);
+        table.AddColumn(new TableColumn("Dealer(s)") { Width = DealerColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("First") { Width = DateColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Last") { Width = DateColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Price range") { Width = PriceColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Miles range") { Width = MileageColumnWidth, NoWrap = true });
+        foreach (SellerGroupSummary group in groups)
+        {
+            table.AddRow(
+                Format.Cell(Format.Truncate(DealerNamesCell(group.DealerNames), DealerColumnWidth)),
+                group.FirstSeen.ToString("yyyy-MM-dd"),
+                group.LastSeen.ToString("yyyy-MM-dd"),
+                Format.Cell(Format.Truncate(RangeCell(group.MinPrice, group.MaxPrice, Format.Money), PriceColumnWidth)),
+                Format.Cell(Format.Truncate(RangeCell(group.MinMileage, group.MaxMileage, m => m.ToString("N0")), MileageColumnWidth)));
+        }
+
+        return table;
+    }
+
+    /// <summary>The raw, one-row-per-sighting history table (every prior listing exactly as
+    /// Marketcheck reported it), shown only with `odo show --all-history`: the grouped table above is
+    /// the readable default, this is the detail underneath it.</summary>
+    public static Table BuildRawHistoryTable(IReadOnlyList<VinHistoryListing> priorListings)
+    {
+        var table = new Table { Border = TableBorder.Minimal };
+        table.Width(80);
+        table.AddColumn("Dealer");
+        table.AddColumn("First");
+        table.AddColumn("Last");
+        table.AddColumn("Price");
+        table.AddColumn("Miles");
+        foreach (VinHistoryListing listing in priorListings.OrderBy(l => l.FirstSeen))
+        {
+            table.AddRow(
+                Format.Cell(listing.Dealer ?? "(unknown)"),
+                listing.FirstSeen?.ToString("yyyy-MM-dd") ?? "?",
+                listing.LastSeen?.ToString("yyyy-MM-dd") ?? "?",
+                listing.Price is decimal price ? Format.Money(price) : "?",
+                listing.Mileage is int miles ? miles.ToString("N0") : "?");
+        }
+
+        return table;
+    }
+
+    private static string DealerNamesCell(IReadOnlyList<string> names)
+    {
+        if (names.Count == 0)
+        {
+            return "(unknown)";
+        }
+
+        string shown = string.Join(", ", names.Take(MaxDealerNamesShown));
+        int remaining = names.Count - Math.Min(MaxDealerNamesShown, names.Count);
+        return remaining > 0 ? $"{shown} and {remaining} more" : shown;
+    }
+
+    private static string RangeCell<T>(T? min, T? max, Func<T, string> format) where T : struct, IEquatable<T>
+    {
+        if (min is not T lo || max is not T hi)
+        {
+            return "?";
+        }
+
+        return lo.Equals(hi) ? format(lo) : $"{format(lo)}-{format(hi)}";
     }
 
     private static string Stars(int? rating) => rating is int stars ? $"{stars}/5" : "(not rated)";

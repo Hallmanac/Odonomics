@@ -10,7 +10,7 @@ namespace Odonomics.Cli.Commands;
 
 public static class ShowCommand
 {
-    public static async Task<int> RunAsync(string vin, bool refresh, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string vin, bool refresh, bool allHistory, CancellationToken cancellationToken)
     {
         using OdonomicsDbContext db = LedgerFactory.Open();
 
@@ -39,7 +39,7 @@ public static class ShowCommand
         decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, RunSources.LatestCoverageBySource(runs));
         IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
 
-        ShowRenderer.Render(vehicle, research, redFlags);
+        ShowRenderer.Render(vehicle, research, redFlags, allHistory);
         return 0;
     }
 }
