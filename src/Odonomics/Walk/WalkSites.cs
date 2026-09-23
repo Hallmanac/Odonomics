@@ -12,12 +12,26 @@ namespace Odonomics.Walk;
 /// link to replace it with rather than shortening the pair; see README.md's walk section for the
 /// full reasoning. <paramref name="BuildSearchUrl"/> takes make, model, zip, radius, and whether
 /// the scenario marks this model's base model as hybrid-only from some year onward (see
-/// <see cref="Odonomics.Domain.Scenario.HybridOnlyFromModelYear"/>).</summary>
+/// <see cref="Odonomics.Domain.Scenario.HybridOnlyFromModelYear"/>). <paramref name="FallbackDealerName"/>
+/// is the dealer a posting is stamped with when its detail page names none, for a site where the
+/// site itself is the seller (carvana); null for a marketplace whose pages carry the dealer's own
+/// name or none at all.</summary>
 public sealed record WalkSite(
     string Name,
     Func<string, string, string, int, bool, string> BuildSearchUrl,
     Regex DetailUrlPattern,
-    int DetailLinkOverfetchMultiplier = 1);
+    int DetailLinkOverfetchMultiplier = 1,
+    string? FallbackDealerName = null)
+{
+    /// <summary>The dealer name to store for a page whose extraction returned
+    /// <paramref name="extractedDealerName"/>: that name (trimmed) when the page gave one, such as
+    /// a carvana hub ("Carvana Winder"), otherwise <see cref="FallbackDealerName"/>, which is null
+    /// for a site with none.</summary>
+    public string? ResolveDealerName(string? extractedDealerName) =>
+        string.IsNullOrWhiteSpace(extractedDealerName)
+            ? FallbackDealerName
+            : extractedDealerName.Trim();
+}
 
 /// <summary>Search-URL shapes and detail-link patterns for the two v0 walk targets. The spike's
 /// SPIKE-FINDINGS.md recorded both sites as having no working hybrid facet, but that recording
@@ -107,6 +121,12 @@ public static class WalkSites
         new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2);
 
+    /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
+    /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
+    /// and the model reading such a page sometimes returns "Carvana" itself and sometimes nothing,
+    /// so every carvana posting would otherwise show a dealer only by that coin flip.</summary>
+    public const string CarvanaDealerName = "Carvana";
+
     public static readonly WalkSite Carvana = new(
         "carvana",
         (make, model, zip, _, _) =>
@@ -131,7 +151,8 @@ public static class WalkSites
             return $"https://www.carvana.com/cars/filters?zip={zip}&cvnaid={EncodeCvnaid(JsonSerializer.Serialize(filters))}";
         },
         new Regex("/vehicle/", RegexOptions.IgnoreCase),
-        DetailLinkOverfetchMultiplier: 2);
+        DetailLinkOverfetchMultiplier: 2,
+        FallbackDealerName: CarvanaDealerName);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
