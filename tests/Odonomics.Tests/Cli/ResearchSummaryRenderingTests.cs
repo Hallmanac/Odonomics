@@ -72,6 +72,40 @@ public class ResearchSummaryRenderingTests
     }
 
     [Fact]
+    public void Render_EverySingleVehicleCached_StillPrintsTheFullSummaryNotAnEmptyOne()
+    {
+        // The run described in the acceptance criteria this diff set out to satisfy: nothing needed
+        // fetching, but the summary still covers the whole filtered set rather than reading as an
+        // empty run.
+        string? original = Environment.GetEnvironmentVariable("NO_COLOR");
+        try
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", "1");
+
+            var entries = new List<ResearchSummaryEntry>
+            {
+                new(2020, "Toyota", "Camry Hybrid", "4T1G11AK0LU123456", ["mileage-drop"], ResearchSource.Cached),
+                new(2019, "Honda", "Insight", "1HGCM82633A004352", [], ResearchSource.Cached),
+            };
+
+            var writer = new StringWriter();
+            IAnsiConsole console = AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(writer) });
+
+            ResearchSummaryRenderer.Render(console, entries);
+
+            string[] lines = writer.ToString().Replace("\r\n", "\n").Split('\n');
+
+            Assert.Equal("2 vehicles, 0 fetched, 2 cached, 0 unreachable", lines[0]);
+            Assert.StartsWith("C 2020 Toyota Camry Hybrid", lines[1]);
+            Assert.StartsWith("C 2019 Honda Insight", lines[2]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", original);
+        }
+    }
+
+    [Fact]
     public void Render_MixOfFetchedAndCached_MarksEachLineWithItsSource()
     {
         string? original = Environment.GetEnvironmentVariable("NO_COLOR");
