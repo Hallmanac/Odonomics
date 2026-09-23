@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Odonomics.Domain;
 using Odonomics.Ledger;
+using Spectre.Console;
 
 namespace Odonomics.Cli.Commands;
 
@@ -47,7 +48,7 @@ public static class RankCommand
             research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), lowestCurrentPrice);
         }
 
-        RankRenderer.Render(scores, budget, research);
+        RankRenderer.Render(AnsiConsole.Console, scores, budget, research);
         return 0;
     }
 
