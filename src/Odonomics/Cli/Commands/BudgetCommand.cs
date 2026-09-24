@@ -23,7 +23,7 @@ public static class BudgetCommand
 
         console.MarkupLine(
             "[bold]Max purchase price by target monthly budget[/] (using the scenario's average known insurance and mpg across target models)");
-        decimal[] itemized = RoundedToTotal([running.Insurance, running.Fuel, running.Maintenance, running.Reserve], running.Total);
+        decimal[] itemized = Format.RoundedToTotal([running.Insurance, running.Fuel, running.Maintenance, running.Reserve], running.Total);
         console.MarkupLine(
             $"Running costs before any payment: about {Format.Money(running.Total)} a month (insurance {Format.Money(itemized[0])}, fuel {Format.Money(itemized[1])}, maintenance {Format.Money(itemized[2])}, reserve {Format.Money(itemized[3])})");
 
@@ -41,19 +41,5 @@ public static class BudgetCommand
         }
 
         console.Write(table);
-    }
-
-    /// <summary>Rounds each part to whole dollars so the parts add up to the total's own rounding,
-    /// which independent rounding does not guarantee: the whole dollars the total is short of the
-    /// parts' floors go to the parts with the largest fractional remainders.</summary>
-    private static decimal[] RoundedToTotal(decimal[] parts, decimal total)
-    {
-        decimal[] floors = [.. parts.Select(Math.Floor)];
-        int shortfall = (int)(Math.Round(total, MidpointRounding.AwayFromZero) - floors.Sum());
-        HashSet<int> roundedUp = [.. Enumerable.Range(0, parts.Length)
-            .OrderByDescending(i => parts[i] - floors[i])
-            .Take(Math.Max(shortfall, 0))];
-
-        return [.. floors.Select((floor, i) => roundedUp.Contains(i) ? floor + 1m : floor)];
     }
 }
