@@ -202,21 +202,42 @@ public static class ShowRenderer
             return;
         }
 
-        (string Label, Band Value)[] lines =
-        [
-            ("Loan payment", cost.Payment),
-            ("Insurance", Band.Point(cost.InsuranceMonthly)),
-            ("Fuel", cost.Fuel),
-            ("Maintenance", cost.Maintenance),
-            ("Reserve", cost.Reserve),
-            ("During-loan total", cost.DuringLoanMonthly),
-            ("10-year average", cost.TenYearAverageMonthly),
-        ];
+        Band[] parts = [cost.Payment, Band.Point(cost.InsuranceMonthly), cost.Fuel, cost.Maintenance, cost.Reserve];
+        (decimal[] lows, decimal[] highs) = RoundedToDuringLoanTotal(parts, cost.DuringLoanMonthly);
+        string[] labels = ["Loan payment", "Insurance", "Fuel", "Maintenance", "Reserve"];
 
-        foreach ((string label, Band value) in lines)
+        for (int i = 0; i < parts.Length; i++)
         {
-            console.MarkupLine($"  {label.PadRight(MonthlyCostLabelWidth)}{Format.Band(value)}");
+            string figure = parts[i].IsRange
+                ? $"{Format.Money(lows[i])}-{Format.Money(highs[i])}"
+                : Format.Money(lows[i]);
+            console.MarkupLine($"  {labels[i].PadRight(MonthlyCostLabelWidth)}{figure}");
         }
+
+        console.MarkupLine($"  {"During-loan total".PadRight(MonthlyCostLabelWidth)}{Format.Band(cost.DuringLoanMonthly)}");
+        console.MarkupLine($"  {"10-year average".PadRight(MonthlyCostLabelWidth)}{Format.Band(cost.TenYearAverageMonthly)}");
+    }
+
+    /// <summary>Rounds each part of the during-loan total to whole dollars so the low ends, and the
+    /// high ends, of the printed lines add up to the printed total's own low and high, which
+    /// independent rounding does not guarantee (see <see cref="Format.RoundedToTotal"/>). A part that
+    /// is not a range keeps the one figure the low ends gave it, so it prints the same on both sides
+    /// and only the parts that are ranges absorb the high side's rounding.</summary>
+    private static (decimal[] Lows, decimal[] Highs) RoundedToDuringLoanTotal(Band[] parts, Band total)
+    {
+        decimal[] lows = Format.RoundedToTotal([.. parts.Select(part => part.Low)], total.Low);
+
+        int[] ranged = [.. Enumerable.Range(0, parts.Length).Where(i => parts[i].IsRange)];
+        decimal fixedSum = Enumerable.Range(0, parts.Length).Where(i => !parts[i].IsRange).Sum(i => lows[i]);
+        decimal[] rangedHighs = Format.RoundedToTotal([.. ranged.Select(i => parts[i].High)], total.High - fixedSum);
+
+        decimal[] highs = [.. lows];
+        for (int k = 0; k < ranged.Length; k++)
+        {
+            highs[ranged[k]] = rangedHighs[k];
+        }
+
+        return (lows, highs);
     }
 
     /// <summary>The ledger's own postings for one vehicle, one row per posting with its source,

@@ -92,6 +92,35 @@ public class ShowRendererMonthlyCostRenderingTests
         Assert.Equal(Format.Band(ranked.TenYearAverageMonthly), Cells(lines[7])[^1]);
     }
 
+    // At a $12,411 asking price the raw high ends are payment $224.31 and fuel $69.23, so rounding
+    // each line on its own gives high ends ($224, $90, $69, $70, $50) that sum to $503 against a
+    // total of $503.54, which prints as $504.
+    [Theory]
+    [InlineData(12411)]
+    [InlineData(12907)]
+    [InlineData(15333)]
+    [InlineData(19999)]
+    [InlineData(24187)]
+    public void RenderMonthlyCost_ItemizedLinesAddUpToTheDuringLoanTotal(int price)
+    {
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", price, BuildScenario());
+
+        string[] lines = Render(cost);
+
+        (int Low, int High) Figures(string line)
+        {
+            int[] amounts = [.. Cells(line)[^1].Split('-').Select(figure => int.Parse(figure.TrimStart('$').Replace(",", "")))];
+            return (amounts[0], amounts[^1]);
+        }
+
+        (int Low, int High)[] items = [.. lines.Skip(1).Take(5).Select(Figures)];
+        (int Low, int High) total = Figures(lines[6]);
+
+        Assert.Equal(total.Low, items.Sum(item => item.Low));
+        Assert.Equal(total.High, items.Sum(item => item.High));
+        Assert.Equal(Format.Band(cost!.DuringLoanMonthly), Cells(lines[6])[^1]);
+    }
+
     [Fact]
     public void RenderMonthlyCost_PinnedScenario_ShowsEachFigureAsOnePoint()
     {

@@ -36,4 +36,18 @@ public static class Format
 
         return maxWidth <= 1 ? new string('…', Math.Max(maxWidth, 0)) : $"{value[..(maxWidth - 1)]}…";
     }
+
+    /// <summary>Rounds each part to whole dollars so the parts add up to the total's own rounding,
+    /// which independent rounding does not guarantee: the whole dollars the total is short of the
+    /// parts' floors go to the parts with the largest fractional remainders.</summary>
+    public static decimal[] RoundedToTotal(decimal[] parts, decimal total)
+    {
+        decimal[] floors = [.. parts.Select(Math.Floor)];
+        int shortfall = (int)(Math.Round(total, MidpointRounding.AwayFromZero) - floors.Sum());
+        HashSet<int> roundedUp = [.. Enumerable.Range(0, parts.Length)
+            .OrderByDescending(i => parts[i] - floors[i])
+            .Take(Math.Max(shortfall, 0))];
+
+        return [.. floors.Select((floor, i) => roundedUp.Contains(i) ? floor + 1m : floor)];
+    }
 }
