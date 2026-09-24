@@ -1,6 +1,7 @@
 using Odonomics.Cli;
 using Odonomics.Cli.Commands;
 using Odonomics.Domain;
+using Odonomics.Ledger;
 using Spectre.Console.Testing;
 
 namespace Odonomics.Tests.Cli;
@@ -24,6 +25,10 @@ public class MonthlyCostReconciliationTests
         Assert.Null(unavailable);
         return cost!;
     }
+
+    private static Score ScoreAt(Scenario scenario, decimal price) => Scorer.Score(
+        new VehicleForScoring { Vin = "JTDKARFU9L3124436", Year = 2020, Make = "Toyota", Model = "Prius", Mileage = 40000, LowestCurrentPrice = price },
+        scenario);
 
     private static void AssertBothSidesAddUp(CostBreakdown cost, string context)
     {
@@ -134,6 +139,40 @@ public class MonthlyCostReconciliationTests
         }
     }
 
+    [Fact]
+    public void RankDetailAndShow_ShippedScenarioAt15333_PrintTheSameLoanPaymentAndTotal()
+    {
+        Score score = ScoreAt(Shipped(), 15333m);
+
+        string rankPayment = Assert.Single(RenderRankDetail(score), line => line.Contains("loan payment $")).Trim();
+        string[] show = RenderShow(score.Cost!);
+
+        Assert.Equal("loan payment $269-$290  of during $537-$569", rankPayment);
+        Assert.Equal(["Loan", "payment", "$269-$290"], Cells(show[1]));
+        Assert.Equal(["During-loan", "total", "$537-$569"], Cells(show[6]));
+    }
+
+    [Fact]
+    public void RankDetailAndShow_SweepOfPrices_PrintTheSameFiguresForEveryItemizedLine()
+    {
+        Scenario scenario = Shipped();
+
+        for (decimal price = 6000m; price <= 35000m; price += 37m)
+        {
+            Score score = ScoreAt(scenario, price);
+            IReadOnlyList<RoundedLine> lines = Format.DuringLoanLines(score.Cost!);
+
+            string rankPayment = Assert.Single(RenderRankDetail(score), line => line.Contains("loan payment $")).Trim();
+            string[] show = RenderShow(score.Cost!);
+
+            Assert.Equal($"loan payment {lines[0].Figure}  of during {Format.Band(score.Cost!.DuringLoanMonthly)}", rankPayment);
+            for (int i = 0; i < lines.Count; i++)
+            {
+                Assert.Equal($"{lines[i].Label} {lines[i].Figure}", string.Join(' ', Cells(show[i + 1])));
+            }
+        }
+    }
+
     private static string[] Cells(string line) => line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
     private static string[] RenderShow(CostBreakdown cost)
@@ -143,5 +182,23 @@ public class MonthlyCostReconciliationTests
         console.Profile.Capabilities.Ansi = false;
         ShowRenderer.RenderMonthlyCost(console, cost, null);
         return console.Output.Replace("\r\n", "\n").Split('\n');
+    }
+
+    private static string[] RenderRankDetail(Score score)
+    {
+        string? original = Environment.GetEnvironmentVariable("NO_COLOR");
+        try
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", "1");
+            var console = new TestConsole();
+            console.Profile.Width = 80;
+            console.Profile.Capabilities.Ansi = false;
+            RankRenderer.Render(console, [score], null, new Dictionary<string, ResearchStatus>(), [], detail: true);
+            return console.Output.Replace("\r\n", "\n").Split('\n');
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", original);
+        }
     }
 }

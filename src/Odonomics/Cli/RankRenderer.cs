@@ -80,7 +80,7 @@ public static class RankRenderer
     /// those the flag moved into the over-budget section: the cheapest band it names may belong to
     /// a vehicle listed under the over-budget heading rather than Ranked. Prints nothing when
     /// there is no rankable vehicle to name or when the cheapest one meets every target. It is
-    /// written as markup for its yellow style; a "$590-$626" band has no space in it, so
+    /// written as markup for its yellow style; a "$592-$627" band has no space in it, so
     /// Spectre's word wrapping never splits a dollar figure.</summary>
     private static void RenderUnmetTargets(IAnsiConsole console, IReadOnlyList<Score> rankable, IReadOnlyList<decimal> targetMonthlyBudgets)
     {
@@ -103,7 +103,7 @@ public static class RankRenderer
     }
 
     /// <summary>Says above the Ranked section what During-loan and 10yr avg include besides the loan
-    /// payment, so a "$590-$626" during-loan figure is not read as a car payment, and, unless
+    /// payment, so a "$592-$627" during-loan figure is not read as a car payment, and, unless
     /// <paramref name="detail"/> already prints them, points at <c>--detail</c> for each vehicle's
     /// own payment. Only During-loan is the payment plus the running costs; 10yr avg also spreads the
     /// down payment, the payments made within the hold, and the resale value over the hold, so the
@@ -184,9 +184,11 @@ public static class RankRenderer
     }
 
     /// <summary>The `--detail` line under a row: the loan payment on its own beside the during-loan
-    /// total it is part of. Its own line, not a column, so the row above keeps its 80-column fit.</summary>
+    /// total it is part of. The payment is the same rounded figure `odo show` itemizes (see
+    /// <see cref="Format.DuringLoanLines"/>), so the two commands agree on it. Its own line, not a
+    /// column, so the row above keeps its 80-column fit.</summary>
     private static string PaymentLine(CostBreakdown cost) =>
-        $"    loan payment {Format.Band(cost.Payment)}  of during {Format.Band(cost.DuringLoanMonthly)}";
+        $"    loan payment {Format.DuringLoanLines(cost)[0].Figure}  of during {Format.Band(cost.DuringLoanMonthly)}";
 
     /// <summary>A vehicle with no current asking price shows "-" rather than "$0", which would read
     /// as a real price of zero.</summary>
