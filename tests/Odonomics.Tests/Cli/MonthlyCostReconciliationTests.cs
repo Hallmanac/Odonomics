@@ -139,6 +139,48 @@ public class MonthlyCostReconciliationTests
         }
     }
 
+    // A ranged line whose band sits inside one dollar, next to a low side that needs a round-up the
+    // high side does not: the largest low remainder is the fuel line, which would print "$60-$59".
+    [Fact]
+    public void RoundedToTotals_SubDollarFuelBandWhenOnlyTheLowSideRoundsUp_DoesNotPrintFuelBackwards()
+    {
+        Band[] parts = [Range(99.21m, 104.01m), Band.Point(115.06m), Range(59.23m, 59.42m), Band.Point(80m), Band.Point(60m)];
+
+        AssertReconciled(parts, "$100-$104", "$59-$59");
+    }
+
+    // The fixed lines' remainders ask for two round-ups, which leaves the high side none for a
+    // payment band that sits inside one dollar.
+    [Fact]
+    public void RoundedToTotals_SubDollarPaymentBandWhenFixedRemaindersWantTwoRoundUps_DoesNotPrintPaymentBackwards()
+    {
+        Band[] parts = [Range(30.5631m, 30.5748m), Band.Point(50.15m), Range(43.4615m, 51.1538m), Band.Point(52.7333m), Band.Point(46.70m)];
+
+        AssertReconciled(parts, "$30-$30", "$44-$51");
+    }
+
+    private static Band Range(decimal low, decimal high) => new(low, (low + high) / 2m, high);
+
+    private static void AssertReconciled(Band[] parts, params string[] rangedFigures)
+    {
+        var total = new Band(parts.Sum(p => p.Low), parts.Sum(p => p.Expected), parts.Sum(p => p.High));
+        (decimal[] lows, decimal[] highs) = Format.RoundedToTotals(parts, total);
+
+        Assert.Equal(Math.Round(total.Low, MidpointRounding.AwayFromZero), lows.Sum());
+        Assert.Equal(Math.Round(total.High, MidpointRounding.AwayFromZero), highs.Sum());
+        for (int i = 0; i < parts.Length; i++)
+        {
+            Assert.True(lows[i] <= highs[i], $"part {i} printed ${lows[i]}-${highs[i]}");
+            if (!parts[i].IsRange)
+            {
+                Assert.Equal(lows[i], highs[i]);
+            }
+        }
+
+        string[] figures = [.. Enumerable.Range(0, parts.Length).Where(i => parts[i].IsRange).Select(i => new RoundedLine("", lows[i], highs[i], true).Figure)];
+        Assert.Equal(rangedFigures, figures);
+    }
+
     [Fact]
     public void RankDetailAndShow_ShippedScenarioAt15333_PrintTheSameLoanPaymentAndTotal()
     {
