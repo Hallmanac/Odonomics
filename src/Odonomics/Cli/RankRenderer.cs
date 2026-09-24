@@ -18,7 +18,8 @@ public static class RankRenderer
         IReadOnlyList<Score> scores,
         decimal? budget,
         IReadOnlyDictionary<string, ResearchStatus> research,
-        IReadOnlyList<decimal> targetMonthlyBudgets)
+        IReadOnlyList<decimal> targetMonthlyBudgets,
+        bool detail = false)
     {
         List<Score> ranked = [];
         List<Score> overBudget = [];
@@ -56,13 +57,14 @@ public static class RankRenderer
         int ByTenYearAverage(Score a, Score b) => a.Cost!.TenYearAverageMonthly.Expected.CompareTo(b.Cost!.TenYearAverageMonthly.Expected);
         ranked.Sort(ByTenYearAverage);
 
+        RenderRunningCostsNote(console, [.. ranked, .. overBudget]);
         RenderUnmetTargets(console, [.. ranked, .. overBudget], targetMonthlyBudgets);
-        RenderRanked(console, $"Ranked ({ranked.Count})", ranked, research);
+        RenderRanked(console, $"Ranked ({ranked.Count})", ranked, research, detail);
 
         if (budget is decimal budgetValue && overBudget.Count > 0)
         {
             overBudget.Sort(ByTenYearAverage);
-            RenderRanked(console, $"Over the ${budgetValue:N0} budget ({overBudget.Count})", overBudget, research);
+            RenderRanked(console, $"Over the ${budgetValue:N0} budget ({overBudget.Count})", overBudget, research, detail);
         }
 
         RenderInsuranceUnknown(console, insuranceUnknown);
@@ -100,6 +102,28 @@ public static class RankRenderer
         console.MarkupLine($"[yellow]No rankable vehicle meets a target budget of {JoinTargets(unmet)} during the loan; the cheapest is {Format.Band(cheapest)} a month. Run odo budget for the purchase price each target allows.[/]");
     }
 
+    /// <summary>Says above the Ranked section what During-loan and 10yr avg include besides the loan
+    /// payment, so a "$590-$626" during-loan figure is not read as a car payment, and points at
+    /// <c>--detail</c> for each vehicle's own payment. The running costs are the scenario's own
+    /// insurance, fuel, maintenance, and reserve as the cost model priced them for the listed
+    /// vehicles: one figure or range when they agree, otherwise the span from the lowest low to the
+    /// highest high. Covers the same rankable vehicles as <see cref="RenderUnmetTargets"/>, and prints
+    /// nothing when there are none.</summary>
+    private static void RenderRunningCostsNote(IAnsiConsole console, IReadOnlyList<Score> rankable)
+    {
+        if (rankable.Count == 0)
+        {
+            return;
+        }
+
+        var running = new Band(
+            rankable.Min(s => s.Cost!.AfterPayoffMonthly.Low),
+            rankable.Min(s => s.Cost!.AfterPayoffMonthly.Expected),
+            rankable.Max(s => s.Cost!.AfterPayoffMonthly.High));
+
+        console.MarkupLine($"During-loan and 10yr avg include running costs of about {Format.Band(running)} a month (insurance, fuel, maintenance, reserve); the loan payment alone is the remainder. Run with --detail to see each vehicle's payment.");
+    }
+
     private static string JoinTargets(IReadOnlyList<decimal> targets) => targets switch
     {
         [decimal only] => Format.Money(only),
@@ -109,7 +133,7 @@ public static class RankRenderer
 
     private const int VehicleNameMaxWidth = 40;
 
-    private static void RenderRanked(IAnsiConsole console, string heading, IReadOnlyList<Score> scores, IReadOnlyDictionary<string, ResearchStatus> research)
+    private static void RenderRanked(IAnsiConsole console, string heading, IReadOnlyList<Score> scores, IReadOnlyDictionary<string, ResearchStatus> research, bool detail)
     {
         console.MarkupLine($"[bold]{heading}[/]");
         if (scores.Count == 0)
@@ -134,6 +158,10 @@ public static class RankRenderer
             ResearchStatus? status = research.GetValueOrDefault(score.Vehicle.Vin);
             console.MarkupLine($"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(VehicleName(score))}");
             console.MarkupLine(RankedDetailLine(score, status, anyGraded));
+            if (detail)
+            {
+                console.MarkupLine(PaymentLine(score.Cost!));
+            }
         }
     }
 
@@ -148,6 +176,11 @@ public static class RankRenderer
             ? $"{line}  gr {Format.Cell(Format.Truncate(score.Vehicle.DealerGrade ?? "-", GradeColumnWidth))}"
             : line;
     }
+
+    /// <summary>The `--detail` line under a row: the loan payment on its own beside the during-loan
+    /// total it is part of. Its own line, not a column, so the row above keeps its 80-column fit.</summary>
+    private static string PaymentLine(CostBreakdown cost) =>
+        $"    loan payment {Format.Band(cost.Payment)}  of during {Format.Band(cost.DuringLoanMonthly)}";
 
     /// <summary>A vehicle with no current asking price shows "-" rather than "$0", which would read
     /// as a real price of zero.</summary>

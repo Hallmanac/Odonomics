@@ -7,7 +7,7 @@ namespace Odonomics.Cli.Commands;
 
 public static class RankCommand
 {
-    public static async Task<int> RunAsync(string scenarioPath, decimal? budget, int? term, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string scenarioPath, decimal? budget, int? term, bool detail, CancellationToken cancellationToken)
     {
         Scenario scenario = ScenarioLoader.Load(scenarioPath);
         if (term is int overrideTerm)
@@ -48,7 +48,7 @@ public static class RankCommand
             research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), lowestCurrentPrice);
         }
 
-        RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets);
+        RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets, detail);
         return 0;
     }
 
