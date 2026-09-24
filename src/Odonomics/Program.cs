@@ -37,16 +37,19 @@ rootCommand.Add(walkCommand);
 
 var rankBudgetOption = new Option<decimal?>("--budget") { Description = "list vehicles whose during-loan monthly cost exceeds this under a separate over-budget heading instead of the ranked list" };
 var rankTermOption = new Option<int?>("--term") { Description = "override the scenario's loan term in months (e.g. 48, 60, 72)" };
+var rankDetailOption = new Option<bool>("--detail") { Description = "under each row, also print that vehicle's loan payment beside its during-loan total" };
 var rankCommand = new Command("rank", "score every vehicle in the ledger against the scenario");
 rankCommand.Add(scenarioOption);
 rankCommand.Add(rankBudgetOption);
 rankCommand.Add(rankTermOption);
+rankCommand.Add(rankDetailOption);
 rankCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     string scenarioPath = parseResult.GetValue(scenarioOption)!;
     decimal? budget = parseResult.GetValue(rankBudgetOption);
     int? term = parseResult.GetValue(rankTermOption);
-    return await RankCommand.RunAsync(scenarioPath, budget, term, cancellationToken);
+    bool detail = parseResult.GetValue(rankDetailOption);
+    return await RankCommand.RunAsync(scenarioPath, budget, term, detail, cancellationToken);
 });
 rootCommand.Add(rankCommand);
 

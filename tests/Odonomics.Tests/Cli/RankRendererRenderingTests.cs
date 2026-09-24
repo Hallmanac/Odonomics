@@ -64,7 +64,7 @@ public class RankRendererRenderingTests
         };
     }
 
-    private static string[] Render(IReadOnlyList<Score> scores, decimal? budget, IReadOnlyDictionary<string, ResearchStatus>? research = null, IReadOnlyList<decimal>? targets = null)
+    private static string[] Render(IReadOnlyList<Score> scores, decimal? budget, IReadOnlyDictionary<string, ResearchStatus>? research = null, IReadOnlyList<decimal>? targets = null, bool detail = false)
     {
         string? original = Environment.GetEnvironmentVariable("NO_COLOR");
         try
@@ -75,7 +75,7 @@ public class RankRendererRenderingTests
             console.Profile.Width = 80;
             console.Profile.Capabilities.Ansi = false;
 
-            RankRenderer.Render(console, scores, budget, research ?? new Dictionary<string, ResearchStatus>(), targets ?? []);
+            RankRenderer.Render(console, scores, budget, research ?? new Dictionary<string, ResearchStatus>(), targets ?? [], detail);
 
             return console.Output.Replace("\r\n", "\n").Split('\n');
         }
@@ -292,7 +292,7 @@ public class RankRendererRenderingTests
 
         Assert.DoesNotContain(lines, line => line.Contains("No rankable vehicle meets"));
         Assert.DoesNotContain(lines, line => line.Contains("odo budget"));
-        Assert.Equal("Ranked (1)", lines[0]);
+        Assert.Contains("Ranked (1)", lines);
     }
 
     [Fact]
@@ -355,5 +355,101 @@ public class RankRendererRenderingTests
         Assert.Equal(
             "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $410-$430 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
+    }
+
+    private static CostBreakdown BuildItemizedCost(Band payment, Band runningCosts, Band duringLoan)
+    {
+        CostBreakdown cost = BuildCost(duringLoan, new Band(612m, 696m, 780m));
+        return cost with { Payment = payment, AfterPayoffMonthly = runningCosts };
+    }
+
+    private static string RunningCostsText(string[] lines)
+    {
+        int start = Array.FindIndex(lines, line => line.StartsWith("During-loan and 10yr avg include"));
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        int end = Array.FindIndex(lines, start, line => line.StartsWith("Ranked ("));
+        return string.Join(' ', lines[start..end].Select(line => line.Trim()));
+    }
+
+    [Fact]
+    public void Render_RankedVehicle_StatesAboveTheRankedSectionWhatDuringLoanIncludes()
+    {
+        CostBreakdown cost = BuildItemizedCost(new Band(324m, 336m, 348m), new Band(268m, 274m, 279m), new Band(590m, 608m, 626m));
+        Score score = BuildScore("JTDKARFU9L3124436", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string[] lines = Render([score], budget: null);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.StartsWith(
+            "During-loan and 10yr avg include running costs of about $268-$279 a month (insurance, fuel, maintenance, reserve); the loan payment alone is the remainder.",
+            RunningCostsText(lines));
+        Assert.Contains("--detail", RunningCostsText(lines));
+    }
+
+    [Fact]
+    public void Render_VehiclesWithDifferentRunningCosts_NamesTheSpanAcrossThem()
+    {
+        Score prius = BuildScore("JTDKARFU9L3124436", 2020, "Toyota", "Prius", 17897m, cost: BuildItemizedCost(new Band(324m, 336m, 348m), new Band(268m, 274m, 279m), new Band(590m, 608m, 626m)));
+        Score camry = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Camry Hybrid", 22000m, cost: BuildItemizedCost(new Band(400m, 410m, 420m), new Band(278m, 284m, 289m), new Band(680m, 694m, 709m)));
+
+        string[] lines = Render([prius, camry], budget: null);
+
+        Assert.Contains("running costs of about $268-$289 a month", RunningCostsText(lines));
+    }
+
+    [Fact]
+    public void Render_OnlyOverBudgetVehiclesRemain_StillStatesWhatDuringLoanIncludes()
+    {
+        CostBreakdown cost = BuildItemizedCost(new Band(324m, 336m, 348m), new Band(268m, 274m, 279m), new Band(590m, 608m, 626m));
+        Score score = BuildScore("JTDKARFU9L3124436", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string[] lines = Render([score], budget: 300m);
+
+        Assert.Contains("running costs of about $268-$279 a month", RunningCostsText(lines));
+    }
+
+    [Fact]
+    public void Render_NoRankableVehicle_PrintsNoRunningCostsLine()
+    {
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, insuranceUnknown: true);
+
+        string[] lines = Render([score], budget: null);
+
+        Assert.DoesNotContain(lines, line => line.Contains("running costs"));
+    }
+
+    [Fact]
+    public void Render_WithDetail_PrintsOnePaymentLineUnderEachRankedAndOverBudgetRowAt80Columns()
+    {
+        Score ranked = BuildScore("JTDKARFU9L3124436", 2020, "Toyota", "Prius", 17897m, cost: BuildItemizedCost(new Band(324m, 336m, 348m), new Band(268m, 274m, 279m), new Band(590m, 608m, 626m)));
+        Score overBudget = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Camry Hybrid", 22000m, cost: BuildItemizedCost(new Band(400m, 410m, 420m), new Band(278m, 284m, 289m), new Band(680m, 694m, 709m)));
+
+        string[] lines = Render([ranked, overBudget], budget: 650m, detail: true);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.DoesNotContain(lines, line => line.Contains('\u001b'));
+
+        int rankedRow = Array.FindIndex(lines, line => line.Contains("JTDKARFU9L3124436"));
+        Assert.Contains("during $590-$626", lines[rankedRow + 1]);
+        Assert.Equal("loan payment $324-$348  of during $590-$626", lines[rankedRow + 2].Trim());
+
+        int overBudgetRow = Array.FindIndex(lines, line => line.Contains("4T1G11AK0LU123456"));
+        Assert.Contains("during $680-$709", lines[overBudgetRow + 1]);
+        Assert.Equal("loan payment $400-$420  of during $680-$709", lines[overBudgetRow + 2].Trim());
+    }
+
+    [Fact]
+    public void Render_WithoutDetail_PrintsNoPaymentLines()
+    {
+        CostBreakdown cost = BuildItemizedCost(new Band(324m, 336m, 348m), new Band(268m, 274m, 279m), new Band(590m, 608m, 626m));
+        Score score = BuildScore("JTDKARFU9L3124436", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string[] lines = Render([score], budget: null);
+
+        Assert.DoesNotContain(lines, line => line.Contains("loan payment $"));
     }
 }
