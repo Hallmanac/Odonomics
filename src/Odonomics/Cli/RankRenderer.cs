@@ -57,7 +57,7 @@ public static class RankRenderer
         int ByTenYearAverage(Score a, Score b) => a.Cost!.TenYearAverageMonthly.Expected.CompareTo(b.Cost!.TenYearAverageMonthly.Expected);
         ranked.Sort(ByTenYearAverage);
 
-        RenderRunningCostsNote(console, [.. ranked, .. overBudget]);
+        RenderRunningCostsNote(console, [.. ranked, .. overBudget], detail);
         RenderUnmetTargets(console, [.. ranked, .. overBudget], targetMonthlyBudgets);
         RenderRanked(console, $"Ranked ({ranked.Count})", ranked, research, detail);
 
@@ -103,13 +103,16 @@ public static class RankRenderer
     }
 
     /// <summary>Says above the Ranked section what During-loan and 10yr avg include besides the loan
-    /// payment, so a "$590-$626" during-loan figure is not read as a car payment, and points at
-    /// <c>--detail</c> for each vehicle's own payment. The running costs are the scenario's own
-    /// insurance, fuel, maintenance, and reserve as the cost model priced them for the listed
-    /// vehicles: one figure or range when they agree, otherwise the span from the lowest low to the
-    /// highest high. Covers the same rankable vehicles as <see cref="RenderUnmetTargets"/>, and prints
-    /// nothing when there are none.</summary>
-    private static void RenderRunningCostsNote(IAnsiConsole console, IReadOnlyList<Score> rankable)
+    /// payment, so a "$590-$626" during-loan figure is not read as a car payment, and, unless
+    /// <paramref name="detail"/> already prints them, points at <c>--detail</c> for each vehicle's
+    /// own payment. Only During-loan is the payment plus the running costs; 10yr avg also spreads the
+    /// down payment, the payments made within the hold, and the resale value over the hold, so the
+    /// note does not offer the remainder as the payment for both columns. The running costs are the
+    /// scenario's own insurance, fuel, maintenance, and reserve as the cost model priced them for the
+    /// listed vehicles: one figure or range when they agree, otherwise the span from the lowest low
+    /// to the highest high. Covers the same rankable vehicles as <see cref="RenderUnmetTargets"/>,
+    /// and prints nothing when there are none.</summary>
+    private static void RenderRunningCostsNote(IAnsiConsole console, IReadOnlyList<Score> rankable, bool detail)
     {
         if (rankable.Count == 0)
         {
@@ -121,7 +124,10 @@ public static class RankRenderer
             rankable.Min(s => s.Cost!.AfterPayoffMonthly.Expected),
             rankable.Max(s => s.Cost!.AfterPayoffMonthly.High));
 
-        console.MarkupLine($"During-loan and 10yr avg include running costs of about {Format.Band(running)} a month (insurance, fuel, maintenance, reserve); the loan payment alone is the remainder. Run with --detail to see each vehicle's payment.");
+        string pointer = detail
+            ? string.Empty
+            : " Run with --detail to see each vehicle's payment.";
+        console.MarkupLine($"During-loan is the loan payment plus running costs of about {Format.Band(running)} a month (insurance, fuel, maintenance, reserve). 10yr avg spreads those costs, the down payment, the loan payments, and resale value over the hold.{pointer}");
     }
 
     private static string JoinTargets(IReadOnlyList<decimal> targets) => targets switch

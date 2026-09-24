@@ -365,7 +365,7 @@ public class RankRendererRenderingTests
 
     private static string RunningCostsText(string[] lines)
     {
-        int start = Array.FindIndex(lines, line => line.StartsWith("During-loan and 10yr avg include"));
+        int start = Array.FindIndex(lines, line => line.StartsWith("During-loan is the loan payment"));
         if (start < 0)
         {
             return string.Empty;
@@ -385,9 +385,33 @@ public class RankRendererRenderingTests
 
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.StartsWith(
-            "During-loan and 10yr avg include running costs of about $268-$279 a month (insurance, fuel, maintenance, reserve); the loan payment alone is the remainder.",
+            "During-loan is the loan payment plus running costs of about $268-$279 a month (insurance, fuel, maintenance, reserve).",
             RunningCostsText(lines));
         Assert.Contains("--detail", RunningCostsText(lines));
+    }
+
+    [Fact]
+    public void Render_RankedVehicle_DoesNotOfferTheRemainderAsThePaymentForTenYearAvg()
+    {
+        CostBreakdown cost = BuildItemizedCost(new Band(324m, 336m, 348m), new Band(268m, 274m, 279m), new Band(590m, 608m, 626m));
+        Score score = BuildScore("JTDKARFU9L3124436", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string text = RunningCostsText(Render([score], budget: null));
+
+        Assert.DoesNotContain("remainder", text);
+        Assert.Contains("10yr avg spreads those costs, the down payment, the loan payments, and resale value over the hold", text);
+    }
+
+    [Fact]
+    public void Render_WithDetail_DoesNotTellTheReaderToRunWithDetail()
+    {
+        CostBreakdown cost = BuildItemizedCost(new Band(324m, 336m, 348m), new Band(268m, 274m, 279m), new Band(590m, 608m, 626m));
+        Score score = BuildScore("JTDKARFU9L3124436", 2020, "Toyota", "Prius", 17897m, cost: cost);
+
+        string text = RunningCostsText(Render([score], budget: null, detail: true));
+
+        Assert.StartsWith("During-loan is the loan payment", text);
+        Assert.DoesNotContain("--detail", text);
     }
 
     [Fact]
