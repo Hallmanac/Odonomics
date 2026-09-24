@@ -189,7 +189,7 @@ public static class ShowRenderer
     /// <summary>Itemizes what the scenario says one vehicle costs a month: the loan payment and each
     /// running cost as the scenario's expected value (or range, when an input feeding it is loose),
     /// then the during-loan total and the ten-year average. Every figure is read from the same
-    /// <see cref="CostBreakdown"/> `odo rank` prints, so a "$590-$626" during-loan figure can be
+    /// <see cref="CostBreakdown"/> `odo rank` prints, so a "$592-$627" during-loan figure can be
     /// seen to be a payment plus running costs, not a car payment. When the scenario cannot price the
     /// vehicle, says why in place of the figures. Written line by line rather than as a table so
     /// nothing wraps at 80 columns.</summary>
@@ -202,42 +202,13 @@ public static class ShowRenderer
             return;
         }
 
-        Band[] parts = [cost.Payment, Band.Point(cost.InsuranceMonthly), cost.Fuel, cost.Maintenance, cost.Reserve];
-        (decimal[] lows, decimal[] highs) = RoundedToDuringLoanTotal(parts, cost.DuringLoanMonthly);
-        string[] labels = ["Loan payment", "Insurance", "Fuel", "Maintenance", "Reserve"];
-
-        for (int i = 0; i < parts.Length; i++)
+        foreach (RoundedLine line in Format.DuringLoanLines(cost))
         {
-            string figure = parts[i].IsRange
-                ? $"{Format.Money(lows[i])}-{Format.Money(highs[i])}"
-                : Format.Money(lows[i]);
-            console.MarkupLine($"  {labels[i].PadRight(MonthlyCostLabelWidth)}{figure}");
+            console.MarkupLine($"  {line.Label.PadRight(MonthlyCostLabelWidth)}{line.Figure}");
         }
 
         console.MarkupLine($"  {"During-loan total".PadRight(MonthlyCostLabelWidth)}{Format.Band(cost.DuringLoanMonthly)}");
         console.MarkupLine($"  {"10-year average".PadRight(MonthlyCostLabelWidth)}{Format.Band(cost.TenYearAverageMonthly)}");
-    }
-
-    /// <summary>Rounds each part of the during-loan total to whole dollars so the low ends, and the
-    /// high ends, of the printed lines add up to the printed total's own low and high, which
-    /// independent rounding does not guarantee (see <see cref="Format.RoundedToTotal"/>). A part that
-    /// is not a range keeps the one figure the low ends gave it, so it prints the same on both sides
-    /// and only the parts that are ranges absorb the high side's rounding.</summary>
-    private static (decimal[] Lows, decimal[] Highs) RoundedToDuringLoanTotal(Band[] parts, Band total)
-    {
-        decimal[] lows = Format.RoundedToTotal([.. parts.Select(part => part.Low)], total.Low);
-
-        int[] ranged = [.. Enumerable.Range(0, parts.Length).Where(i => parts[i].IsRange)];
-        decimal fixedSum = Enumerable.Range(0, parts.Length).Where(i => !parts[i].IsRange).Sum(i => lows[i]);
-        decimal[] rangedHighs = Format.RoundedToTotal([.. ranged.Select(i => parts[i].High)], total.High - fixedSum);
-
-        decimal[] highs = [.. lows];
-        for (int k = 0; k < ranged.Length; k++)
-        {
-            highs[ranged[k]] = rangedHighs[k];
-        }
-
-        return (lows, highs);
     }
 
     /// <summary>The ledger's own postings for one vehicle, one row per posting with its source,

@@ -12,7 +12,7 @@ public class ShowRendererMonthlyCostRenderingTests
     // $17,950 asking price the amount financed is $16,552 after $3,000 down, so the payment runs
     // $324 to $348; fuel is $58 to $69, and with $90 insurance, $70 maintenance and $50 reserve the
     // running costs run $268 to $279.
-    private static Scenario BuildScenario() => new()
+    internal static Scenario BuildScenario() => new()
     {
         Name = "test",
         Zip = "32114",
