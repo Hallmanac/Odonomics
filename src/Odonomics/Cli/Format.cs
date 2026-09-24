@@ -43,11 +43,84 @@ public static class Format
     public static decimal[] RoundedToTotal(decimal[] parts, decimal total)
     {
         decimal[] floors = [.. parts.Select(Math.Floor)];
-        int shortfall = (int)(Math.Round(total, MidpointRounding.AwayFromZero) - floors.Sum());
-        HashSet<int> roundedUp = [.. Enumerable.Range(0, parts.Length)
-            .OrderByDescending(i => parts[i] - floors[i])
-            .Take(Math.Max(shortfall, 0))];
+        int shortfall = WholeDollars(total) - (int)floors.Sum();
+        HashSet<int> roundedUp = TopByRemainder(parts, floors, [.. Enumerable.Range(0, parts.Length)], shortfall);
 
         return [.. floors.Select((floor, i) => roundedUp.Contains(i) ? floor + 1m : floor)];
     }
+
+    /// <summary>The loan payment and each running cost of a vehicle's during-loan monthly cost, in the
+    /// order they are printed, rounded to whole dollars so each side's lines add up to
+    /// <see cref="CostBreakdown.DuringLoanMonthly"/>'s own rounded low and high (see
+    /// <see cref="RoundedToTotals"/>). Both `odo show` and `odo rank --detail` print their figures
+    /// from here, so the two commands cannot show different payments for one vehicle.</summary>
+    public static IReadOnlyList<RoundedLine> DuringLoanLines(CostBreakdown cost)
+    {
+        Domain.Band[] parts = [cost.Payment, Domain.Band.Point(cost.InsuranceMonthly), cost.Fuel, cost.Maintenance, cost.Reserve];
+        string[] labels = ["Loan payment", "Insurance", "Fuel", "Maintenance", "Reserve"];
+        (decimal[] lows, decimal[] highs) = RoundedToTotals(parts, cost.DuringLoanMonthly);
+
+        return [.. parts.Select((part, i) => new RoundedLine(labels[i], lows[i], highs[i], part.IsRange))];
+    }
+
+    /// <summary>Rounds each part band to whole dollars so the low ends add up to the total's rounded
+    /// low and the high ends add up to its rounded high, each side apportioned against its own
+    /// unrounded figures. A part that is not a range prints one figure on both sides, so it takes
+    /// the same rounding on both; how many of those parts round up is whatever both sides can
+    /// still cover with their ranged parts, as close to the fixed parts' own remainders as that
+    /// allows. This assumes each total's low and high are the sums of the parts' lows and highs,
+    /// which holds for a <see cref="CostBreakdown"/>; a total that is not can only be matched as
+    /// nearly as the parts' round-ups reach. A ranged part whose low end rounds up to the dollar
+    /// its high end also sits in has that high end rounded up too when the count allows, so a
+    /// narrow range does not print inverted.</summary>
+    public static (decimal[] Lows, decimal[] Highs) RoundedToTotals(Domain.Band[] parts, Domain.Band total)
+    {
+        decimal[] lowParts = [.. parts.Select(part => part.Low)];
+        decimal[] highParts = [.. parts.Select(part => part.High)];
+        decimal[] lowFloors = [.. lowParts.Select(Math.Floor)];
+        decimal[] highFloors = [.. highParts.Select(Math.Floor)];
+        int lowRoundUps = WholeDollars(total.Low) - (int)lowFloors.Sum();
+        int highRoundUps = WholeDollars(total.High) - (int)highFloors.Sum();
+
+        int[] fixedParts = [.. Enumerable.Range(0, parts.Length).Where(i => !parts[i].IsRange)];
+        int[] ranged = [.. Enumerable.Range(0, parts.Length).Where(i => parts[i].IsRange)];
+
+        int fixedMin = Math.Max(0, Math.Max(lowRoundUps, highRoundUps) - ranged.Length);
+        int fixedMax = Math.Max(fixedMin, Math.Min(fixedParts.Length, Math.Min(lowRoundUps, highRoundUps)));
+        int fixedWanted = WholeDollars(fixedParts.Sum(i => lowParts[i] - lowFloors[i]));
+        int fixedRoundUps = Math.Clamp(fixedWanted, fixedMin, fixedMax);
+
+        HashSet<int> fixedUp = TopByRemainder(lowParts, lowFloors, fixedParts, fixedRoundUps);
+        HashSet<int> lowUp = TopByRemainder(lowParts, lowFloors, ranged, Math.Clamp(lowRoundUps - fixedRoundUps, 0, ranged.Length));
+
+        HashSet<int> highUp = TopByRemainder(
+            highParts,
+            highFloors,
+            ranged,
+            Math.Clamp(highRoundUps - fixedRoundUps, 0, ranged.Length),
+            first: i => lowUp.Contains(i) && lowFloors[i] == highFloors[i]);
+
+        decimal[] lows = [.. lowFloors.Select((floor, i) => floor + (fixedUp.Contains(i) || lowUp.Contains(i) ? 1m : 0m))];
+        decimal[] highs = [.. highFloors.Select((floor, i) => floor + (fixedUp.Contains(i) || highUp.Contains(i) ? 1m : 0m))];
+        return (lows, highs);
+    }
+
+    private static int WholeDollars(decimal value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
+
+    /// <summary>The <paramref name="count"/> candidates with the largest fractional remainders, those
+    /// matching <paramref name="first"/> ahead of the rest when it is given.</summary>
+    private static HashSet<int> TopByRemainder(decimal[] parts, decimal[] floors, int[] candidates, int count, Func<int, bool>? first = null) =>
+        [.. candidates
+            .OrderByDescending(i => first?.Invoke(i) ?? false)
+            .ThenByDescending(i => parts[i] - floors[i])
+            .Take(Math.Max(count, 0))];
+}
+
+/// <summary>One whole-dollar line of a reconciled cost: a range prints "$low-$high", anything else
+/// the one figure.</summary>
+public readonly record struct RoundedLine(string Label, decimal Low, decimal High, bool IsRange)
+{
+    public string Figure => IsRange
+        ? $"{Format.Money(Low)}-{Format.Money(High)}"
+        : Format.Money(Low);
 }
