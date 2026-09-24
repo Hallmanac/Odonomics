@@ -64,12 +64,14 @@ odo search                          run Auto.dev and Marketcheck, upsert the led
 odo walk [cars.com|carvana] [--model "Make Model"] [--max N]
                                      an operator-assisted walk (see below)
 odo dealer grade [--all | <vin>]    look up each ungraded dealer's CarEdge grade (see below)
-odo rank [--budget N] [--term M]    score every vehicle in the ledger against the scenario
+odo rank [--budget N] [--term M] [--detail]
+                                     score every vehicle in the ledger against the scenario; --detail
+                                     adds each vehicle's loan payment under its row (see below)
 odo show <vin> [--refresh] [--all-history]
                                      NHTSA decode, recalls, complaints, safety ratings, Marketcheck
                                      VIN history (grouped by seller; pass --all-history for the raw
                                      one-row-per-sighting list too), red flags, postings, notes,
-                                     finalist status
+                                     finalist status, and an itemized monthly cost (see below)
 odo research [<vin> ...] [--refresh] [--quiet]
                                      NHTSA safety ratings and Marketcheck VIN history for every
                                      vehicle in the ledger that passes the scenario's filters (or
@@ -339,6 +341,14 @@ own warning heading, still ranked, never hidden.
 ## Unmet target budgets
 
 `odo rank` says plainly, in one line above the Ranked section, when no rankable vehicle's expected during-loan monthly cost meets one or more of the scenario's target monthly budgets. The line names only the unmet targets and the cheapest vehicle's during-loan range, then points at `odo budget` for the purchase price each target allows. It reads the targets from the scenario rather than from `--budget`, and it still counts vehicles that `--budget` moved into the over-budget section, so a tight `--budget` does not hide it. It is not printed when every target is met or when there is no rankable vehicle to name. A rankable vehicle is one that passes the scenario's filters, has a known insurance figure, and has a current price, so excluded and insurance-unknown vehicles are never considered.
+
+## Monthly cost
+
+The during-loan figure `odo rank` prints per vehicle is not a car payment. It is the loan payment plus the scenario's running costs (insurance, fuel, maintenance, and the emergency reserve), and the 10yr avg figure carries the same running costs. Three places break it apart, all reading the same cost figures the scenario produces for each vehicle:
+
+- `odo show <vin>` prints a "Monthly cost" block after the postings, for a vehicle with a current asking price. It lists the loan payment, insurance, fuel, maintenance, and reserve, then the during-loan total and the 10-year average. Each figure is the scenario's expected value, or a `$low-$high` range when an input feeding it is loose, exactly as `odo rank` shows it. `show` prices a vehicle the scenario's filters would exclude too, but a vehicle with no current price, or a model the scenario has no insurance or mpg figure for, gets a line saying why nothing was computed. Because it reads the scenario, `odo show` takes `--scenario <path>` like the other commands and needs the scenario file to resolve.
+- `odo rank` prints one line above its sections saying what During-loan and 10yr avg include, for example "During-loan and 10yr avg include running costs of about $268-$279 a month (insurance, fuel, maintenance, reserve); the loan payment alone is the remainder." The figure is computed from the ranked and over-budget vehicles' running costs, so it is a single figure or range when they agree and the span across them when they differ (insurance is per model). It is not printed when there is no rankable vehicle.
+- `odo rank --detail` adds one line under each ranked and over-budget row, giving that vehicle's loan payment beside its during-loan total (`loan payment $324-$348  of during $590-$626`). It is a separate line rather than a column, so the row above it keeps its 80-column fit.
 
 ## Scenario
 
