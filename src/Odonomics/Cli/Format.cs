@@ -66,13 +66,14 @@ public static class Format
     /// <summary>Rounds each part band to whole dollars so the low ends add up to the total's rounded
     /// low and the high ends add up to its rounded high, each side apportioned against its own
     /// unrounded figures. A part that is not a range prints one figure on both sides, so it takes
-    /// the same rounding on both; how many of those parts round up is whatever both sides can
-    /// still cover with their ranged parts, as close to the fixed parts' own remainders as that
-    /// allows. This assumes each total's low and high are the sums of the parts' lows and highs,
-    /// which holds for a <see cref="CostBreakdown"/>; a total that is not can only be matched as
-    /// nearly as the parts' round-ups reach. A ranged part whose low end rounds up to the dollar
-    /// its high end also sits in has that high end rounded up too when the count allows, so a
-    /// narrow range does not print inverted.</summary>
+    /// the same rounding on both; how many of those parts round up is the count closest to the
+    /// fixed parts' own remainders that still leaves both sides a workable split of round-ups
+    /// among the ranged parts. A ranged part whose floors match on both ends has to round up on the
+    /// high end whenever it rounds up on the low end, or it would print inverted; the split picks
+    /// how many such parts the low side may round up so that always holds. This assumes each
+    /// total's low and high are the sums of the parts' lows and highs, which holds for a
+    /// <see cref="CostBreakdown"/>; a total that is not can only be matched as nearly as the
+    /// parts' round-ups reach.</summary>
     public static (decimal[] Lows, decimal[] Highs) RoundedToTotals(Domain.Band[] parts, Domain.Band total)
     {
         decimal[] lowParts = [.. parts.Select(part => part.Low)];
@@ -84,21 +85,46 @@ public static class Format
 
         int[] fixedParts = [.. Enumerable.Range(0, parts.Length).Where(i => !parts[i].IsRange)];
         int[] ranged = [.. Enumerable.Range(0, parts.Length).Where(i => parts[i].IsRange)];
+        int[] sharedFloor = [.. ranged.Where(i => lowFloors[i] == highFloors[i])];
+        int spreadCount = ranged.Length - sharedFloor.Length;
 
+        // A split of round-ups is workable when neither side needs more (or fewer) than its ranged
+        // parts can take, and the low side's parts that share a floor with their high end fit within
+        // the high side's round-ups.
+        bool Workable(int fixedCount)
+        {
+            int low = lowRoundUps - fixedCount;
+            int high = highRoundUps - fixedCount;
+            return low >= 0 && high >= 0 && low <= ranged.Length && high <= ranged.Length && low <= high + spreadCount;
+        }
+
+        int fixedWanted = WholeDollars(fixedParts.Sum(i => lowParts[i] - lowFloors[i]));
         int fixedMin = Math.Max(0, Math.Max(lowRoundUps, highRoundUps) - ranged.Length);
         int fixedMax = Math.Max(fixedMin, Math.Min(fixedParts.Length, Math.Min(lowRoundUps, highRoundUps)));
-        int fixedWanted = WholeDollars(fixedParts.Sum(i => lowParts[i] - lowFloors[i]));
-        int fixedRoundUps = Math.Clamp(fixedWanted, fixedMin, fixedMax);
+        int fixedRoundUps = Enumerable.Range(0, fixedParts.Length + 1)
+            .Where(Workable)
+            .OrderBy(count => Math.Abs(count - fixedWanted))
+            .Select(count => (int?)count)
+            .FirstOrDefault() ?? Math.Clamp(fixedWanted, fixedMin, fixedMax);
+
+        int lowCount = Math.Clamp(lowRoundUps - fixedRoundUps, 0, ranged.Length);
+        int highCount = Math.Clamp(highRoundUps - fixedRoundUps, 0, ranged.Length);
+
+        // Of the low side's round-ups, how many go to parts that share a floor: as many as the
+        // remainders favor, held to what the high side can repeat and to what the spread parts
+        // cannot absorb.
+        int naturalShared = TopByRemainder(lowParts, lowFloors, ranged, lowCount).Count(sharedFloor.Contains);
+        int mostShared = Math.Min(sharedFloor.Length, Math.Min(lowCount, highCount));
+        int fewestShared = Math.Min(mostShared, Math.Max(0, lowCount - spreadCount));
+        int lowShared = Math.Clamp(naturalShared, fewestShared, mostShared);
 
         HashSet<int> fixedUp = TopByRemainder(lowParts, lowFloors, fixedParts, fixedRoundUps);
-        HashSet<int> lowUp = TopByRemainder(lowParts, lowFloors, ranged, Math.Clamp(lowRoundUps - fixedRoundUps, 0, ranged.Length));
-
-        HashSet<int> highUp = TopByRemainder(
-            highParts,
-            highFloors,
-            ranged,
-            Math.Clamp(highRoundUps - fixedRoundUps, 0, ranged.Length),
-            first: i => lowUp.Contains(i) && lowFloors[i] == highFloors[i]);
+        HashSet<int> lowUp = [
+            .. TopByRemainder(lowParts, lowFloors, sharedFloor, lowShared),
+            .. TopByRemainder(lowParts, lowFloors, [.. ranged.Except(sharedFloor)], lowCount - lowShared)];
+        HashSet<int> highUp = [
+            .. lowUp.Where(sharedFloor.Contains),
+            .. TopByRemainder(highParts, highFloors, [.. ranged.Where(i => !lowUp.Contains(i) || !sharedFloor.Contains(i))], highCount - lowShared)];
 
         decimal[] lows = [.. lowFloors.Select((floor, i) => floor + (fixedUp.Contains(i) || lowUp.Contains(i) ? 1m : 0m))];
         decimal[] highs = [.. highFloors.Select((floor, i) => floor + (fixedUp.Contains(i) || highUp.Contains(i) ? 1m : 0m))];
@@ -107,12 +133,10 @@ public static class Format
 
     private static int WholeDollars(decimal value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
 
-    /// <summary>The <paramref name="count"/> candidates with the largest fractional remainders, those
-    /// matching <paramref name="first"/> ahead of the rest when it is given.</summary>
-    private static HashSet<int> TopByRemainder(decimal[] parts, decimal[] floors, int[] candidates, int count, Func<int, bool>? first = null) =>
+    /// <summary>The <paramref name="count"/> candidates with the largest fractional remainders.</summary>
+    private static HashSet<int> TopByRemainder(decimal[] parts, decimal[] floors, int[] candidates, int count) =>
         [.. candidates
-            .OrderByDescending(i => first?.Invoke(i) ?? false)
-            .ThenByDescending(i => parts[i] - floors[i])
+            .OrderByDescending(i => parts[i] - floors[i])
             .Take(Math.Max(count, 0))];
 }
 
