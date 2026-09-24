@@ -59,6 +59,7 @@ var showVinArgument = new Argument<string>("vin");
 var showAllHistoryOption = new Option<bool>("--all-history") { Description = "also print the raw, one-row-per-sighting VIN history table underneath the grouped-by-seller summary" };
 var showCommand = new Command("show", "NHTSA decode, recalls, complaints, safety ratings, Marketcheck VIN history, red flags, postings, notes, and finalist status for one VIN");
 showCommand.Add(showVinArgument);
+showCommand.Add(scenarioOption);
 showCommand.Add(refreshOption);
 showCommand.Add(showAllHistoryOption);
 showCommand.SetAction(async (parseResult, cancellationToken) =>
@@ -66,7 +67,8 @@ showCommand.SetAction(async (parseResult, cancellationToken) =>
     string vin = parseResult.GetValue(showVinArgument)!;
     bool refresh = parseResult.GetValue(refreshOption);
     bool allHistory = parseResult.GetValue(showAllHistoryOption);
-    return await ShowCommand.RunAsync(vin, refresh, allHistory, cancellationToken);
+    string scenarioPath = parseResult.GetValue(scenarioOption)!;
+    return await ShowCommand.RunAsync(vin, scenarioPath, refresh, allHistory, cancellationToken);
 });
 rootCommand.Add(showCommand);
 

@@ -10,8 +10,9 @@ namespace Odonomics.Cli.Commands;
 
 public static class ShowCommand
 {
-    public static async Task<int> RunAsync(string vin, bool refresh, bool allHistory, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string vin, string scenarioPath, bool refresh, bool allHistory, CancellationToken cancellationToken)
     {
+        Scenario scenario = ScenarioLoader.Load(scenarioPath);
         using OdonomicsDbContext db = LedgerFactory.Open();
 
         VehicleEntity? vehicle = await db.Vehicles
@@ -39,7 +40,30 @@ public static class ShowCommand
         decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, RunSources.LatestCoverageBySource(runs));
         IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
 
-        ShowRenderer.Render(vehicle, research, redFlags, allHistory);
+        (CostBreakdown? monthlyCost, string? unavailable) = MonthlyCostFor($"{vehicle.Make} {vehicle.Model}", currentPrice, scenario);
+        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable);
         return 0;
+    }
+
+    /// <summary>Prices one vehicle the way `odo rank` does (see <see cref="Scorer.ComputeCost"/>), but
+    /// without the hard filters: `odo show` is asked about any VIN in the ledger, including one the
+    /// scenario would exclude, and its monthly cost is still worth seeing. What it cannot price it
+    /// explains instead of throwing: a vehicle with no current price, or a model the scenario has no
+    /// insurance or mpg figure for.</summary>
+    public static (CostBreakdown? Cost, string? Unavailable) MonthlyCostFor(string makeModel, decimal? currentPrice, Scenario scenario)
+    {
+        if (currentPrice is not decimal price)
+        {
+            return (null, "no current asking price (every posting is gone)");
+        }
+
+        if (scenario.InsuranceMonthlyByModel.GetValueOrDefault(makeModel) is not decimal insuranceMonthly)
+        {
+            return (null, $"the scenario has no insurance figure for {makeModel}");
+        }
+
+        return scenario.MpgByModel.TryGetValue(makeModel, out decimal mpg)
+            ? (Scorer.ComputeCost(price, insuranceMonthly, mpg, scenario), null)
+            : (null, $"the scenario has no mpg figure for {makeModel}");
     }
 }

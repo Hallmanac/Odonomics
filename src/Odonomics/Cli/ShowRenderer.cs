@@ -36,7 +36,13 @@ public static class ShowRenderer
     private const int MaxDealerNamesShown = 3;
     private const int CurrentListingMaxIdleDays = 14;
 
-    public static void Render(VehicleEntity vehicle, VinResearchResult research, IReadOnlyList<RedFlag> redFlags, bool allHistory)
+    public static void Render(
+        VehicleEntity vehicle,
+        VinResearchResult research,
+        IReadOnlyList<RedFlag> redFlags,
+        bool allHistory,
+        CostBreakdown? monthlyCost,
+        string? monthlyCostUnavailable)
     {
         (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
@@ -168,10 +174,48 @@ public static class ShowRenderer
         AnsiConsole.Write(BuildPostingsTable(vehicle.Postings));
 
         AnsiConsole.WriteLine();
+        RenderMonthlyCost(AnsiConsole.Console, monthlyCost, monthlyCostUnavailable);
+
+        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLineInterpolated($"[bold]Notes ({vehicle.Notes.Count})[/]");
         foreach (NoteEntity note in vehicle.Notes.OrderBy(n => n.CreatedAt))
         {
             AnsiConsole.MarkupLineInterpolated($"  [[{note.CreatedAt:yyyy-MM-dd}]] {note.Text}");
+        }
+    }
+
+    private const int MonthlyCostLabelWidth = 18;
+
+    /// <summary>Itemizes what the scenario says one vehicle costs a month: the loan payment and each
+    /// running cost as the scenario's expected value (or range, when an input feeding it is loose),
+    /// then the during-loan total and the ten-year average. Every figure is read from the same
+    /// <see cref="CostBreakdown"/> `odo rank` prints, so a "$590-$626" during-loan figure can be
+    /// seen to be a payment plus running costs, not a car payment. When the scenario cannot price the
+    /// vehicle, says why in place of the figures. Written line by line rather than as a table so
+    /// nothing wraps at 80 columns.</summary>
+    public static void RenderMonthlyCost(IAnsiConsole console, CostBreakdown? cost, string? unavailableReason)
+    {
+        console.MarkupLine("[bold]Monthly cost[/]");
+        if (cost is null)
+        {
+            console.MarkupLineInterpolated($"  not computed: {unavailableReason ?? "no cost available"}");
+            return;
+        }
+
+        (string Label, Band Value)[] lines =
+        [
+            ("Loan payment", cost.Payment),
+            ("Insurance", Band.Point(cost.InsuranceMonthly)),
+            ("Fuel", cost.Fuel),
+            ("Maintenance", cost.Maintenance),
+            ("Reserve", cost.Reserve),
+            ("During-loan total", cost.DuringLoanMonthly),
+            ("10-year average", cost.TenYearAverageMonthly),
+        ];
+
+        foreach ((string label, Band value) in lines)
+        {
+            console.MarkupLine($"  {label.PadRight(MonthlyCostLabelWidth)}{Format.Band(value)}");
         }
     }
 
