@@ -133,7 +133,7 @@ public readonly record struct ResolvedDealer(string? Name, string? Location, boo
 /// of 35). So for a hybrid-only-from-year model the cars.com builder returns two URLs: the hybrid
 /// facet from the scenario's minimum year, then the base-model facet from
 /// <see cref="ListingQuery.HybridOnlyFromModelYear"/> itself (or the scenario's minimum year if
-/// that is later), so it can only return the years that are actually hybrid. Each gets its own share of the cap.</para></summary>
+/// that is later), so it can only return the years that are actually hybrid. The two share the cap, with any share one cannot spend passing to the other (see <see cref="WalkPairSearches"/>).</para></summary>
 public static class WalkSites
 {
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");

@@ -102,6 +102,10 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
 /// saved, dropped" without the arithmetic ever looking contradictory.</summary>
 public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown Dropped)
 {
+    /// <summary>How many of the visited pages spent a slot of the per-pair cap: every visit except
+    /// the ones dropped as another model, a repeat VIN, or a new car.</summary>
+    public int SpentOnCap => Visited - Dropped.NotMatching - Dropped.Repeat - Dropped.NewCar;
+
     public DetailWalkTally Plus(DetailWalkTally other) => new(Visited + other.Visited, Upserted + other.Upserted, Dropped.Plus(other.Dropped));
 }
 

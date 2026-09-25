@@ -26,8 +26,19 @@ public static class WalkPairSearches
     /// consider from it, at most the pool size it is handed: the search's cap share times the
     /// site's over-fetch multiplier. <paramref name="visitLinkAsync"/> is given a running index
     /// across the whole pair rather than one per search, so the detail files a pair records never
-    /// collide. A search whose cap share is zero (a cap of 1 across two searches) is not opened.
-    /// The returned tally is the sum over every search.</summary>
+    /// collide.
+    ///
+    /// <para>A search's share is an even split of the cap still unspent across the searches still
+    /// to run, so whatever an earlier search leaves unspent (its page ran out of candidates) rolls
+    /// forward to the next. A search that stops at its share may still have candidates it never
+    /// visited, so once every search has run, any cap still unspent goes to those leftover links
+    /// in search order. Together the two mean the pair falls short of the cap only when every
+    /// search's links are exhausted, exactly as a single search does. No search page is opened
+    /// once the cap is spent, and the returned tally is the sum over every search.</para>
+    ///
+    /// <para><paramref name="gapBeforeNextLinkAsync"/> runs between links inside a search and also
+    /// wherever the walk moves from one search's last visit to the next page it loads, so a pair's
+    /// pacing has no machine-speed step between searches.</para></summary>
     public static async Task<DetailWalkTally> RunAsync(
         WalkSite site,
         IReadOnlyList<string> searchUrls,
@@ -37,28 +48,56 @@ public static class WalkPairSearches
         Func<CancellationToken, Task> gapBeforeNextLinkAsync,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<int> shares = SplitCap(maxDetailPages, searchUrls.Count);
         var total = new DetailWalkTally(0, 0, new DroppedBreakdown(0, 0, 0, 0));
-        for (int search = 0; search < searchUrls.Count; search++)
+        int remaining = maxDetailPages;
+        List<IReadOnlyList<string>> unvisitedLinks = [];
+
+        async Task<DetailWalkTally> WalkAsync(IReadOnlyList<string> links, int cap)
         {
-            if (shares[search] == 0)
+            int visitedBefore = total.Visited;
+            return await WalkDetailWalk.RunAsync(
+                links,
+                cap,
+                (link, i, ct) => visitLinkAsync(link, visitedBefore + i, ct),
+                gapBeforeNextLinkAsync,
+                cancellationToken);
+        }
+
+        for (int search = 0; search < searchUrls.Count && remaining > 0; search++)
+        {
+            int share = SplitCap(remaining, searchUrls.Count - search)[0];
+            if (total.Visited > 0)
             {
-                continue;
+                await gapBeforeNextLinkAsync(cancellationToken);
             }
 
             IReadOnlyList<string> candidateLinks = await collectLinksAsync(
                 searchUrls[search],
                 search,
-                shares[search] * site.DetailLinkOverfetchMultiplier,
+                share * site.DetailLinkOverfetchMultiplier,
                 cancellationToken);
-            int visitedBefore = total.Visited;
-            DetailWalkTally tally = await WalkDetailWalk.RunAsync(
-                candidateLinks,
-                shares[search],
-                (link, i, ct) => visitLinkAsync(link, visitedBefore + i, ct),
-                gapBeforeNextLinkAsync,
-                cancellationToken);
+            DetailWalkTally tally = await WalkAsync(candidateLinks, share);
             total = total.Plus(tally);
+            remaining -= tally.SpentOnCap;
+            unvisitedLinks.Add([.. candidateLinks.Skip(tally.Visited)]);
+        }
+
+        foreach (IReadOnlyList<string> links in unvisitedLinks)
+        {
+            if (remaining <= 0)
+            {
+                break;
+            }
+
+            if (links.Count == 0)
+            {
+                continue;
+            }
+
+            await gapBeforeNextLinkAsync(cancellationToken);
+            DetailWalkTally tally = await WalkAsync(links, remaining);
+            total = total.Plus(tally);
+            remaining -= tally.SpentOnCap;
         }
 
         return total;

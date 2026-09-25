@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Web;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Odonomics.Domain;
@@ -170,7 +171,10 @@ public static class WalkCommand
 
         async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
         {
-            AnsiConsole.MarkupLineInterpolated($"opening search page for {make} {model} on {site.Name}");
+            string searchLabel = searchUrls.Count > 1
+                ? $"search {searchIndex + 1} of {searchUrls.Count}, {HttpUtility.ParseQueryString(new Uri(searchUrl).Query).Get("models[]")} facet"
+                : "search page";
+            AnsiConsole.MarkupLineInterpolated($"opening {searchLabel} for {make} {model} on {site.Name}");
             await page.GotoAsync(searchUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await CdpConnection.HandleChallengeIfPresentAsync(page, ct);
 
