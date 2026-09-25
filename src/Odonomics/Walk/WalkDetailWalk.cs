@@ -17,7 +17,7 @@ public enum DetailPageOutcome
     /// <summary>The page is some other vehicle than the one this pair asked for. Like
     /// <see cref="Repeat"/>, this never spends any of the per-pair cap: a search page that still
     /// mixes in other models, despite the walk's own search URL now asking each site for the
-    /// exact model in the common case (one deliberate exception: cars.com queries both the hybrid
+    /// exact model in the common case (one deliberate exception: cars.com searches both the hybrid
     /// facet and the base model for a hybrid-only-from-year model, see
     /// <see cref="Odonomics.Walk.WalkSites"/>), still gets every real candidate visited, up to the
     /// pool <see cref="WalkDetailWalk.RunAsync"/> was handed.</summary>
@@ -74,6 +74,15 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
 {
     public int Total => MissingFields + NoVin + NotMatching + Failed + ExtractionFailed + Repeat + NewCar;
 
+    public DroppedBreakdown Plus(DroppedBreakdown other) => new(
+        MissingFields + other.MissingFields,
+        NoVin + other.NoVin,
+        NotMatching + other.NotMatching,
+        Failed + other.Failed,
+        ExtractionFailed + other.ExtractionFailed,
+        Repeat + other.Repeat,
+        NewCar + other.NewCar);
+
     public int this[DetailPageOutcome outcome] => outcome switch
     {
         DetailPageOutcome.MissingFields => MissingFields,
@@ -91,7 +100,10 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
 /// actually visited, how many were upserted, and how many were dropped for each reason. Visited
 /// always equals Upserted plus Dropped.Total, so the pair and run summaries can report "pages,
 /// saved, dropped" without the arithmetic ever looking contradictory.</summary>
-public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown Dropped);
+public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown Dropped)
+{
+    public DetailWalkTally Plus(DetailWalkTally other) => new(Visited + other.Visited, Upserted + other.Upserted, Dropped.Plus(other.Dropped));
+}
 
 /// <summary>
 /// Walks a pool of candidate detail links for one (site, model) pair, stopping once
