@@ -18,8 +18,8 @@ public static class Scorer
         decimal? insuranceMonthly = scenario.InsuranceMonthlyByModel.GetValueOrDefault(vehicle.MakeModel);
         bool insuranceUnknown = insuranceMonthly is null;
 
-        CostBreakdown? cost = passes && !insuranceUnknown && vehicle.LowestCurrentPrice is decimal price
-            ? ComputeCost(price, insuranceMonthly!.Value, MpgFor(vehicle, scenario), scenario)
+        CostBreakdown? cost = passes && insuranceMonthly is decimal insurance && vehicle.PurchasePrice is PurchasePrice purchasePrice
+            ? ComputeCost(purchasePrice.Total, insurance, MpgFor(vehicle, scenario), scenario)
             : null;
 
         return new Score

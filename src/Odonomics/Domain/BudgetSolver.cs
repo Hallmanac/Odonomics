@@ -25,6 +25,10 @@ public static class BudgetSolver
         return new MonthlyRunningCosts(insuranceMonthly, fuel, maintenance, scenario.EmergencyReservePerMonth.Expected);
     }
 
+    /// <summary>The highest purchase price whose during-loan monthly cost fits the target. It is a
+    /// purchase price in the sense of <see cref="PurchasePrice.Total"/>: an asking price plus any
+    /// shipping fee, the same figure `odo rank` and `odo show` price a vehicle at, so a car whose
+    /// posting carries a fee has that much less room in its asking price.</summary>
     public static decimal MaxPurchasePrice(Scenario scenario, decimal targetMonthlyBudget, decimal insuranceMonthly, decimal mpg)
     {
         MonthlyRunningCosts running = RunningCosts(scenario, insuranceMonthly, mpg);

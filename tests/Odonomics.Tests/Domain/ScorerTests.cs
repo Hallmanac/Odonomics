@@ -193,4 +193,44 @@ public class ScorerTests
         Assert.False(score.Passes);
         Assert.Null(score.Cost);
     }
+
+    [Fact]
+    public void Score_VehicleWithAShippingFee_IsCostedAtTheAskingPricePlusTheFee()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring shipped = Vehicle("Toyota", "Prius", 2020, 40000, 16410m) with { ShippingFee = 1590m };
+        VehicleForScoring pickedUp = Vehicle("Toyota", "Prius", 2020, 40000, 18000m);
+
+        Score shippedScore = Scorer.Score(shipped, scenario);
+
+        Assert.Equal(18000m, shipped.PurchasePrice?.Total);
+        Assert.Equal(Scorer.Score(pickedUp, scenario).Cost, shippedScore.Cost);
+    }
+
+    [Fact]
+    public void Score_VehicleWithNoShippingFee_IsCostedAtItsAskingPrice()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m);
+
+        Assert.Equal(18000m, vehicle.PurchasePrice?.Total);
+        Assert.Equal(Scorer.ComputeCost(18000m, 120m, 52m, scenario), Scorer.Score(vehicle, scenario).Cost);
+    }
+
+    [Fact]
+    public void Score_FreeShippingCostsTheSameAsNoFee()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring free = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with { ShippingFee = 0m };
+
+        Assert.Equal(Scorer.Score(Vehicle("Toyota", "Prius", 2020, 40000, 18000m), scenario).Cost, Scorer.Score(free, scenario).Cost);
+    }
+
+    [Fact]
+    public void PurchasePrice_VehicleWithNoAskingPrice_IsNullEvenWithAFee()
+    {
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, null) with { ShippingFee = 1590m };
+
+        Assert.Null(vehicle.PurchasePrice);
+    }
 }
