@@ -298,6 +298,7 @@ public static class WalkCommand
                     DealerName = dealer.Name,
                     DealerLocation = dealer.Location,
                     DealerNameIsFallback = dealer.IsFallback,
+                    ShippingFee = site.ReadShippingFee(bodyText),
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);
