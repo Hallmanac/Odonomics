@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Odonomics.Ledger;
+using Odonomics.Sources;
 
 namespace Odonomics.Walk;
 
@@ -9,17 +10,20 @@ namespace Odonomics.Walk;
 /// even for a site whose search URL isolates the requested model, since a page rejected as
 /// <see cref="Odonomics.Walk.DetailPageOutcome.Repeat"/> or <see cref="Odonomics.Walk.DetailPageOutcome.NotMatching"/>
 /// (the latter now also expected for cars.com's base-model bucket on a hybrid-only-from-year
-/// model, see <see cref="BuildSearchUrl"/>'s hybridOnlyFromModelYear parameter) needs a spare
+/// model, see <see cref="ListingQuery.HybridOnlyFromModelYear"/>) needs a spare
 /// link to replace it with rather than shortening the pair; see README.md's walk section for the
-/// full reasoning. <paramref name="BuildSearchUrl"/> takes make, model, zip, radius, and whether
-/// the scenario marks this model's base model as hybrid-only from some year onward (see
-/// <see cref="Odonomics.Domain.Scenario.HybridOnlyFromModelYear"/>). <paramref name="FallbackDealerName"/>
+/// full reasoning. <paramref name="BuildSearchUrl"/> takes the scenario-derived
+/// <see cref="ListingQuery"/> for one model: make, model, zip, radius, whether the scenario marks
+/// this model's base model as hybrid-only from some year onward (see
+/// <see cref="Odonomics.Domain.Scenario.HybridOnlyFromModelYear"/>), and the minimum model year and
+/// maximum mileage, which both sites take as search facets so the per-pair cap is spent only on
+/// cars the scenario can rank. <paramref name="FallbackDealerName"/>
 /// is the dealer a posting is stamped with when its detail page names none, for a site where the
 /// site itself is the seller (carvana); null for a marketplace whose pages carry the dealer's own
 /// name or none at all.</summary>
 public sealed record WalkSite(
     string Name,
-    Func<string, string, string, int, bool, string> BuildSearchUrl,
+    Func<ListingQuery, string> BuildSearchUrl,
     Regex DetailUrlPattern,
     int DetailLinkOverfetchMultiplier = 1,
     string? FallbackDealerName = null)
@@ -129,15 +133,16 @@ public static class WalkSites
 
     public static readonly WalkSite CarsCom = new(
         "cars.com",
-        (make, model, zip, radius, hybridOnlyFromModelYear) =>
+        query =>
         {
-            string makeSlug = Slugify(make);
-            string hybridModelSlug = $"{makeSlug}-{ModelFacetWords(model)}";
-            string modelsQuery = hybridOnlyFromModelYear
-                ? $"models[]={makeSlug}-{ModelFacetWords(BaseModelName(model))}&models[]={hybridModelSlug}"
+            string makeSlug = Slugify(query.Make);
+            string hybridModelSlug = $"{makeSlug}-{ModelFacetWords(query.Model)}";
+            string modelsQuery = query.HybridOnlyFromModelYear.HasValue
+                ? $"models[]={makeSlug}-{ModelFacetWords(BaseModelName(query.Model))}&models[]={hybridModelSlug}"
                 : $"models[]={hybridModelSlug}";
             return $"https://www.cars.com/shopping/results/?stock_type=used&makes[]={makeSlug}" +
-                   $"&{modelsQuery}&zip={zip}&maximum_distance={radius}";
+                   $"&{modelsQuery}&zip={query.Zip}&maximum_distance={query.RadiusMiles}" +
+                   $"&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
         },
         new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2);
@@ -150,26 +155,15 @@ public static class WalkSites
 
     public static readonly WalkSite Carvana = new(
         "carvana",
-        (make, model, zip, _, _) =>
+        query =>
         {
-            string baseModel = BaseModelName(model);
-            object filters = IsHybridVariant(model)
-                ? new
-                {
-                    filters = new
-                    {
-                        makes = new[] { new { name = make, parentModels = new[] { new { name = baseModel } } } },
-                        fuelTypes = new[] { "Hybrid" },
-                    },
-                }
-                : new
-                {
-                    filters = new
-                    {
-                        makes = new[] { new { name = make, parentModels = new[] { new { name = baseModel } } } },
-                    },
-                };
-            return $"https://www.carvana.com/cars/filters?zip={zip}&cvnaid={EncodeCvnaid(JsonSerializer.Serialize(filters))}";
+            var makes = new[] { new { name = query.Make, parentModels = new[] { new { name = BaseModelName(query.Model) } } } };
+            var year = new { min = query.YearMin };
+            var mileage = new { max = query.MaxMileage };
+            object filters = IsHybridVariant(query.Model)
+                ? new { filters = new { makes, fuelTypes = new[] { "Hybrid" }, year, mileage } }
+                : new { filters = new { makes, year, mileage } };
+            return $"https://www.carvana.com/cars/filters?zip={query.Zip}&cvnaid={EncodeCvnaid(JsonSerializer.Serialize(filters))}";
         },
         new Regex("/vehicle/", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2,

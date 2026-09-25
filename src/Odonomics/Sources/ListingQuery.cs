@@ -77,16 +77,21 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
         return year is int candidateYear && candidateYear < hybridYear ? hybridYear : null;
     }
 
-    /// <summary>Builds one query per target model in the scenario's allowed-models list. Each
-    /// entry is a "Make Model" string (e.g. "Toyota Camry Hybrid"); the make is always the first
-    /// word, matching how every target model in this scenario is named.</summary>
+    /// <summary>Builds one query per target model in the scenario's allowed-models list.</summary>
     public static IReadOnlyList<ListingQuery> FromScenario(Scenario scenario) =>
-        [.. scenario.Filters.AllowedModels.Select(makeModel =>
-        {
-            int spaceIndex = makeModel.IndexOf(' ');
-            string make = spaceIndex < 0 ? makeModel : makeModel[..spaceIndex];
-            string model = spaceIndex < 0 ? "" : makeModel[(spaceIndex + 1)..];
-            int? hybridOnlyFromModelYear = scenario.HybridOnlyFromModelYear.TryGetValue(makeModel, out int hybridYear) ? hybridYear : null;
-            return new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage, hybridOnlyFromModelYear);
-        })];
+        [.. scenario.Filters.AllowedModels.Select(makeModel => For(scenario, makeModel))];
+
+    /// <summary>Builds the query for one "Make Model" string (e.g. "Toyota Camry Hybrid"); the make
+    /// is always the first word, matching how every target model in this scenario is named. The
+    /// minimum model year, maximum mileage, and hybrid-only year all come from the scenario, so a
+    /// caller that turns the query into a site's search facets applies the same limits the scorer
+    /// later enforces.</summary>
+    public static ListingQuery For(Scenario scenario, string makeModel)
+    {
+        int spaceIndex = makeModel.IndexOf(' ');
+        string make = spaceIndex < 0 ? makeModel : makeModel[..spaceIndex];
+        string model = spaceIndex < 0 ? "" : makeModel[(spaceIndex + 1)..];
+        int? hybridOnlyFromModelYear = scenario.HybridOnlyFromModelYear.TryGetValue(makeModel, out int hybridYear) ? hybridYear : null;
+        return new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage, hybridOnlyFromModelYear);
+    }
 }
