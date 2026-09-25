@@ -33,7 +33,9 @@ namespace Odonomics.Walk;
 /// is for a site whose detail page marks a private seller in its own text (autotrader's
 /// "Sample S (Private Seller)" line): a page it matches is stored with
 /// <see cref="WalkSites.PrivateSellerDealerName"/> and no location, whatever name the extraction
-/// read off it.</summary>
+/// read off it. <paramref name="ShippingFeeReader"/> reads the one-time shipping fee off a detail page's
+/// text for a site that prints one (carvana); null for a site that does not, whose postings store no
+/// fee.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -44,7 +46,8 @@ public sealed record WalkSite(
     Func<string, int, string>? PagedSearchUrl = null,
     Regex? MatchCountPattern = null,
     Regex? PrivateSellerPagePattern = null,
-    Regex? ResultCardLinkPattern = null)
+    Regex? ResultCardLinkPattern = null,
+    Func<string, decimal?>? ShippingFeeReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -103,6 +106,10 @@ public sealed record WalkSite(
             ? count
             : null;
     }
+
+    /// <summary>The shipping fee a detail page shows on top of its asking price, or null when this
+    /// site prints none or the page carries none.</summary>
+    public decimal? ReadShippingFee(string pageText) => ShippingFeeReader?.Invoke(pageText);
 
     /// <summary>The dealer name to store for a page whose extraction returned
     /// <paramref name="extractedDealerName"/>: that name (trimmed) when the page gave one, such as
@@ -281,7 +288,8 @@ public static class WalkSites
         DetailLinkOverfetchMultiplier: 2,
         FallbackDealerName: CarvanaDealerName,
         // Carvana renders about 21 cards a page and pages with a plain page=N on the same filters URL.
-        PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}");
+        PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}",
+        ShippingFeeReader: CarvanaShipping.Read);
 
     /// <summary>What a private seller's listing is stored as: one dealer row for every private seller,
     /// with no location, so no individual's name or city enters the ledger and
