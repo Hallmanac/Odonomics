@@ -132,4 +132,71 @@ public class WalkPairSummaryLineTests
 
         Assert.Equal("7 (4 wrong model, 3 missing fields)", WalkPairSummaryLine.TableCell(dropped));
     }
+
+    [Fact]
+    public void Format_CamryExampleAtEightyColumns_WrapsAfterTheTally()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 10, NoVin: 0, NotMatching: 14, Failed: 0);
+
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Camry Hybrid", pages: 35, saved: 11, dropped, width: 80);
+
+        Assert.Equal(
+            "cars.com / Toyota Camry Hybrid: 35 pages, 11 saved, 24 dropped\n    (14 wrong model, 10 missing fields)",
+            line);
+    }
+
+    [Fact]
+    public void Format_CamryExampleAtOneHundredTwentyColumns_StaysOnOneLine()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 10, NoVin: 0, NotMatching: 14, Failed: 0);
+
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Camry Hybrid", pages: 35, saved: 11, dropped, width: 120);
+
+        Assert.Equal(
+            "cars.com / Toyota Camry Hybrid: 35 pages, 11 saved, 24 dropped (14 wrong model, 10 missing fields)",
+            line);
+    }
+
+    [Fact]
+    public void Format_OneReasonLineWiderThanEightyColumns_WrapsAfterTheTally()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 0, NoVin: 0, NotMatching: 0, Failed: 0, ExtractionFailed: 24);
+
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: 35, saved: 11, dropped, width: 80);
+
+        Assert.Equal(
+            "cars.com / Toyota Corolla Hybrid: 35 pages, 11 saved, 24 dropped\n    (extraction failed)",
+            line);
+    }
+
+    [Fact]
+    public void Format_OneReasonLineAtOneHundredTwentyColumns_StaysOnOneLine()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 0, NoVin: 0, NotMatching: 0, Failed: 0, ExtractionFailed: 24);
+
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: 35, saved: 11, dropped, width: 120);
+
+        Assert.Equal(
+            "cars.com / Toyota Corolla Hybrid: 35 pages, 11 saved, 24 dropped (extraction failed)",
+            line);
+    }
+
+    [Fact]
+    public void Format_LineExactlyTheConsoleWidth_StaysOnOneLine()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 0, NotMatching: 0, Failed: 0);
+        string expected = "cars.com / Honda Insight: 9 pages, 7 saved, 2 dropped (missing fields)";
+
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 9, saved: 7, dropped, expected.Length);
+
+        Assert.Equal(expected, line);
+    }
+
+    [Fact]
+    public void Format_NothingDroppedAtANarrowWidth_NeverAddsAContinuationLine()
+    {
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 7, saved: 7, new DroppedBreakdown(0, 0, 0, 0), width: 20);
+
+        Assert.Equal("cars.com / Honda Insight: 7 pages, 7 saved, 0 dropped", line);
+    }
 }
