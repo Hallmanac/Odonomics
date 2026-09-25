@@ -166,6 +166,11 @@ public static class RankRenderer
             console.MarkupLine(RankedDetailLine(score, status, anyGraded));
             if (detail)
             {
+                if (PurchasePriceLine(score) is string purchasePriceLine)
+                {
+                    console.MarkupLine(purchasePriceLine);
+                }
+
                 console.MarkupLine(PaymentLine(score.Cost!));
             }
         }
@@ -190,11 +195,22 @@ public static class RankRenderer
     private static string PaymentLine(CostBreakdown cost) =>
         $"    loan payment {Format.DuringLoanLines(cost)[0].Figure}  of during {Format.Band(cost.DuringLoanMonthly)}";
 
-    /// <summary>A vehicle with no current asking price shows "-" rather than "$0", which would read
-    /// as a real price of zero.</summary>
+    /// <summary>The `--detail` line that names the shipping fee inside the price a row shows: the
+    /// asking price, the fee, and the purchase price they add up to, which is the figure the row's
+    /// costs are computed from. Null when the vehicle's posting shows no fee, so a vehicle without
+    /// one prints exactly what it did before. A fee of zero is still named, since "free shipping" is
+    /// a fact the page gave.</summary>
+    private static string? PurchasePriceLine(Score score) =>
+        score.Vehicle.PurchasePrice is { ShippingFee: decimal fee } purchasePrice
+            ? $"    price {Format.Money(purchasePrice.Asking)} asking + {Format.Money(fee)} shipping = {Format.Money(purchasePrice.Total)}"
+            : null;
+
+    /// <summary>The purchase price the vehicle's costs are computed from: its asking price plus any
+    /// shipping fee. A vehicle with no current asking price shows "-" rather than "$0", which would
+    /// read as a real price of zero.</summary>
     private static string PriceText(Score score) =>
-        score.Vehicle.LowestCurrentPrice is decimal price
-            ? Format.Money(price)
+        score.Vehicle.PurchasePrice is PurchasePrice purchasePrice
+            ? Format.Money(purchasePrice.Total)
             : "-";
 
     private static string ResearchMarker(ResearchStatus? status) => status switch

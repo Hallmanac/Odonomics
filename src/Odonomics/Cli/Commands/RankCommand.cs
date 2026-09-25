@@ -32,7 +32,7 @@ public static class RankCommand
         var research = new Dictionary<string, ResearchStatus>();
         foreach (VehicleEntity vehicle in vehicles)
         {
-            decimal? lowestCurrentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
+            PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource);
             var forScoring = new VehicleForScoring
             {
                 Vin = vehicle.Vin,
@@ -40,12 +40,13 @@ public static class RankCommand
                 Make = vehicle.Make,
                 Model = vehicle.Model,
                 Mileage = vehicle.Mileage,
-                LowestCurrentPrice = lowestCurrentPrice,
+                LowestCurrentPrice = purchasePrice?.Asking,
+                ShippingFee = purchasePrice?.ShippingFee,
                 DealerGrade = DealerGradeSummary(vehicle),
                 OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade?.StartsWith('F') == true),
             };
             scores.Add(Scorer.Score(forScoring, scenario));
-            research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), lowestCurrentPrice);
+            research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource));
         }
 
         RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets, detail);

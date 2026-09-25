@@ -100,4 +100,20 @@ public class BudgetSolverTests
 
         Assert.Equal(100m, average);
     }
+
+    [Fact]
+    public void MaxPurchasePrice_IsThePurchasePriceTotalRankPricesAVehicleAt_ShippingFeeIncluded()
+    {
+        Scenario scenario = BuildScenario();
+        decimal maxPrice = BudgetSolver.MaxPurchasePrice(scenario, targetMonthlyBudget: 500m, insuranceMonthly: 120m, mpg: 40m);
+        const decimal shippingFee = 1590m;
+
+        decimal DuringLoanAtAsking(decimal asking) =>
+            Scorer.ComputeCost(new PurchasePrice(asking, shippingFee).Total, 120m, 40m, scenario).DuringLoanMonthly.Expected;
+
+        // A car whose asking price plus fee is the max still fits the $500 budget; a dollar more asking
+        // does not, so the fee comes out of the asking price room one for one.
+        Assert.True(DuringLoanAtAsking(maxPrice - shippingFee) <= 500m);
+        Assert.True(DuringLoanAtAsking(maxPrice - shippingFee + 1m) > 500m);
+    }
 }

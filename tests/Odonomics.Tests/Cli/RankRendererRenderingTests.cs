@@ -20,7 +20,8 @@ public class RankRendererRenderingTests
         IReadOnlyList<string>? failureReasons = null,
         CostBreakdown? cost = null,
         string? dealerGrade = null,
-        bool onlyFGraded = false)
+        bool onlyFGraded = false,
+        decimal? shippingFee = null)
     {
         var vehicle = new VehicleForScoring
         {
@@ -30,6 +31,7 @@ public class RankRendererRenderingTests
             Model = model,
             Mileage = 40000,
             LowestCurrentPrice = price,
+            ShippingFee = shippingFee,
             DealerGrade = dealerGrade,
             OnlyFGradedDealers = onlyFGraded,
         };
@@ -475,5 +477,43 @@ public class RankRendererRenderingTests
         string[] lines = Render([score], budget: null);
 
         Assert.DoesNotContain(lines, line => line.Contains("loan payment $"));
+    }
+
+    [Fact]
+    public void Render_DetailForAVehicleWithAShippingFee_NamesTheFeeAndThePurchasePriceItAddsUpTo()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, cost: cost, shippingFee: 1590m);
+
+        string[] lines = Render([score], budget: null, detail: true);
+
+        Assert.Contains(lines, line => line.Contains("$23,590") && line.Contains("during $590-$626"));
+        int priceLine = Array.FindIndex(lines, line => line.Trim() == "price $22,000 asking + $1,590 shipping = $23,590");
+        Assert.True(priceLine >= 0, "expected an itemized price line naming the shipping fee");
+        Assert.StartsWith("    loan payment", lines[priceLine + 1]);
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    [Fact]
+    public void Render_DetailForAFreeShippingVehicle_StillNamesTheZeroFee()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, cost: cost, shippingFee: 0m);
+
+        string[] lines = Render([score], budget: null, detail: true);
+
+        Assert.Contains(lines, line => line.Trim() == "price $22,000 asking + $0 shipping = $22,000");
+    }
+
+    [Fact]
+    public void Render_DetailForAVehicleWithNoShippingFee_PrintsNoPriceLineAndTheAskingPrice()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, cost: cost);
+
+        string[] lines = Render([score], budget: null, detail: true);
+
+        Assert.DoesNotContain(lines, line => line.Contains("shipping"));
+        Assert.Contains(lines, line => line.Contains("$22,000") && line.Contains("during $590-$626"));
     }
 }
