@@ -3,7 +3,7 @@ using Spectre.Console;
 
 namespace Odonomics.Cli;
 
-/// <summary>Renders a search/walk diff as four narrow tables (new, moved, price-dropped, gone),
+/// <summary>Renders a search/walk diff as four narrow tables (new, moved, price-dropped, gone, the last with a reason per row),
 /// each column-limited to still read at 80 columns.</summary>
 public static class DiffRenderer
 {
@@ -85,6 +85,13 @@ public static class DiffRenderer
         AnsiConsole.Write(table);
     }
 
+    // The VIN, price, source, and reason cells never break across lines, so they get fixed widths; only the
+    // model name is free to wrap, at a word boundary, to make room.
+    private const int GoneVinColumnWidth = 17;
+    private const int GonePriceColumnWidth = 10;
+    private const int GoneSourceColumnWidth = 11;
+    private const int GoneReasonColumnWidth = 18;
+
     private static void RenderGone(IReadOnlyList<GonePostingEntry> entries)
     {
         AnsiConsole.MarkupLine($"[bold]Gone ({entries.Count})[/]");
@@ -94,13 +101,24 @@ public static class DiffRenderer
             return;
         }
 
-        Table table = NarrowTable("VIN", "Model", "Last price", "Source");
+        AnsiConsole.Write(BuildGoneTable(entries));
+    }
+
+    public static Table BuildGoneTable(IReadOnlyList<GonePostingEntry> entries)
+    {
+        var table = new Table { Border = TableBorder.Minimal };
+        table.Width(80);
+        table.AddColumn(new TableColumn("VIN") { Width = GoneVinColumnWidth, NoWrap = true });
+        table.AddColumn("Model");
+        table.AddColumn(new TableColumn("Last price") { Width = GonePriceColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Source") { Width = GoneSourceColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Reason") { Width = GoneReasonColumnWidth, NoWrap = true });
         foreach (GonePostingEntry entry in entries)
         {
-            table.AddRow(Format.Cell(entry.Vin), Format.Cell($"{entry.Make} {entry.Model}"), Format.Money(entry.LastKnownPrice), Format.Cell(entry.Source));
+            table.AddRow(Format.Cell(entry.Vin), Format.Cell($"{entry.Make} {entry.Model}"), Format.Money(entry.LastKnownPrice), Format.Cell(Format.Truncate(entry.Source, GoneSourceColumnWidth)), Format.Cell(entry.Reason));
         }
 
-        AnsiConsole.Write(table);
+        return table;
     }
 
     private static Table NarrowTable(params string[] columns)
