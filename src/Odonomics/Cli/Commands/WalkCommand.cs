@@ -1,3 +1,4 @@
+using System.CommandLine;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Odonomics.Domain;
@@ -18,13 +19,19 @@ namespace Odonomics.Cli.Commands;
 /// that one model exactly, on whichever site(s) it's covering. --max caps matching detail pages
 /// visited per site-and-model pair, not per run or raw page visits: a page rejected for not
 /// matching the model, or one whose VIN this pair already saved through a different link, doesn't
-/// spend the cap, so the walk can open more candidate links than --max to fill it. See the brief
-/// for the full pacing spec; this command
-/// implements it as literally as an automated agent can, since the actual bot-defense behavior can
+/// spend the cap, so the walk can open more candidate links than --max to fill it. --max defaults
+/// to 30 (<see cref="WalkPacing.DefaultMaxDetailPages"/>). See the brief for the full pacing spec;
+/// this command implements it as literally as an automated agent can, since the actual bot-defense behavior can
 /// only be proven by the operator running it against a real browser.
 /// </summary>
 public static class WalkCommand
 {
+    public static Option<int> CreateMaxOption() => new("--max")
+    {
+        Description = "maximum number of matching detail pages to visit per site-and-model pair; a page rejected for not matching the model doesn't count against it, so the walk may open more candidate links than this to reach it",
+        DefaultValueFactory = _ => WalkPacing.DefaultMaxDetailPages,
+    };
+
     public static async Task<int> RunAsync(string scenarioPath, string? siteName, string? modelOverride, int maxDetailPages, CancellationToken cancellationToken)
     {
         List<WalkSite> sites;
