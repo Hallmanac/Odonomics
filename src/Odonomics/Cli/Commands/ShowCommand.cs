@@ -37,11 +37,16 @@ public static class ShowCommand
             : VinResearchService.FromCached(vehicle.VinRecord!);
 
         List<RunEntity> runs = await db.Runs.ToListAsync(cancellationToken);
-        decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, RunSources.LatestCoverageBySource(runs));
+        Dictionary<string, DateTimeOffset> latestCoverageBySource = RunSources.LatestCoverageBySource(runs);
+
+        // The red flags compare asking prices with other listings' asking prices, so they keep the
+        // asking price alone; the monthly cost is what taking the car home costs, shipping included.
+        decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
         IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
 
-        (CostBreakdown? monthlyCost, string? unavailable) = MonthlyCostFor($"{vehicle.Make} {vehicle.Model}", currentPrice, scenario);
-        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable);
+        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource);
+        (CostBreakdown? monthlyCost, string? unavailable) = MonthlyCostFor($"{vehicle.Make} {vehicle.Model}", purchasePrice?.Total, scenario);
+        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice);
         return 0;
     }
 
@@ -49,10 +54,11 @@ public static class ShowCommand
     /// without the hard filters: `odo show` is asked about any VIN in the ledger, including one the
     /// scenario would exclude, and its monthly cost is still worth seeing. What it cannot price it
     /// explains instead of throwing: a vehicle with no current price, or a model the scenario has no
-    /// insurance or mpg figure for.</summary>
-    public static (CostBreakdown? Cost, string? Unavailable) MonthlyCostFor(string makeModel, decimal? currentPrice, Scenario scenario)
+    /// insurance or mpg figure for. <paramref name="purchasePrice"/> is what the car costs to take
+    /// home, its asking price plus any shipping fee (see <see cref="PurchasePrice.Total"/>).</summary>
+    public static (CostBreakdown? Cost, string? Unavailable) MonthlyCostFor(string makeModel, decimal? purchasePrice, Scenario scenario)
     {
-        if (currentPrice is not decimal price)
+        if (purchasePrice is not decimal price)
         {
             return (null, "no current asking price (every posting is gone)");
         }

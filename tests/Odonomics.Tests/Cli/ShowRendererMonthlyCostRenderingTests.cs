@@ -42,13 +42,13 @@ public class ShowRendererMonthlyCostRenderingTests
         TargetMonthlyBudgets = [300, 350, 400],
     };
 
-    private static string[] Render(CostBreakdown? cost, string? unavailable = null)
+    private static string[] Render(CostBreakdown? cost, string? unavailable = null, PurchasePrice? purchasePrice = null)
     {
         var console = new TestConsole();
         console.Profile.Width = 80;
         console.Profile.Capabilities.Ansi = false;
 
-        ShowRenderer.RenderMonthlyCost(console, cost, unavailable);
+        ShowRenderer.RenderMonthlyCost(console, cost, unavailable, purchasePrice);
 
         return console.Output.Replace("\r\n", "\n").Split('\n');
     }
@@ -171,5 +171,65 @@ public class ShowRendererMonthlyCostRenderingTests
 
         Assert.NotNull(cost);
         Assert.Null(unavailable);
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_VehicleWithAShippingFee_PrintsTheFeeOnItsOwnLineUnderTheAskingPrice()
+    {
+        var purchasePrice = new PurchasePrice(16360m, 1590m);
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] lines = Render(cost, purchasePrice: purchasePrice);
+
+        Assert.Equal("Monthly cost", lines[0]);
+        Assert.Equal(["Asking", "price", "$16,360"], Cells(lines[1]));
+        Assert.Equal(["Shipping", "fee", "$1,590"], Cells(lines[2]));
+        Assert.Equal(["Purchase", "price", "$17,950"], Cells(lines[3]));
+        Assert.Equal(["Loan", "payment", "$324-$348"], Cells(lines[4]));
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_FeeInThePurchasePrice_CostsTheSameAsAskingThatMuchMoreWithNoFee()
+    {
+        Scenario scenario = BuildScenario();
+        (CostBreakdown? withFee, _) = ShowCommand.MonthlyCostFor("Toyota Prius", new PurchasePrice(16360m, 1590m).Total, scenario);
+        (CostBreakdown? asked, _) = ShowCommand.MonthlyCostFor("Toyota Prius", 17950m, scenario);
+
+        Assert.Equal(asked, withFee);
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_ItemizedLinesStillAddUpToTheDuringLoanTotalWithAFee()
+    {
+        var purchasePrice = new PurchasePrice(10821m, 1590m);
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] lines = Render(cost, purchasePrice: purchasePrice);
+
+        (int Low, int High) Figures(string line)
+        {
+            int[] amounts = [.. Cells(line)[^1].Split('-').Select(figure => int.Parse(figure.TrimStart('$').Replace(",", "")))];
+            return (amounts[0], amounts[^1]);
+        }
+
+        (int Low, int High)[] items = [.. lines.Skip(4).Take(5).Select(Figures)];
+        (int Low, int High) total = Figures(lines[9]);
+
+        Assert.Equal(total.Low, items.Sum(item => item.Low));
+        Assert.Equal(total.High, items.Sum(item => item.High));
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_VehicleWithNoShippingFee_PrintsNoPriceLines()
+    {
+        var purchasePrice = new PurchasePrice(17950m, ShippingFee: null);
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] withPrice = Render(cost, purchasePrice: purchasePrice);
+        string[] withoutPrice = Render(cost);
+
+        Assert.Equal(withoutPrice, withPrice);
+        Assert.Equal(["Loan", "payment", "$324-$348"], Cells(withPrice[1]));
     }
 }
