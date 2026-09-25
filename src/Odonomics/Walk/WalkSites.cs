@@ -22,14 +22,17 @@ namespace Odonomics.Walk;
 /// cars the scenario can rank. <paramref name="FallbackDealerName"/>
 /// is the dealer a posting is stamped with when its detail page names none, for a site where the
 /// site itself is the seller (carvana); null for a marketplace whose pages carry the dealer's own
-/// name or none at all.</summary>
+/// name or none at all. <paramref name="PagedSearchUrl"/> is null for a site whose search is one page,
+/// and for one whose results run to more pages it turns a search URL and a 1-based page number into
+/// that page's URL (see <see cref="WalkSearchPages"/>).</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
     Regex DetailUrlPattern,
     int DetailLinkOverfetchMultiplier = 1,
     string? FallbackDealerName = null,
-    Regex? SkippedCardTitlePattern = null)
+    Regex? SkippedCardTitlePattern = null,
+    Func<string, int, string>? PagedSearchUrl = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -216,7 +219,9 @@ public static class WalkSites
         },
         new Regex("/vehicle/", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2,
-        FallbackDealerName: CarvanaDealerName);
+        FallbackDealerName: CarvanaDealerName,
+        // Carvana renders about 21 cards a page and pages with a plain page=N on the same filters URL.
+        PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}");
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {

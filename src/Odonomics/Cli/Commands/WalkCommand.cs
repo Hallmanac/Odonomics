@@ -169,13 +169,15 @@ public static class WalkCommand
 
         IReadOnlyList<string> searchUrls = site.BuildSearchUrls(query);
 
-        async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
+        // Counts every search page the pair records, across searches and result pages alike, so
+        // each one lands in its own search.txt / search-2.txt / ... and none overwrites another.
+        int searchPagesRecorded = 0;
+
+        async Task<IReadOnlyList<PageLink>> LoadSearchPageAsync(string pageUrl, string searchLabel, int pageNumber, CancellationToken ct)
         {
-            string searchLabel = searchUrls.Count > 1
-                ? $"search {searchIndex + 1} of {searchUrls.Count}, {HttpUtility.ParseQueryString(new Uri(searchUrl).Query).Get("models[]")} facet"
-                : "search page";
-            AnsiConsole.MarkupLineInterpolated($"opening {searchLabel} for {make} {model} on {site.Name}");
-            await page.GotoAsync(searchUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            string pageLabel = pageNumber > 1 ? $"{searchLabel}, page {pageNumber}" : searchLabel;
+            AnsiConsole.MarkupLineInterpolated($"opening {pageLabel} for {make} {model} on {site.Name}");
+            await page.GotoAsync(pageUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await CdpConnection.HandleChallengeIfPresentAsync(page, ct);
 
             await ScrollInStepsAsync(page, pacing, ct);
@@ -184,10 +186,23 @@ public static class WalkCommand
             await Task.Delay(dwell, ct);
 
             string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
-            await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchIndex), searchBodyText, ct);
+            await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchPagesRecorded++), searchBodyText, ct);
 
             string[][] anchors = await page.EvaluateAsync<string[][]>("() => Array.from(document.querySelectorAll('a')).map(a => [a.href, a.innerText || ''])");
-            IReadOnlyList<string> links = site.CollectDetailLinks([.. anchors.Select(a => new PageLink(a[0], a[1]))], linkPoolSize);
+            return [.. anchors.Select(a => new PageLink(a[0], a[1]))];
+        }
+
+        async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
+        {
+            string searchLabel = searchUrls.Count > 1
+                ? $"search {searchIndex + 1} of {searchUrls.Count}, {HttpUtility.ParseQueryString(new Uri(searchUrl).Query).Get("models[]")} facet"
+                : "search page";
+            IReadOnlyList<string> links = await WalkSearchPages.CollectLinksAsync(
+                site,
+                searchUrl,
+                linkPoolSize,
+                (pageUrl, pageNumber, pageCt) => LoadSearchPageAsync(pageUrl, searchLabel, pageNumber, pageCt),
+                ct);
             AnsiConsole.MarkupLineInterpolated($"found {links.Count} detail link(s) to consider (cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s))");
             return links;
         }
