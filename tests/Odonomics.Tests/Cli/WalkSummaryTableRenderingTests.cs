@@ -54,10 +54,10 @@ public class WalkSummaryTableRenderingTests
 
         Assert.Equal(
             [
-                "  Site     │ Model                  │ Pages │ Saved │ Dropped         │ Status  ",
-                " ──────────┼────────────────────────┼───────┼───────┼─────────────────┼──────── ",
-                "  cars.com │ Honda Insight          │ 9     │ 7     │ 2 (missing      │ ok      ",
-                "           │                        │       │       │ fields)         │         ",
+                "  Site       │ Model                  │ Pages │ Saved │ Dropped       │ Status  ",
+                " ────────────┼────────────────────────┼───────┼───────┼───────────────┼──────── ",
+                "  cars.com   │ Honda Insight          │ 9     │ 7     │ 2 (missing    │ ok      ",
+                "             │                        │       │       │ fields)       │         ",
             ],
             lines[1..5]);
     }
@@ -74,13 +74,14 @@ public class WalkSummaryTableRenderingTests
 
         Assert.Equal(
             [
-                "  Site     │ Model                  │ Pages │ Saved │ Dropped         │ Status  ",
-                " ──────────┼────────────────────────┼───────┼───────┼─────────────────┼──────── ",
-                "  cars.com │ Honda Insight          │ 14    │ 7     │ 7 (4 wrong      │ ok      ",
-                "           │                        │       │       │ model, 3        │         ",
-                "           │                        │       │       │ missing fields) │         ",
+                "  Site       │ Model                  │ Pages │ Saved │ Dropped       │ Status  ",
+                " ────────────┼────────────────────────┼───────┼───────┼───────────────┼──────── ",
+                "  cars.com   │ Honda Insight          │ 14    │ 7     │ 7 (4 wrong    │ ok      ",
+                "             │                        │       │       │ model, 3      │         ",
+                "             │                        │       │       │ missing       │         ",
+                "             │                        │       │       │ fields)       │         ",
             ],
-            lines[1..6]);
+            lines[1..7]);
     }
 
     [Fact]
@@ -101,16 +102,32 @@ public class WalkSummaryTableRenderingTests
 
         Assert.Equal(
             [
-                "  Site     │ Model                  │ Pages │ Saved │ Dropped         │ Status  ",
-                " ──────────┼────────────────────────┼───────┼───────┼─────────────────┼──────── ",
-                "  auto tr… │ Corolla Hybrid Limited │ 30    │ 5     │ 25 (8 wrong     │ ok      ",
-                "           │                        │       │       │ model, 4        │         ",
-                "           │                        │       │       │ missing fields, │         ",
-                "           │                        │       │       │ 3 no VIN, 8     │         ",
-                "           │                        │       │       │ repeat, 2       │         ",
-                "           │                        │       │       │ failed to load) │         ",
+                "  Site       │ Model                  │ Pages │ Saved │ Dropped       │ Status  ",
+                " ────────────┼────────────────────────┼───────┼───────┼───────────────┼──────── ",
+                "  auto trad… │ Corolla Hybrid Limited │ 30    │ 5     │ 25 (8 wrong   │ ok      ",
+                "             │                        │       │       │ model, 4      │         ",
+                "             │                        │       │       │ missing       │         ",
+                "             │                        │       │       │ fields, 3 no  │         ",
+                "             │                        │       │       │ VIN, 8        │         ",
+                "             │                        │       │       │ repeat, 2     │         ",
+                "             │                        │       │       │ failed to     │         ",
+                "             │                        │       │       │ load)         │         ",
             ],
-            lines[1..9]);
+            lines[1..11]);
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    [Fact]
+    public void BuildSummaryTable_AutotraderRow_NamesTheSiteInFullRatherThanTruncatingIt()
+    {
+        List<WalkPairSummary> summaries =
+        [
+            new("autotrader", "Toyota Corolla Hybrid", 30, 5, new DroppedBreakdown(MissingFields: 4, NoVin: 3, NotMatching: 8, Failed: 2, ExtractionFailed: 0, Repeat: 8), Completed: true),
+        ];
+
+        string[] lines = Render(summaries);
+
+        Assert.Equal("  autotrader │ Toyota Corolla Hybrid  │ 30    │ 5     │ 25 (8 wrong   │ ok      ", lines[3]);
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
     }
 

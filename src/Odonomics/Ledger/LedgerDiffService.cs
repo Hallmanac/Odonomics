@@ -125,7 +125,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                     // by (VIN, source) rather than VIN alone: unlike the genuinely-new-vehicle branch
                     // above, where one entry per VIN is the right call, the same already-known VIN can
                     // legitimately turn up new on two different sources in the same run (a bare `odo
-                    // walk` covers cars.com and carvana together), and each is its own new sighting.
+                    // walk` covers every walk site together), and each is its own new sighting.
                     if (newSourceSightings.Add((vehicle.Vin, posting.Source)))
                     {
                         newEntries.Add(new NewPostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, currentPrice));

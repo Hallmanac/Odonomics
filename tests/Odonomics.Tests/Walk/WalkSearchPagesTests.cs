@@ -16,11 +16,11 @@ public class WalkSearchPagesTests
     {
         public List<(string Url, int PageNumber)> Loads { get; } = [];
 
-        public Task<IReadOnlyList<PageLink>> LoadAsync(string url, int pageNumber, CancellationToken _)
+        public Task<SearchPageContent> LoadAsync(string url, int pageNumber, CancellationToken _)
         {
             Loads.Add((url, pageNumber));
             IReadOnlyList<PageLink> anchors = pages.TryGetValue(pageNumber, out List<PageLink>? served) ? served : [];
-            return Task.FromResult(anchors);
+            return Task.FromResult(new SearchPageContent(anchors));
         }
     }
 
@@ -141,7 +141,7 @@ public class WalkSearchPagesTests
             CarvanaSearch,
             200,
             (_, pageNumber, _) => pageNumber == 1
-                ? Task.FromResult<IReadOnlyList<PageLink>>(pages[1])
+                ? Task.FromResult(new SearchPageContent(pages[1]))
                 : throw new TimeoutException("page 2 timed out"),
             (pageNumber, ex) => failures.Add((pageNumber, ex.Message)),
             CancellationToken.None);
@@ -175,12 +175,12 @@ public class WalkSearchPagesTests
             {
                 if (pageNumber == 1)
                 {
-                    return Task.FromResult<IReadOnlyList<PageLink>>(CarvanaCards("a", 21));
+                    return Task.FromResult(new SearchPageContent(CarvanaCards("a", 21)));
                 }
 
                 cts.Cancel();
                 ct.ThrowIfCancellationRequested();
-                return Task.FromResult<IReadOnlyList<PageLink>>([]);
+                return Task.FromResult(new SearchPageContent([]));
             },
             (_, _) => Assert.Fail("a cancelled walk must not be reported as a failed page"),
             cts.Token));
