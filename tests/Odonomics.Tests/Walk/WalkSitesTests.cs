@@ -14,9 +14,9 @@ public class WalkSitesTests
     private static Scenario Shipped() => ScenarioLoader.Load(Path.Combine(TestPaths.RepoRoot, "scenarios", "daughter.json"));
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_UsesMakeModelSlugZipRadiusYearAndMileage()
+    public void CarsCom_BuildSearchUrls_UsesMakeModelSlugZipRadiusYearAndMileage()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl(Query("Toyota", "Corolla"));
+        string url = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Corolla")).Single();
 
         Assert.Equal(
             "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla&zip=32114&maximum_distance=50&year_min=2019&mileage_max=100000",
@@ -24,11 +24,11 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_CorollaHybrid_MatchesOperatorsBrowserUrl()
+    public void CarsCom_BuildSearchUrls_CorollaHybrid_MatchesOperatorsBrowserUrl()
     {
         // The exact facet value Brian's Edge browser built ticking "Corolla Hybrid"
         // (notes/run-session-2026-09-22.md, "Facet URLs from Brian"), minus its sid and sort.
-        string url = WalkSites.CarsCom.BuildSearchUrl(Query("Toyota", "Corolla Hybrid", zip: "32833"));
+        string url = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Corolla Hybrid", zip: "32833")).Single();
 
         Assert.Equal(
             "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla_hybrid&zip=32833&maximum_distance=50&year_min=2019&mileage_max=100000",
@@ -36,67 +36,98 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_CamryHybrid_UnderscoresHybridWord()
+    public void CarsCom_BuildSearchUrls_CamryHybrid_UnderscoresHybridWord()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl(Query("Toyota", "Camry Hybrid"));
+        string url = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Camry Hybrid")).Single();
 
         Assert.Contains("models[]=toyota-camry_hybrid&", url);
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_MultiWordNonHybridModel_UnderscoresEveryWord()
+    public void CarsCom_BuildSearchUrls_MultiWordNonHybridModel_UnderscoresEveryWord()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl(Query("Toyota", "Corolla Cross"));
+        string url = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Corolla Cross")).Single();
 
         Assert.Contains("models[]=toyota-corolla_cross&", url);
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_HyphenatedModel_UnderscoresTheHyphenToo()
+    public void CarsCom_BuildSearchUrls_HyphenatedModel_UnderscoresTheHyphenToo()
     {
         // cars.com's own model-facet JSON carries "honda-cr_v_hybrid"
         // (spike/recorded/cars.com/day1/Honda-Insight-search.html) and, for the same
         // hyphen-collapsing rule, "toyota-c_hr"
         // (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html), not the hyphenated
         // "honda-cr-v_hybrid" a plain space-to-underscore replace would produce.
-        string url = WalkSites.CarsCom.BuildSearchUrl(Query("Honda", "CR-V Hybrid"));
+        string url = WalkSites.CarsCom.BuildSearchUrls(Query("Honda", "CR-V Hybrid")).Single();
 
         Assert.Contains("models[]=honda-cr_v_hybrid&", url);
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_HondaInsight_Unchanged()
+    public void CarsCom_BuildSearchUrls_HondaInsight_Unchanged()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl(Query("Honda", "Insight"));
+        string url = WalkSites.CarsCom.BuildSearchUrls(Query("Honda", "Insight")).Single();
 
         Assert.Contains("models[]=honda-insight&", url);
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_ToyotaPrius_Unchanged()
+    public void CarsCom_BuildSearchUrls_ToyotaPrius_Unchanged()
     {
-        string url = WalkSites.CarsCom.BuildSearchUrl(Query("Toyota", "Prius"));
+        string url = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Prius")).Single();
 
         Assert.Contains("models[]=toyota-prius&", url);
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_HybridOnlyFromModelYear_QueriesBothBaseAndHybridFacets()
+    public void CarsCom_BuildSearchUrls_HybridOnlyFromModelYear_YieldsAHybridSearchThenABaseModelSearch()
     {
         // Toyota's 2025+ Camry is hybrid-only but cars.com never moved those listings into the
-        // "camry_hybrid" bucket (they're still filed under plain "camry"); the operator's own
-        // recorded search.txt for the "toyota-camry" bucket lists Camrys from 2010 through 2024
-        // with zero case-insensitive "hybrid" occurrences. Querying only the hybrid facet for a
-        // HybridOnlyFromModelYear model would silently exclude every post-cutover listing, but
-        // querying only the base facet (the walk's prior behavior) would silently exclude every
-        // pre-cutover Camry Hybrid that cars.com genuinely does file under "camry_hybrid". Since
-        // models[] is a checkbox array, the walk asks for both buckets and leaves
-        // ListingQuery.MatchesExtractedVehicle to accept the base-titled ones at or after the
-        // hybrid year and reject the genuinely-gas ones below it.
-        string url = WalkSites.CarsCom.BuildSearchUrl(Query("Toyota", "Camry Hybrid", hybridOnlyFromModelYear: 2025));
+        // "camry_hybrid" bucket (they're still filed under plain "camry"), so both buckets have to
+        // be searched. cars.com takes one year_min per request, though, so the base model gets its
+        // own search from the hybrid-only year rather than sharing the scenario's 2018 minimum,
+        // which would fill the results with gas Camrys from 2018 through 2024.
+        IReadOnlyList<string> urls = WalkSites.CarsCom.BuildSearchUrls(
+            Query("Toyota", "Camry Hybrid", zip: "32833", hybridOnlyFromModelYear: 2025, yearMin: 2018));
 
-        Assert.Contains("models[]=toyota-camry&", url);
-        Assert.Contains("models[]=toyota-camry_hybrid&", url);
+        Assert.Equal(
+            [
+                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry_hybrid&zip=32833&maximum_distance=50&year_min=2018&mileage_max=100000",
+                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry&zip=32833&maximum_distance=50&year_min=2025&mileage_max=100000",
+            ],
+            urls);
+    }
+
+    [Fact]
+    public void CarsCom_BuildSearchUrls_MinimumYearAfterTheHybridOnlyYear_BaseSearchStartsAtTheMinimum()
+    {
+        IReadOnlyList<string> urls = WalkSites.CarsCom.BuildSearchUrls(
+            Query("Toyota", "Camry Hybrid", hybridOnlyFromModelYear: 2025, yearMin: 2026));
+
+        Assert.Contains("year_min=2026&", urls[1]);
+    }
+
+    [Fact]
+    public void CarsCom_BuildSearchUrls_NoHybridOnlyRule_YieldsExactlyOneSearch()
+    {
+        IReadOnlyList<string> urls = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Corolla Hybrid", zip: "32833"));
+
+        Assert.Equal(
+            ["https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla_hybrid&zip=32833&maximum_distance=50&year_min=2019&mileage_max=100000"],
+            urls);
+    }
+
+    [Fact]
+    public void CarsCom_BuildSearchUrls_ShippedScenarioCamryHybrid_SplitsAtTheHybridOnlyYear()
+    {
+        IReadOnlyList<string> urls = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(Shipped(), "Toyota Camry Hybrid"));
+
+        Assert.Equal(2, urls.Count);
+        Assert.Contains("models[]=toyota-camry_hybrid&", urls[0]);
+        Assert.Contains("year_min=2018&", urls[0]);
+        Assert.Contains("models[]=toyota-camry&", urls[1]);
+        Assert.Contains("year_min=2025&", urls[1]);
     }
 
     [Fact]
@@ -113,9 +144,9 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_NonHybridModel_HasNoFuelTypesFilter()
+    public void Carvana_BuildSearchUrls_NonHybridModel_HasNoFuelTypesFilter()
     {
-        string url = WalkSites.Carvana.BuildSearchUrl(Query("Honda", "Insight"));
+        string url = WalkSites.Carvana.BuildSearchUrls(Query("Honda", "Insight")).Single();
 
         JsonElement filters = DecodeCvnaid(url);
         JsonElement makes = filters.GetProperty("filters").GetProperty("makes");
@@ -126,9 +157,9 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_HybridModel_FiltersByBaseModelAndFuelType()
+    public void Carvana_BuildSearchUrls_HybridModel_FiltersByBaseModelAndFuelType()
     {
-        string url = WalkSites.Carvana.BuildSearchUrl(Query("Toyota", "Corolla Hybrid"));
+        string url = WalkSites.Carvana.BuildSearchUrls(Query("Toyota", "Corolla Hybrid")).Single();
 
         JsonElement filters = DecodeCvnaid(url);
         JsonElement makes = filters.GetProperty("filters").GetProperty("makes");
@@ -138,13 +169,13 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_Prius_MatchesTheOrchestratorsVerifiedUrl()
+    public void Carvana_BuildSearchUrls_Prius_MatchesTheOrchestratorsVerifiedUrl()
     {
         // The whole URL here, route and zip included, is the one the orchestrator loaded over CDP
         // in Brian's Edge and confirmed carvana honored (notes/run-session-2026-09-22.md, "Year
         // and mileage facet URLs, verified by the orchestrator"): the chips read "2019 or newer"
         // and "Under 100,000 miles". The key is the singular "year"; a "years" key is ignored.
-        string url = WalkSites.Carvana.BuildSearchUrl(Query("Toyota", "Prius"));
+        string url = WalkSites.Carvana.BuildSearchUrls(Query("Toyota", "Prius")).Single();
 
         Assert.Equal(
             "https://www.carvana.com/cars/filters?zip=32114&cvnaid=" +
@@ -153,9 +184,9 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_CvnaidIsUnpaddedBase64UrlOfTheFilterJson()
+    public void Carvana_BuildSearchUrls_CvnaidIsUnpaddedBase64UrlOfTheFilterJson()
     {
-        string url = WalkSites.Carvana.BuildSearchUrl(Query("Toyota", "Corolla Hybrid"));
+        string url = WalkSites.Carvana.BuildSearchUrls(Query("Toyota", "Corolla Hybrid")).Single();
 
         string cvnaid = url[(url.IndexOf("cvnaid=", StringComparison.Ordinal) + "cvnaid=".Length)..];
         Assert.DoesNotContain('=', cvnaid);
@@ -167,19 +198,20 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_ReadsYearAndMileageFromTheScenario()
+    public void CarsCom_BuildSearchUrls_ReadsYearAndMileageFromTheScenario()
     {
         Scenario scenario = Shipped();
 
-        string prius = WalkSites.CarsCom.BuildSearchUrl(ListingQuery.For(scenario, "Toyota Prius"));
-        string camry = WalkSites.CarsCom.BuildSearchUrl(ListingQuery.For(scenario, "Toyota Camry Hybrid"));
+        string prius = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Prius")).Single();
+        IReadOnlyList<string> camry = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Camry Hybrid"));
 
         Assert.EndsWith("&year_min=2019&mileage_max=100000", prius);
-        Assert.EndsWith("&year_min=2018&mileage_max=100000", camry);
+        Assert.EndsWith("&year_min=2018&mileage_max=100000", camry[0]);
+        Assert.EndsWith("&year_min=2025&mileage_max=100000", camry[1]);
     }
 
     [Fact]
-    public void CarsCom_BuildSearchUrl_FollowsAChangedScenario()
+    public void CarsCom_BuildSearchUrls_FollowsAChangedScenario()
     {
         Scenario scenario = Shipped() with
         {
@@ -192,20 +224,21 @@ public class WalkSitesTests
             },
         };
 
-        string prius = WalkSites.CarsCom.BuildSearchUrl(ListingQuery.For(scenario, "Toyota Prius"));
-        string camry = WalkSites.CarsCom.BuildSearchUrl(ListingQuery.For(scenario, "Toyota Camry Hybrid"));
+        string prius = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Prius")).Single();
+        IReadOnlyList<string> camry = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Camry Hybrid"));
 
         Assert.EndsWith("&year_min=2021&mileage_max=65000", prius);
-        Assert.EndsWith("&year_min=2020&mileage_max=65000", camry);
+        Assert.EndsWith("&year_min=2020&mileage_max=65000", camry[0]);
+        Assert.EndsWith("&year_min=2025&mileage_max=65000", camry[1]);
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_ReadsYearAndMileageFromTheScenario_IncludingTheHybridOnlyCamry()
+    public void Carvana_BuildSearchUrls_ReadsYearAndMileageFromTheScenario_IncludingTheHybridOnlyCamry()
     {
         Scenario scenario = Shipped();
 
-        JsonElement prius = DecodeCvnaid(WalkSites.Carvana.BuildSearchUrl(ListingQuery.For(scenario, "Toyota Prius"))).GetProperty("filters");
-        JsonElement camry = DecodeCvnaid(WalkSites.Carvana.BuildSearchUrl(ListingQuery.For(scenario, "Toyota Camry Hybrid"))).GetProperty("filters");
+        JsonElement prius = DecodeCvnaid(WalkSites.Carvana.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Prius")).Single()).GetProperty("filters");
+        JsonElement camry = DecodeCvnaid(WalkSites.Carvana.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Camry Hybrid")).Single()).GetProperty("filters");
 
         Assert.Equal(2019, prius.GetProperty("year").GetProperty("min").GetInt32());
         Assert.Equal(100000, prius.GetProperty("mileage").GetProperty("max").GetInt32());
@@ -216,7 +249,7 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_FollowsAChangedScenario()
+    public void Carvana_BuildSearchUrls_FollowsAChangedScenario()
     {
         Scenario scenario = Shipped() with
         {
@@ -229,20 +262,20 @@ public class WalkSitesTests
             },
         };
 
-        JsonElement filters = DecodeCvnaid(WalkSites.Carvana.BuildSearchUrl(ListingQuery.For(scenario, "Toyota Prius"))).GetProperty("filters");
+        JsonElement filters = DecodeCvnaid(WalkSites.Carvana.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Prius")).Single()).GetProperty("filters");
 
         Assert.Equal(2021, filters.GetProperty("year").GetProperty("min").GetInt32());
         Assert.Equal(65000, filters.GetProperty("mileage").GetProperty("max").GetInt32());
     }
 
     [Fact]
-    public void Carvana_BuildSearchUrl_HybridOnlyFromModelYear_StillFiltersByFuelType()
+    public void Carvana_BuildSearchUrls_HybridOnlyFromModelYear_StillFiltersByFuelType()
     {
         // Unlike cars.com, carvana's fuelTypes filter matches each listing's actual fuel type
         // rather than its title text, so a hybrid-only-from-year model needs no base-model
         // fallback: it already returns those listings under the normal hybrid query.
-        string withFlag = WalkSites.Carvana.BuildSearchUrl(Query("Toyota", "Camry Hybrid", hybridOnlyFromModelYear: 2025));
-        string withoutFlag = WalkSites.Carvana.BuildSearchUrl(Query("Toyota", "Camry Hybrid"));
+        string withFlag = WalkSites.Carvana.BuildSearchUrls(Query("Toyota", "Camry Hybrid", hybridOnlyFromModelYear: 2025)).Single();
+        string withoutFlag = WalkSites.Carvana.BuildSearchUrls(Query("Toyota", "Camry Hybrid")).Single();
 
         Assert.Equal(withoutFlag, withFlag);
     }

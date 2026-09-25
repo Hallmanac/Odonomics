@@ -166,23 +166,27 @@ public static class WalkCommand
         ListingQuery query = ListingQuery.For(scenario, makeModel);
         var recorder = new WalkRecorder(dataDirectory, site.Name, model, currentRun.StartedAt);
 
-        string searchUrl = site.BuildSearchUrl(query);
-        AnsiConsole.MarkupLineInterpolated($"opening search page for {make} {model} on {site.Name}");
-        await page.GotoAsync(searchUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await CdpConnection.HandleChallengeIfPresentAsync(page, cancellationToken);
+        IReadOnlyList<string> searchUrls = site.BuildSearchUrls(query);
 
-        await ScrollInStepsAsync(page, pacing, cancellationToken);
-        TimeSpan dwell = pacing.RandomDwell();
-        AnsiConsole.MarkupLineInterpolated($"dwelling {dwell.TotalSeconds:0}s on the search page");
-        await Task.Delay(dwell, cancellationToken);
+        async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
+        {
+            AnsiConsole.MarkupLineInterpolated($"opening search page for {make} {model} on {site.Name}");
+            await page.GotoAsync(searchUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await CdpConnection.HandleChallengeIfPresentAsync(page, ct);
 
-        string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
-        await recorder.WriteAsync("search.txt", searchBodyText, cancellationToken);
+            await ScrollInStepsAsync(page, pacing, ct);
+            TimeSpan dwell = pacing.RandomDwell();
+            AnsiConsole.MarkupLineInterpolated($"dwelling {dwell.TotalSeconds:0}s on the search page");
+            await Task.Delay(dwell, ct);
 
-        string[][] anchors = await page.EvaluateAsync<string[][]>("() => Array.from(document.querySelectorAll('a')).map(a => [a.href, a.innerText || ''])");
-        int linkPoolSize = maxDetailPages * site.DetailLinkOverfetchMultiplier;
-        IReadOnlyList<string> candidateLinks = site.CollectDetailLinks([.. anchors.Select(a => new PageLink(a[0], a[1]))], linkPoolSize);
-        AnsiConsole.MarkupLineInterpolated($"found {candidateLinks.Count} detail link(s) to consider (cap {maxDetailPages} matching candidate(s))");
+            string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
+            await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchIndex), searchBodyText, ct);
+
+            string[][] anchors = await page.EvaluateAsync<string[][]>("() => Array.from(document.querySelectorAll('a')).map(a => [a.href, a.innerText || ''])");
+            IReadOnlyList<string> links = site.CollectDetailLinks([.. anchors.Select(a => new PageLink(a[0], a[1]))], linkPoolSize);
+            AnsiConsole.MarkupLineInterpolated($"found {links.Count} detail link(s) to consider (cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s))");
+            return links;
+        }
 
         // Distinct detail links can still resolve to the same VIN within one pair (two dealers
         // cross-listing the same car, or a search page that links one listing twice under
@@ -300,9 +304,11 @@ public static class WalkCommand
             }
         }
 
-        DetailWalkTally tally = await WalkDetailWalk.RunAsync(
-            candidateLinks,
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            site,
+            searchUrls,
             maxDetailPages,
+            CollectLinksAsync,
             VisitLinkAsync,
             ct => Task.Delay(pacing.RandomDetailGap(), ct),
             cancellationToken);

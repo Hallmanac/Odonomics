@@ -12,8 +12,10 @@ namespace Odonomics.Walk;
 /// (the latter now also expected for cars.com's base-model bucket on a hybrid-only-from-year
 /// model, see <see cref="ListingQuery.HybridOnlyFromModelYear"/>) needs a spare
 /// link to replace it with rather than shortening the pair; see README.md's walk section for the
-/// full reasoning. <paramref name="BuildSearchUrl"/> takes the scenario-derived
-/// <see cref="ListingQuery"/> for one model: make, model, zip, radius, whether the scenario marks
+/// full reasoning. <paramref name="BuildSearchUrls"/> takes the scenario-derived
+/// <see cref="ListingQuery"/> for one model and returns the one or more search URLs the walk visits
+/// for it, in order, sharing the per-pair cap (see <see cref="WalkPairSearches"/>); the query carries
+/// make, model, zip, radius, whether the scenario marks
 /// this model's base model as hybrid-only from some year onward (see
 /// <see cref="Odonomics.Domain.Scenario.HybridOnlyFromModelYear"/>), and the minimum model year and
 /// maximum mileage, which both sites take as search facets so the per-pair cap is spent only on
@@ -23,7 +25,7 @@ namespace Odonomics.Walk;
 /// name or none at all.</summary>
 public sealed record WalkSite(
     string Name,
-    Func<ListingQuery, string> BuildSearchUrl,
+    Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
     Regex DetailUrlPattern,
     int DetailLinkOverfetchMultiplier = 1,
     string? FallbackDealerName = null,
@@ -112,16 +114,26 @@ public readonly record struct ResolvedDealer(string? Name, string? Location, boo
 /// own recorded run confirms it: the base-model query's search.txt, under the walk data
 /// directory outside this repo at
 /// "walks/cars.com/20260922-184927/camry-hybrid/search.txt", lists gas-titled Camrys with zero
-/// case-insensitive "hybrid" occurrences). For a model with that rule set, cars.com's search URL
-/// below queries both the hybrid facet and the base-model facet: models[] is a checkbox array
-/// cars.com's own URL shape accepts more than one value on, so the hybrid facet still reaches the
-/// pre-cutover model years actually filed there while the added base-model facet reaches the
+/// case-insensitive "hybrid" occurrences). For a model with that rule set, cars.com's builder
+/// below returns two searches, the hybrid facet and the base-model facet: the hybrid facet reaches
+/// the pre-cutover model years actually filed there while the base-model facet reaches the
 /// post-cutover years cars.com never moved into the hybrid bucket. ListingQuery.MatchesExtractedVehicle
 /// is what then accepts a base-titled candidate at or after the hybrid-only year and rejects a
 /// genuinely-gas one below it. Carvana needs no equivalent second query: its fuelTypes filter
 /// matches each listing's actual fuel type, not its title text, so a hybrid-only-from-year
 /// model's newer listings already come back correctly under the base-model query it always
-/// uses.</summary>
+/// uses.
+///
+/// <para>Those two facets cannot share one search URL, though. cars.com takes a single year_min
+/// for the whole request, so one URL carrying both facets has to use the scenario's minimum year
+/// (2018 for the Camry Hybrid) for the base model too, and every gas Camry from 2018 through
+/// the hybrid-only year comes back, crowds the results, and is then rejected by
+/// ListingQuery.MatchesExtractedVehicle after the per-pair cap has been spent on it (walk run 4
+/// saw 14 of 24 drops be exactly that, with the real hybrid titles sitting at positions 24 and 25
+/// of 35). So for a hybrid-only-from-year model the cars.com builder returns two URLs: the hybrid
+/// facet from the scenario's minimum year, then the base-model facet from
+/// <see cref="ListingQuery.HybridOnlyFromModelYear"/> itself (or the scenario's minimum year if
+/// that is later), so it can only return the years that are actually hybrid. Each gets its own share of the cap.</para></summary>
 public static class WalkSites
 {
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");
@@ -168,12 +180,17 @@ public static class WalkSites
         {
             string makeSlug = Slugify(query.Make);
             string hybridModelSlug = $"{makeSlug}-{ModelFacetWords(query.Model)}";
-            string modelsQuery = query.HybridOnlyFromModelYear.HasValue
-                ? $"models[]={makeSlug}-{ModelFacetWords(BaseModelName(query.Model))}&models[]={hybridModelSlug}"
-                : $"models[]={hybridModelSlug}";
-            return $"https://www.cars.com/shopping/results/?stock_type=used&makes[]={makeSlug}" +
-                   $"&{modelsQuery}&zip={query.Zip}&maximum_distance={query.RadiusMiles}" +
-                   $"&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+            string SearchUrl(string modelSlug, int yearMin) =>
+                $"https://www.cars.com/shopping/results/?stock_type=used&makes[]={makeSlug}" +
+                $"&models[]={modelSlug}&zip={query.Zip}&maximum_distance={query.RadiusMiles}" +
+                $"&year_min={yearMin}&mileage_max={query.MaxMileage}";
+
+            return query.HybridOnlyFromModelYear is int hybridOnlyYear
+                ? [
+                    SearchUrl(hybridModelSlug, query.YearMin),
+                    SearchUrl($"{makeSlug}-{ModelFacetWords(BaseModelName(query.Model))}", Math.Max(hybridOnlyYear, query.YearMin)),
+                ]
+                : [SearchUrl(hybridModelSlug, query.YearMin)];
         },
         new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2,
@@ -195,7 +212,7 @@ public static class WalkSites
             object filters = IsHybridVariant(query.Model)
                 ? new { filters = new { makes, fuelTypes = new[] { "Hybrid" }, year, mileage } }
                 : new { filters = new { makes, year, mileage } };
-            return $"https://www.carvana.com/cars/filters?zip={query.Zip}&cvnaid={EncodeCvnaid(JsonSerializer.Serialize(filters))}";
+            return [$"https://www.carvana.com/cars/filters?zip={query.Zip}&cvnaid={EncodeCvnaid(JsonSerializer.Serialize(filters))}"];
         },
         new Regex("/vehicle/", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2,
