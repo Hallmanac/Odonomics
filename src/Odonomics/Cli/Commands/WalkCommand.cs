@@ -14,7 +14,7 @@ namespace Odonomics.Cli.Commands;
 
 /// <summary>
 /// The assisted browser walk: connects over CDP to a browser the operator already launched by
-/// hand, never launches one itself. With no site argument it walks cars.com and then carvana; a
+/// hand, never launches one itself. With no site argument it walks cars.com, then carvana, then autotrader; a
 /// site argument narrows it to that one site. With no --model it walks every model in the
 /// scenario's allowed list, in order, on whichever site(s) it's covering; --model narrows it to
 /// that one model exactly, on whichever site(s) it's covering. --max caps matching detail pages
@@ -38,14 +38,14 @@ public static class WalkCommand
         List<WalkSite> sites;
         if (siteName is null)
         {
-            sites = [WalkSites.CarsCom, WalkSites.Carvana];
+            sites = [WalkSites.CarsCom, WalkSites.Carvana, WalkSites.Autotrader];
         }
         else
         {
             WalkSite? site = WalkSites.Find(siteName);
             if (site is null)
             {
-                AnsiConsole.MarkupLineInterpolated($"[red]unknown walk target \"{siteName}\"; expected cars.com or carvana[/]");
+                AnsiConsole.MarkupLineInterpolated($"[red]unknown walk target \"{siteName}\"; expected cars.com, carvana, or autotrader[/]");
                 return 1;
             }
 
@@ -173,7 +173,7 @@ public static class WalkCommand
         // each one lands in its own search.txt / search-2.txt / ... and none overwrites another.
         int searchPagesRecorded = 0;
 
-        async Task<IReadOnlyList<PageLink>> LoadSearchPageAsync(string pageUrl, string searchLabel, int pageNumber, CancellationToken ct)
+        async Task<SearchPageContent> LoadSearchPageAsync(string pageUrl, string searchLabel, int pageNumber, CancellationToken ct)
         {
             string pageLabel = pageNumber > 1 ? $"{searchLabel}, page {pageNumber}" : searchLabel;
             AnsiConsole.MarkupLineInterpolated($"opening {pageLabel} for {make} {model} on {site.Name}");
@@ -189,7 +189,7 @@ public static class WalkCommand
             await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchPagesRecorded++), searchBodyText, ct);
 
             string[][] anchors = await page.EvaluateAsync<string[][]>("() => Array.from(document.querySelectorAll('a')).map(a => [a.href, a.innerText || ''])");
-            return [.. anchors.Select(a => new PageLink(a[0], a[1]))];
+            return new SearchPageContent([.. anchors.Select(a => new PageLink(a[0], a[1]))], searchBodyText);
         }
 
         async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
@@ -271,7 +271,7 @@ public static class WalkCommand
                     return DetailPageOutcome.MissingFields;
                 }
 
-                ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation);
+                ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
                 var candidate = new ListingCandidate
                 {
                     Vin = outcome.Result.Vin,
@@ -347,18 +347,18 @@ public static class WalkCommand
 
     // Column widths are chosen so that, added to Border.Minimal's per-column padding and
     // separators (3 chars per column plus 1 for the table's own edges), the table never needs
-    // more than 80 columns: 8 + 22 + 5 + 5 + 15 + 6 + (3 * 6 + 1) = 80. Site and Model are also
+    // more than 80 columns: 10 + 22 + 5 + 5 + 13 + 6 + (3 * 6 + 1) = 80. Site and Model are also
     // truncated to their column's width before they reach the table, since Spectre wraps a cell
     // that overflows its declared width onto a second line rather than cropping it, which would
     // split one pair's row across two lines of the table. Dropped is the one column that's
-    // allowed to wrap: its own reason breakdown can run longer than 15 columns, and none of the
+    // allowed to wrap: its own reason breakdown can run longer than 13 columns, and none of the
     // reason words themselves are wider than that, so Spectre folds it onto a continuation line
     // under the same row at a space rather than mid-word.
-    private const int SiteColumnWidth = 8;
+    private const int SiteColumnWidth = 10;
     private const int ModelColumnWidth = 22;
     private const int PagesColumnWidth = 5;
     private const int SavedColumnWidth = 5;
-    private const int DroppedColumnWidth = 15;
+    private const int DroppedColumnWidth = 13;
     private const int StatusColumnWidth = 6;
 
     /// <summary>Builds the end-of-run table without writing it, so a rendering test can capture

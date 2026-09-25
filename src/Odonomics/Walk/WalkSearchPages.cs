@@ -15,7 +15,7 @@ public static class WalkSearchPages
     /// <summary>The candidate links for <paramref name="searchUrl"/>, in page order, one per
     /// canonical URL and at most <paramref name="poolSize"/>. <paramref name="loadPageAsync"/> is
     /// given a page's URL and its 1-based number, and does everything a person would on that page
-    /// (open it, scroll, dwell, record it) before returning its anchors, so the pacing between
+    /// (open it, scroll, dwell, record it) before returning its anchors and text, so the pacing between
     /// pages is the pacing between any two page loads. When a page after the first throws (other than
     /// because <paramref name="cancellationToken"/> was cancelled), <paramref name="onLaterPageFailed"/>
     /// is told its number and the exception and the pool built so far is returned; a failure on the
@@ -24,7 +24,7 @@ public static class WalkSearchPages
         WalkSite site,
         string searchUrl,
         int poolSize,
-        Func<string, int, CancellationToken, Task<IReadOnlyList<PageLink>>> loadPageAsync,
+        Func<string, int, CancellationToken, Task<SearchPageContent>> loadPageAsync,
         Action<int, Exception> onLaterPageFailed,
         CancellationToken cancellationToken)
     {
@@ -37,10 +37,10 @@ public static class WalkSearchPages
             string pageUrl = pageNumber > 1 && pageUrlFor is not null
                 ? pageUrlFor(searchUrl, pageNumber)
                 : searchUrl;
-            IReadOnlyList<PageLink> anchors;
+            SearchPageContent content;
             try
             {
-                anchors = await loadPageAsync(pageUrl, pageNumber, cancellationToken);
+                content = await loadPageAsync(pageUrl, pageNumber, cancellationToken);
             }
             catch (Exception ex) when (pageNumber > 1 && !cancellationToken.IsCancellationRequested)
             {
@@ -49,7 +49,7 @@ public static class WalkSearchPages
             }
 
             int added = 0;
-            foreach (string link in site.CollectDetailLinks(anchors, int.MaxValue))
+            foreach (string link in site.CollectDetailLinks(content.Links, int.MaxValue, content.Text))
             {
                 if (canonicalUrls.Add(WalkSites.CanonicalDetailUrl(link)))
                 {

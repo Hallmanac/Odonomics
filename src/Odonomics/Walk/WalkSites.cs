@@ -129,6 +129,10 @@ public sealed record WalkSite(
 /// cars.com card link is the card's title ("Used 2024 Toyota Corolla LE").</summary>
 public readonly record struct PageLink(string Href, string Text);
 
+/// <summary>One loaded search page: its anchors, and its visible text for a site that states its
+/// match count there (see <see cref="WalkSite.MatchCountPattern"/>).</summary>
+public readonly record struct SearchPageContent(IReadOnlyList<PageLink> Links, string? Text = null);
+
 /// <summary>The dealer name and location a walked candidate is stored with, and whether the name is
 /// the site's fallback rather than one the page gave.</summary>
 public readonly record struct ResolvedDealer(string? Name, string? Location, bool IsFallback);

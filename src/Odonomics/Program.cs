@@ -17,7 +17,7 @@ searchCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(searchCommand);
 
-var walkSiteArgument = new Argument<string?>("site") { Description = "cars.com or carvana; omit to walk both", Arity = ArgumentArity.ZeroOrOne };
+var walkSiteArgument = new Argument<string?>("site") { Description = "cars.com, carvana, or autotrader; omit to walk all three", Arity = ArgumentArity.ZeroOrOne };
 var walkModelOption = new Option<string?>("--model") { Description = "which target model to visit this run (\"Make Model\"); defaults to every model in the scenario's allowed list" };
 var walkMaxOption = WalkCommand.CreateMaxOption();
 var walkCommand = new Command("walk", "an operator-assisted walk, connected over CDP to a browser you already launched, of every site and model in the scenario (or a narrower slice via the site argument and --model)");
