@@ -1,23 +1,44 @@
+using Odonomics.Domain;
 using Odonomics.Ledger;
 
 namespace Odonomics.Tests.Ledger;
 
 public class LedgerDiffServiceTests
 {
-    private static ListingCandidate Candidate(string vin, decimal price, string url, string source = "auto.dev", string model = "Prius") => new()
+    private static ListingCandidate Candidate(string vin, decimal price, string url, string source = "auto.dev", string model = "Prius", string make = "Toyota", int year = 2020, int mileage = 40000) => new()
     {
         Vin = vin,
         Source = source,
         Url = url,
-        Year = 2020,
-        Make = "Toyota",
+        Year = year,
+        Make = make,
         Model = model,
         Trim = "LE",
         Price = price,
-        Mileage = 40000,
+        Mileage = mileage,
     };
 
-    private static RunEntity Run(DateTimeOffset startedAt, string sources = "auto.dev:Prius") => new() { Command = "search", Sources = sources, StartedAt = startedAt };
+    private static Scenario DaughterScenario { get; } = ScenarioLoader.Load(Path.Combine(TestPaths.RepoRoot, "scenarios", "daughter.json"));
+
+    private static RunEntity Run(DateTimeOffset startedAt, string sources = "auto.dev:Prius", string? zip = null, int? radiusMiles = null) =>
+        new() { Command = "search", Sources = sources, StartedAt = startedAt, Zip = zip, RadiusMiles = radiusMiles };
+
+    private static async Task<GonePostingEntry> GoneAfterTwoRunsAsync(ListingCandidate candidate, RunEntity run1, RunEntity run2, Scenario scenario)
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(candidate, run1, CancellationToken.None);
+
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, scenario, CancellationToken.None);
+        return Assert.Single(diff.Gone);
+    }
 
     [Fact]
     public async Task ComputeAsync_FirstRunEver_EverythingIsNewAndNothingIsGone()
@@ -32,7 +53,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a"), run1, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run1, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run1, DaughterScenario, CancellationToken.None);
 
         Assert.Single(diff.New);
         Assert.Empty(diff.PriceDrops);
@@ -57,7 +78,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://cars.com/a"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.New);
         PriceDropEntry drop = Assert.Single(diff.PriceDrops);
@@ -84,7 +105,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.PriceDrops);
     }
@@ -106,14 +127,14 @@ public class LedgerDiffServiceTests
         db.Runs.Add(run2);
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://cars.com/a"), run2, CancellationToken.None);
-        await diffService.ComputeAsync(run2, CancellationToken.None);
+        await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         RunEntity run3 = Run(new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero));
         db.Runs.Add(run3);
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://cars.com/a"), run3, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run3, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run3, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.PriceDrops);
         Assert.Empty(diff.Gone);
@@ -138,7 +159,7 @@ public class LedgerDiffServiceTests
         db.Runs.Add(run2);
         await db.SaveChangesAsync(CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         GonePostingEntry gone = Assert.Single(diff.Gone);
         Assert.Equal("1HGCM82633A004352", gone.Vin);
@@ -164,7 +185,7 @@ public class LedgerDiffServiceTests
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a"), run2, CancellationToken.None);
         await upsert.UpsertAsync(Candidate("2T1BURHE0JC014908", 15000m, "https://carvana.com/z", "carvana"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         NewPostingEntry added = Assert.Single(diff.New);
         Assert.Equal("2T1BURHE0JC014908", added.Vin);
@@ -193,7 +214,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("3VWFE21C04M000000", 12000m, "https://cars.com/b", "cars.com"), walkRun, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(walkRun, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(walkRun, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.Gone);
     }
@@ -219,7 +240,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/prius-a", "cars.com", "Prius"), priusWalk, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(priusWalk, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(priusWalk, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.Gone);
     }
@@ -246,7 +267,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/b", "cars.com"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.Gone);
         Assert.Empty(diff.New);
@@ -282,7 +303,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, canonicalUrl, "cars.com"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.New);
         Assert.Empty(diff.Gone);
@@ -316,7 +337,7 @@ public class LedgerDiffServiceTests
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/b", "cars.com"), run2, CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://carvana.com/b", "carvana.com"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Equal(2, diff.Moved.Count);
         Assert.Contains(diff.Moved, e => e.Source == "cars.com" && e.OldUrl == "https://cars.com/a" && e.NewUrl == "https://cars.com/b");
@@ -346,7 +367,7 @@ public class LedgerDiffServiceTests
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://cars.com/b", "cars.com"), run2, CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 16000m, "https://carvana.com/b", "carvana.com"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Equal(2, diff.PriceDrops.Count);
         Assert.Contains(diff.PriceDrops, e => e.Source == "cars.com" && e.PreviousPrice == 18000m && e.CurrentPrice == 17000m);
@@ -380,7 +401,7 @@ public class LedgerDiffServiceTests
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://autodev.com/a"), run2, CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 16000m, "https://marketcheck.com/a", "marketcheck"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Equal(2, diff.PriceDrops.Count);
         Assert.Contains(diff.PriceDrops, e => e.Source == "auto.dev" && e.PreviousPrice == 18000m && e.CurrentPrice == 17000m);
@@ -421,7 +442,7 @@ public class LedgerDiffServiceTests
         // /c: a brand-new URL, relist path against stale /b, price drops 19000 -> 17000.
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://cars.com/c", "cars.com"), run3, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run3, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run3, DaughterScenario, CancellationToken.None);
 
         PriceDropEntry drop = Assert.Single(diff.PriceDrops);
         Assert.Equal("cars.com", drop.Source);
@@ -447,7 +468,7 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17000m, "https://cars.com/b", "cars.com"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.New);
         Assert.Empty(diff.Moved);
@@ -482,7 +503,7 @@ public class LedgerDiffServiceTests
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://autodev.com/a"), run2, CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         NewPostingEntry entry = Assert.Single(diff.New);
         Assert.Equal("1HGCM82633A004352", entry.Vin);
@@ -517,7 +538,7 @@ public class LedgerDiffServiceTests
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run2, CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://carvana.com/a", "carvana.com"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Equal(2, diff.New.Count);
         Assert.Contains(diff.New, e => e.Source == "cars.com" && e.Url == "https://cars.com/a");
@@ -541,7 +562,7 @@ public class LedgerDiffServiceTests
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/b", "cars.com"), run1, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run1, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run1, DaughterScenario, CancellationToken.None);
 
         NewPostingEntry added = Assert.Single(diff.New);
         Assert.Equal("1HGCM82633A004352", added.Vin);
@@ -565,7 +586,7 @@ public class LedgerDiffServiceTests
         db.Runs.Add(run2);
         await db.SaveChangesAsync(CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         GonePostingEntry gone = Assert.Single(diff.Gone);
         Assert.Equal("1HGCM82633A004352", gone.Vin);
@@ -598,11 +619,159 @@ public class LedgerDiffServiceTests
         await db.SaveChangesAsync(CancellationToken.None);
         await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, canonicalUrl, "cars.com"), run2, CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, CancellationToken.None);
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
         Assert.Empty(diff.New);
         Assert.Empty(diff.Moved);
         Assert.Empty(diff.PriceDrops);
         Assert.Empty(diff.Gone);
+    }
+
+    private static readonly DateTimeOffset FirstRunAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset SecondRunAt = new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task ComputeAsync_GoneVehicleBelowTheModelsMinimumYear_IsGoneForBelowYearFacet()
+    {
+        // The 2010 Insight from walk run 4: the scenario's Insight minimum is 2019.
+        ListingCandidate insight = Candidate("JHMZE2H79AS041642", 9000m, "https://cars.com/insight", "cars.com", "Insight", "Honda", year: 2010);
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            insight,
+            Run(FirstRunAt, "cars.com:Insight", "32833", 50),
+            Run(SecondRunAt, "cars.com:Insight", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.BelowYearFacet, gone.Reason);
+        Assert.Equal("below year facet", gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_GoneVehicleUsesTheModelsOwnMinimumYear()
+    {
+        // The scenario allows a 2018 Camry Hybrid, so a 2018 is inside the year facet.
+        ListingCandidate camry = Candidate("4T1B11HK5JU000001", 17000m, "https://cars.com/camry", "cars.com", "Camry Hybrid", "Toyota", year: 2018);
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            camry,
+            Run(FirstRunAt, "cars.com:Camry Hybrid", "32833", 50),
+            Run(SecondRunAt, "cars.com:Camry Hybrid", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_GoneVehicleOverTheMileageLimit_IsGoneForOverMileage()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000001", 9000m, "https://cars.com/prius", "cars.com", mileage: DaughterScenario.Filters.MaxMileage + 1);
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, "cars.com:Prius", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.OverMileage, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_ZipMovedSinceTheRunThatLastSawTheVehicle_IsGoneForSearchMoved()
+    {
+        // The Daytona-area Camry from walk run 4 fell outside the radius when the zip moved.
+        ListingCandidate camry = Candidate("4T1DAACK9TU267793", 24000m, "https://cars.com/daytona", "cars.com", "Camry Hybrid", "Toyota", year: 2026);
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            camry,
+            Run(FirstRunAt, "cars.com:Camry Hybrid", "32114", 50),
+            Run(SecondRunAt, "cars.com:Camry Hybrid", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.SearchMoved, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_RadiusChangedSinceTheRunThatLastSawTheVehicle_IsGoneForSearchMoved()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000002", 15000m, "https://cars.com/prius", "cars.com");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 100),
+            Run(SecondRunAt, "cars.com:Prius", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.SearchMoved, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_SameZipAndRadiusAsTheRunThatLastSawTheVehicle_IsGoneForNotOnSearchPage()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000003", 15000m, "https://cars.com/prius", "cars.com");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, "cars.com:Prius", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
+        Assert.Equal("not on search page", gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PriorRunRecordedNoZipOrRadius_NeverYieldsSearchMoved()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000004", 15000m, "https://cars.com/prius", "cars.com");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius"),
+            Run(SecondRunAt, "cars.com:Prius", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_VehicleBelowTheYearFacetAfterTheSearchMoved_IsStillGoneForBelowYearFacet()
+    {
+        ListingCandidate insight = Candidate("JHMZE2H79AS041643", 9000m, "https://cars.com/insight", "cars.com", "Insight", "Honda", year: 2010);
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            insight,
+            Run(FirstRunAt, "cars.com:Insight", "32114", 50),
+            Run(SecondRunAt, "cars.com:Insight", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.BelowYearFacet, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_VehicleOverMileageAndBelowTheYearFacet_ReportsTheYearFacetFirst()
+    {
+        ListingCandidate insight = Candidate("JHMZE2H79AS041644", 4000m, "https://cars.com/insight", "cars.com", "Insight", "Honda", year: 2010, mileage: 150000);
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            insight,
+            Run(FirstRunAt, "cars.com:Insight", "32833", 50),
+            Run(SecondRunAt, "cars.com:Insight", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.BelowYearFacet, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_VehicleOverMileageAfterTheSearchMoved_IsStillGoneForOverMileage()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000005", 4000m, "https://cars.com/prius", "cars.com", mileage: 150000);
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32114", 50),
+            Run(SecondRunAt, "cars.com:Prius", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.OverMileage, gone.Reason);
     }
 }

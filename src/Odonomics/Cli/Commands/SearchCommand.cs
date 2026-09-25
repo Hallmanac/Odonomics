@@ -17,7 +17,7 @@ public static class SearchCommand
 
         using OdonomicsDbContext db = LedgerFactory.Open();
 
-        var currentRun = new RunEntity { Command = "search", Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        var currentRun = new RunEntity { Command = "search", Sources = "", StartedAt = DateTimeOffset.UtcNow, Zip = scenario.Zip, RadiusMiles = scenario.RadiusMiles };
         db.Runs.Add(currentRun);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -57,7 +57,7 @@ public static class SearchCommand
         AnsiConsole.MarkupLineInterpolated($"upserted {upserted} candidate sighting(s) from this run");
 
         var diffService = new LedgerDiffService(db);
-        SearchDiff diff = await diffService.ComputeAsync(currentRun, cancellationToken);
+        SearchDiff diff = await diffService.ComputeAsync(currentRun, scenario, cancellationToken);
         DiffRenderer.Render(diff);
 
         return 0;

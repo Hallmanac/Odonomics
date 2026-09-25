@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Odonomics.Domain;
 
 namespace Odonomics.Ledger;
 
@@ -8,7 +9,17 @@ public sealed record MovedPostingEntry(string Vin, int Year, string Make, string
 
 public sealed record PriceDropEntry(string Vin, int Year, string Make, string Model, string Source, string Url, decimal PreviousPrice, decimal CurrentPrice);
 
-public sealed record GonePostingEntry(string Vin, int Year, string Make, string Model, string Source, string Url, decimal LastKnownPrice);
+public sealed record GonePostingEntry(string Vin, int Year, string Make, string Model, string Source, string Url, decimal LastKnownPrice, string Reason);
+
+/// <summary>The short reason a "gone" posting is reported, so a reader can tell a car that left the
+/// market from one this run no longer looks for.</summary>
+public static class GoneReasons
+{
+    public const string BelowYearFacet = "below year facet";
+    public const string OverMileage = "over mileage";
+    public const string SearchMoved = "search moved";
+    public const string NotOnSearchPage = "not on search page";
+}
 
 public sealed record SearchDiff(
     IReadOnlyList<NewPostingEntry> New,
@@ -36,11 +47,17 @@ public sealed record SearchDiff(
 /// and model (via <see cref="RunEntity.Sources"/>, one "source:model" token per pair the run
 /// actually covered) keeps a search from reporting a walk's postings gone and vice versa, and
 /// keeps a run that only covered one model from marking every other model on that same source as
-/// checked too.
+/// checked too. Every "gone" entry carries a reason, checked in order: the vehicle's year is below
+/// the scenario's minimum for its model, its mileage is over the scenario's maximum, the run that
+/// last saw it searched a different zip or radius than this one, or otherwise it simply is not on
+/// the search page any more. The first three are cars the search no longer asks for; only the last
+/// is a car that has likely left the market. "Search moved" compares the zip and radius each run
+/// recorded (see <see cref="RunEntity.Zip"/>), so a run recorded before the ledger kept them never
+/// yields it.
 /// </summary>
 public sealed class LedgerDiffService(OdonomicsDbContext db)
 {
-    public async Task<SearchDiff> ComputeAsync(RunEntity currentRun, CancellationToken cancellationToken)
+    public async Task<SearchDiff> ComputeAsync(RunEntity currentRun, Scenario scenario, CancellationToken cancellationToken)
     {
         List<PostingEntity> touchedThisRun = await db.Postings
             .Include(p => p.Vehicle)
@@ -193,10 +210,33 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                 }
 
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
-                gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice));
+                RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == previousCoverage);
+                gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(vehicle, lastSeenRun, currentRun, scenario)));
             }
         }
 
         return new SearchDiff(newEntries, moved, priceDrops, gone);
     }
+
+    private static string GoneReason(VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario)
+    {
+        if (vehicle.Year < scenario.Filters.MinYearFor($"{vehicle.Make} {vehicle.Model}"))
+        {
+            return GoneReasons.BelowYearFacet;
+        }
+
+        if (vehicle.Mileage > scenario.Filters.MaxMileage)
+        {
+            return GoneReasons.OverMileage;
+        }
+
+        return SearchAreaChanged(lastSeenRun, currentRun)
+            ? GoneReasons.SearchMoved
+            : GoneReasons.NotOnSearchPage;
+    }
+
+    private static bool SearchAreaChanged(RunEntity? lastSeenRun, RunEntity currentRun) =>
+        lastSeenRun is not null
+        && ((lastSeenRun.Zip is not null && lastSeenRun.Zip != currentRun.Zip)
+            || (lastSeenRun.RadiusMiles is not null && lastSeenRun.RadiusMiles != currentRun.RadiusMiles));
 }

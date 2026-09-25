@@ -83,7 +83,7 @@ public static class WalkCommand
         ExtractionClient extraction = ExtractionClient.FromAppDirectory(secrets.AnthropicApiKey, http);
 
         using OdonomicsDbContext db = LedgerFactory.Open();
-        var currentRun = new RunEntity { Command = BuildCommandLabel(siteName, modelOverride), Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        var currentRun = new RunEntity { Command = BuildCommandLabel(siteName, modelOverride), Sources = "", StartedAt = DateTimeOffset.UtcNow, Zip = scenario.Zip, RadiusMiles = scenario.RadiusMiles };
         db.Runs.Add(currentRun);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -115,7 +115,7 @@ public static class WalkCommand
         RenderSummary(summaries);
 
         var diffService = new LedgerDiffService(db);
-        SearchDiff diff = await diffService.ComputeAsync(currentRun, cancellationToken);
+        SearchDiff diff = await diffService.ComputeAsync(currentRun, scenario, cancellationToken);
         DiffRenderer.Render(diff);
 
         return summaries.Any(s => s.Completed) ? 0 : 1;
