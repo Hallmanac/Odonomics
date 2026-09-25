@@ -14,7 +14,9 @@ public static class BudgetCommand
 
     /// <summary>Prints the running-cost block and the max-price table. The block comes first so a
     /// reader sees how much of each target is already spoken for before the price it leaves. Both
-    /// take their figures from <see cref="BudgetSolver"/>, so neither can drift from the solver.</summary>
+    /// take their figures from <see cref="BudgetSolver"/>, so neither can drift from the solver. A
+    /// closing line says the max price counts a listing's shipping fee, since `odo rank` prices a
+    /// vehicle at its asking price plus that fee and the two commands must agree on what a price is.</summary>
     public static void Render(IAnsiConsole console, Scenario scenario)
     {
         decimal insuranceMonthly = scenario.AverageKnownInsuranceMonthly();
@@ -41,5 +43,6 @@ public static class BudgetCommand
         }
 
         console.Write(table);
+        console.MarkupLine("Max purchase price is the asking price plus any shipping fee (Carvana lists one per car), so a car with a shipping fee needs an asking price that much lower.");
     }
 }

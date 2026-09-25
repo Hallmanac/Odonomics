@@ -107,6 +107,14 @@ public class BudgetCommandRenderingTests
         Assert.Equal("$89", RowCells(pricierLines, "$400")[1]);
     }
 
+    [Fact]
+    public void Render_ClosingLine_SaysTheMaxPurchasePriceCountsAShippingFee()
+    {
+        string prose = JoinTrimmed(SplitLines(RenderWithNoColor(BuildScenario())));
+
+        Assert.Contains("Max purchase price is the asking price plus any shipping fee", prose);
+    }
+
     private static string JoinTrimmed(IEnumerable<string> lines) => string.Join(' ', lines.Select(line => line.Trim()));
 
     private static string RenderWithNoColor(Scenario scenario)
