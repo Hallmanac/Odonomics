@@ -8,7 +8,9 @@ namespace Odonomics.Walk;
 /// come from the same <see cref="DroppedBreakdown"/>. Every non-zero reason is always named, in
 /// the fixed order <see cref="DroppedReasonOrder"/> gives: the table's own column wraps a long
 /// breakdown onto a continuation line under the same row rather than ever falling back to a bare
-/// count, since a bare count with no reason is exactly the gap this class exists to close.
+/// count, since a bare count with no reason is exactly the gap this class exists to close. The
+/// per-pair line itself never wraps mid-parenthetical: when it would exceed the console width the
+/// whole breakdown moves to an indented continuation line instead.
 /// </summary>
 public static class WalkPairSummaryLine
 {
@@ -23,10 +25,32 @@ public static class WalkPairSummaryLine
         DetailPageOutcome.ExtractionFailed,
     ];
 
-    public static string Format(string site, string make, string model, int pages, int saved, DroppedBreakdown dropped)
+    private const string ContinuationIndent = "    ";
+
+    /// <summary>The per-pair line printed right after its walk. When the whole line would be wider
+    /// than <paramref name="width"/> (the console width; unbounded by default), the tally stays on
+    /// the first line and the parenthesized reason breakdown moves, intact, to a second line
+    /// indented by four spaces, so the console never breaks it mid-parenthetical.</summary>
+    public static string Format(
+        string site,
+        string make,
+        string model,
+        int pages,
+        int saved,
+        DroppedBreakdown dropped,
+        int width = int.MaxValue)
     {
         string prefix = $"{site} / {make} {model}: {pages} pages, {saved} saved, {dropped.Total} dropped";
-        return WithDroppedSuffix(prefix, dropped);
+        string cell = DroppedCell(dropped);
+        if (cell.Length == 0)
+        {
+            return prefix;
+        }
+
+        string breakdown = $"({cell})";
+        return prefix.Length + 1 + breakdown.Length > width
+            ? $"{prefix}\n{ContinuationIndent}{breakdown}"
+            : $"{prefix} {breakdown}";
     }
 
     /// <summary>The "N dropped" figure for the end-of-run table's "Dropped" column, with the full

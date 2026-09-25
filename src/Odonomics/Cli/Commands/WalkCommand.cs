@@ -307,7 +307,7 @@ public static class WalkCommand
             ct => Task.Delay(pacing.RandomDetailGap(), ct),
             cancellationToken);
 
-        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, tally.Upserted, tally.Dropped)}");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width)}");
 
         return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped);
     }
