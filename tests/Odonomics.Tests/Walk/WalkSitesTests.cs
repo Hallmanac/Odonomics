@@ -330,6 +330,7 @@ public class WalkSitesTests
     [Theory]
     [InlineData("cars.com")]
     [InlineData("carvana")]
+    [InlineData("autotrader")]
     [InlineData("CARS.COM")]
     public void Find_KnownSite_ReturnsIt(string name)
     {
@@ -339,6 +340,6 @@ public class WalkSitesTests
     [Fact]
     public void Find_UnknownSite_ReturnsNull()
     {
-        Assert.Null(WalkSites.Find("autotrader"));
+        Assert.Null(WalkSites.Find("edmunds"));
     }
 }
