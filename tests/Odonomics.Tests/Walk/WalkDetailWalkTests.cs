@@ -109,9 +109,10 @@ public class WalkDetailWalkTests
     [Fact]
     public async Task RunAsync_EveryOutcomeKind_TalliesEachIntoItsOwnDroppedReason()
     {
-        List<string> links = Links(7);
+        List<string> links = Links(8);
         DetailPageOutcome[] outcomes =
         [
+            DetailPageOutcome.NewCar,
             DetailPageOutcome.MissingFields,
             DetailPageOutcome.NoVin,
             DetailPageOutcome.NotMatching,
@@ -123,20 +124,39 @@ public class WalkDetailWalkTests
 
         DetailWalkTally tally = await WalkDetailWalk.RunAsync(
             links,
-            maxDetailPages: 7,
+            maxDetailPages: 8,
             (_, i, _) => Task.FromResult(outcomes[i]),
             _ => Task.CompletedTask,
             CancellationToken.None);
 
-        Assert.Equal(7, tally.Visited);
+        Assert.Equal(8, tally.Visited);
         Assert.Equal(1, tally.Upserted);
+        Assert.Equal(1, tally.Dropped.NewCar);
         Assert.Equal(1, tally.Dropped.MissingFields);
         Assert.Equal(1, tally.Dropped.NoVin);
         Assert.Equal(1, tally.Dropped.NotMatching);
         Assert.Equal(1, tally.Dropped.Failed);
         Assert.Equal(1, tally.Dropped.ExtractionFailed);
         Assert.Equal(1, tally.Dropped.Repeat);
-        Assert.Equal(6, tally.Dropped.Total);
+        Assert.Equal(7, tally.Dropped.Total);
+        Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
+    }
+
+    [Fact]
+    public async Task RunAsync_NewCarPages_NeverSpendTheCap()
+    {
+        List<string> links = Links(8);
+
+        DetailWalkTally tally = await WalkDetailWalk.RunAsync(
+            links,
+            maxDetailPages: 3,
+            (_, i, _) => Task.FromResult(i < 5 ? DetailPageOutcome.NewCar : DetailPageOutcome.Upserted),
+            _ => Task.CompletedTask,
+            CancellationToken.None);
+
+        Assert.Equal(8, tally.Visited);
+        Assert.Equal(3, tally.Upserted);
+        Assert.Equal(5, tally.Dropped.NewCar);
         Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
     }
 
