@@ -18,13 +18,20 @@ namespace Odonomics.Walk;
 /// make, model, zip, radius, whether the scenario marks
 /// this model's base model as hybrid-only from some year onward (see
 /// <see cref="Odonomics.Domain.Scenario.HybridOnlyFromModelYear"/>), and the minimum model year and
-/// maximum mileage, which both sites take as search facets so the per-pair cap is spent only on
+/// maximum mileage, which every site takes as search facets so the per-pair cap is spent only on
 /// cars the scenario can rank. <paramref name="FallbackDealerName"/>
 /// is the dealer a posting is stamped with when its detail page names none, for a site where the
 /// site itself is the seller (carvana); null for a marketplace whose pages carry the dealer's own
 /// name or none at all. <paramref name="PagedSearchUrl"/> is null for a site whose search is one page,
 /// and for one whose results run to more pages it turns a search URL and a 1-based page number into
-/// that page's URL (see <see cref="WalkSearchPages"/>).</summary>
+/// that page's URL (see <see cref="WalkSearchPages"/>). <paramref name="MatchCountPattern"/> is for a site whose search page states
+/// how many listings match ("13 Matches") and keeps filling the page with cards for other models and
+/// years after them (autotrader): its first group is that count, and
+/// <see cref="CollectDetailLinks"/> trusts the count over the cards. <paramref name="PrivateSellerPagePattern"/>
+/// is for a site whose detail page marks a private seller in its own text (autotrader's
+/// "Sample S (Private Seller)" line): a page it matches is stored with
+/// <see cref="WalkSites.PrivateSellerDealerName"/> and no location, whatever name the extraction
+/// read off it.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -32,7 +39,9 @@ public sealed record WalkSite(
     int DetailLinkOverfetchMultiplier = 1,
     string? FallbackDealerName = null,
     Regex? SkippedCardTitlePattern = null,
-    Func<string, int, string>? PagedSearchUrl = null)
+    Func<string, int, string>? PagedSearchUrl = null,
+    Regex? MatchCountPattern = null,
+    Regex? PrivateSellerPagePattern = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -40,9 +49,20 @@ public sealed record WalkSite(
     /// <see cref="SkippedCardTitlePattern"/> (cars.com mixes new-car cards into a used search, and
     /// the scenario can never rank one). A listing is skipped when any of its anchors carries such
     /// a title, since a card links its photo and its title separately and only the title anchor
-    /// has text. A skipped card never enters the pool, so it never counts against the per-pair cap.</summary>
-    public IReadOnlyList<string> CollectDetailLinks(IReadOnlyList<PageLink> links, int poolSize)
+    /// has text. A skipped card never enters the pool, so it never counts against the per-pair cap.
+    /// When this site has a <see cref="MatchCountPattern"/> and <paramref name="searchPageText"/> states
+    /// a count, the page's cards are trusted only that far: a count of zero yields no links at all, and
+    /// a positive count yields at most that many, since the matching listings come first in page order
+    /// and everything after them is filler (other models, other years, new cars, listings outside the
+    /// search radius) that the search facets never asked for. A page that states no count is taken as
+    /// it comes.</summary>
+    public IReadOnlyList<string> CollectDetailLinks(IReadOnlyList<PageLink> links, int poolSize, string? searchPageText = null)
     {
+        if (MatchCountIn(searchPageText) is int matchCount)
+        {
+            poolSize = Math.Min(poolSize, matchCount);
+        }
+
         List<PageLink> detailLinks = [.. links.Where(l => DetailUrlPattern.IsMatch(l.Href))];
         HashSet<string> skipped = SkippedCardTitlePattern is null
             ? []
@@ -60,6 +80,16 @@ public sealed record WalkSite(
         ];
     }
 
+    private int? MatchCountIn(string? searchPageText)
+    {
+        Match match = MatchCountPattern is null || searchPageText is null
+            ? Match.Empty
+            : MatchCountPattern.Match(searchPageText);
+        return match.Success && int.TryParse(match.Groups[1].Value.Replace(",", ""), out int count)
+            ? count
+            : null;
+    }
+
     /// <summary>The dealer name to store for a page whose extraction returned
     /// <paramref name="extractedDealerName"/>: that name (trimmed) when the page gave one, such as
     /// a carvana hub ("Carvana Winder"), otherwise <see cref="FallbackDealerName"/>, which is null
@@ -75,11 +105,20 @@ public sealed record WalkSite(
     /// hub). Then the location is dropped and <see cref="ResolvedDealer.IsFallback"/> is set: the
     /// fallback is one dealer, "Carvana" with no location, rather than a row per pickup city the
     /// page happened to print, and the upsert uses the flag so a sighting that named no hub never
-    /// replaces a link to a more specific dealer an earlier sighting established.</summary>
-    public ResolvedDealer ResolveDealer(string? extractedDealerName, string? extractedDealerLocation) =>
-        FallbackDealerName is not null && NamesNoDealerBeyondTheSite(extractedDealerName)
-            ? new ResolvedDealer(FallbackDealerName, null, IsFallback: true)
-            : new ResolvedDealer(ResolveDealerName(extractedDealerName), extractedDealerLocation, IsFallback: false);
+    /// replaces a link to a more specific dealer an earlier sighting established. A page that reads
+    /// as a private seller's (see <see cref="PrivateSellerPagePattern"/>, checked against
+    /// <paramref name="pageText"/>) is stored with <see cref="WalkSites.PrivateSellerDealerName"/> and
+    /// no location instead: the extraction would read a person's name and city off it, and a person is
+    /// not a dealer row. That name is a fact the page states, not a fallback, so it is not flagged as one.</summary>
+    public ResolvedDealer ResolveDealer(string? extractedDealerName, string? extractedDealerLocation, string? pageText = null) =>
+        ReadsAsPrivateSeller(pageText)
+            ? new ResolvedDealer(WalkSites.PrivateSellerDealerName, null, IsFallback: false)
+            : FallbackDealerName is not null && NamesNoDealerBeyondTheSite(extractedDealerName)
+                ? new ResolvedDealer(FallbackDealerName, null, IsFallback: true)
+                : new ResolvedDealer(ResolveDealerName(extractedDealerName), extractedDealerLocation, IsFallback: false);
+
+    private bool ReadsAsPrivateSeller(string? pageText) =>
+        PrivateSellerPagePattern is not null && pageText is not null && PrivateSellerPagePattern.IsMatch(pageText);
 
     private bool NamesNoDealerBeyondTheSite(string? extractedDealerName) =>
         string.IsNullOrWhiteSpace(extractedDealerName)
@@ -94,7 +133,8 @@ public readonly record struct PageLink(string Href, string Text);
 /// the site's fallback rather than one the page gave.</summary>
 public readonly record struct ResolvedDealer(string? Name, string? Location, bool IsFallback);
 
-/// <summary>Search-URL shapes and detail-link patterns for the two v0 walk targets. The spike's
+/// <summary>Search-URL shapes and detail-link patterns for the walk targets: cars.com and carvana, whose
+/// hybrid facets the rest of this comment is about, and autotrader (see <see cref="Autotrader"/>). The spike's
 /// SPIKE-FINDINGS.md recorded both sites as having no working hybrid facet, but that recording
 /// doesn't hold up against the spike's own day-one capture: the cars.com response to a
 /// "toyota-corolla_hybrid" query (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html)
@@ -223,10 +263,43 @@ public static class WalkSites
         // Carvana renders about 21 cards a page and pages with a plain page=N on the same filters URL.
         PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}");
 
+    /// <summary>What a private seller's listing is stored as: one dealer row for every private seller,
+    /// with no location, so no individual's name or city enters the ledger and
+    /// <c>odo dealer grade</c> has one row to skip rather than a person to look up on CarEdge (see
+    /// <see cref="PrivateSellerDealers"/>).</summary>
+    public const string PrivateSellerDealerName = "Private seller";
+
+    /// <summary>autotrader's zip, radius, minimum year, maximum mileage, and hybrid facets. Both dealers and
+    /// private sellers list there, so the URL carries no sellerTypes parameter (sellerTypes=d and
+    /// sellerTypes=p narrow to one or the other). autotrader has one model per base model, so a hybrid
+    /// variant ("Corolla Hybrid") searches its base model ("corolla") with fuelTypeGroup=HYB, while a
+    /// model that is hybrid by name ("Prius", "Insight") has no such facet to add. A model slug it does
+    /// not know is not an error: the site silently returns every listing for the make, which is why the
+    /// slug is the base model and never "corolla-hybrid". The site rewrites the URL to
+    /// /cars-for-sale/&lt;make&gt;/&lt;model&gt;/&lt;city&gt;-&lt;state&gt;?... and honors each parameter. A search
+    /// page states "N Matches" and then fills the rest of the page with cards for other years, other
+    /// models, new cars and listings outside the radius, so the count is read before the cards are
+    /// trusted (see <see cref="WalkSite.CollectDetailLinks"/>). A detail link is
+    /// /cars-for-sale/vehicle/&lt;digits&gt;, sometimes followed by a query string and a fragment such as
+    /// #purchaseConfidence, both of which <see cref="CanonicalDetailUrl"/> strips.</summary>
+    public static readonly WalkSite Autotrader = new(
+        "autotrader",
+        query =>
+        {
+            string url = $"https://www.autotrader.com/cars-for-sale/used-cars/{Slugify(query.Make)}/{Slugify(BaseModelName(query.Model))}" +
+                $"?zip={query.Zip}&searchRadius={query.RadiusMiles}&startYear={query.YearMin}&maxMileage={query.MaxMileage}&sortBy=relevance";
+            return [IsHybridVariant(query.Model) ? $"{url}&fuelTypeGroup=HYB" : url];
+        },
+        new Regex(@"/cars-for-sale/vehicle/\d+", RegexOptions.IgnoreCase),
+        DetailLinkOverfetchMultiplier: 2,
+        MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+Match(?:es)?\b"),
+        PrivateSellerPagePattern: new Regex(@"\(Private Seller\)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline));
+
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
         "cars.com" => CarsCom,
         "carvana" => Carvana,
+        "autotrader" => Autotrader,
         _ => null,
     };
 }
