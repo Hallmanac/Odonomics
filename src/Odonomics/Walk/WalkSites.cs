@@ -26,8 +26,35 @@ public sealed record WalkSite(
     Func<ListingQuery, string> BuildSearchUrl,
     Regex DetailUrlPattern,
     int DetailLinkOverfetchMultiplier = 1,
-    string? FallbackDealerName = null)
+    string? FallbackDealerName = null,
+    Regex? SkippedCardTitlePattern = null)
 {
+    /// <summary>The candidate detail links on a search page, in page order, at most
+    /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
+    /// matches, one per canonical URL, minus any listing whose card title matches
+    /// <see cref="SkippedCardTitlePattern"/> (cars.com mixes new-car cards into a used search, and
+    /// the scenario can never rank one). A listing is skipped when any of its anchors carries such
+    /// a title, since a card links its photo and its title separately and only the title anchor
+    /// has text. A skipped card never enters the pool, so it never counts against the per-pair cap.</summary>
+    public IReadOnlyList<string> CollectDetailLinks(IReadOnlyList<PageLink> links, int poolSize)
+    {
+        List<PageLink> detailLinks = [.. links.Where(l => DetailUrlPattern.IsMatch(l.Href))];
+        HashSet<string> skipped = SkippedCardTitlePattern is null
+            ? []
+            : [.. detailLinks
+                .Where(l => SkippedCardTitlePattern.IsMatch(l.Text))
+                .Select(l => WalkSites.CanonicalDetailUrl(l.Href))];
+
+        return
+        [
+            .. detailLinks
+                .DistinctBy(l => WalkSites.CanonicalDetailUrl(l.Href))
+                .Where(l => !skipped.Contains(WalkSites.CanonicalDetailUrl(l.Href)))
+                .Select(l => l.Href)
+                .Take(poolSize)
+        ];
+    }
+
     /// <summary>The dealer name to store for a page whose extraction returned
     /// <paramref name="extractedDealerName"/>: that name (trimmed) when the page gave one, such as
     /// a carvana hub ("Carvana Winder"), otherwise <see cref="FallbackDealerName"/>, which is null
@@ -53,6 +80,10 @@ public sealed record WalkSite(
         string.IsNullOrWhiteSpace(extractedDealerName)
         || DealerNormalizer.Normalize(extractedDealerName) == DealerNormalizer.Normalize(FallbackDealerName);
 }
+
+/// <summary>One anchor read off a search page: its resolved href and its visible text, which on a
+/// cars.com card link is the card's title ("Used 2024 Toyota Corolla LE").</summary>
+public readonly record struct PageLink(string Href, string Text);
 
 /// <summary>The dealer name and location a walked candidate is stored with, and whether the name is
 /// the site's fallback rather than one the page gave.</summary>
@@ -145,7 +176,8 @@ public static class WalkSites
                    $"&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
         },
         new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
-        DetailLinkOverfetchMultiplier: 2);
+        DetailLinkOverfetchMultiplier: 2,
+        SkippedCardTitlePattern: new Regex(@"^\s*New\s", RegexOptions.IgnoreCase));
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),

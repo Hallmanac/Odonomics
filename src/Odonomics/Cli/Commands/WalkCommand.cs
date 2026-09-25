@@ -179,12 +179,9 @@ public static class WalkCommand
         string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
         await recorder.WriteAsync("search.txt", searchBodyText, cancellationToken);
 
-        string[] hrefs = await page.EvaluateAsync<string[]>("() => Array.from(document.querySelectorAll('a')).map(a => a.href)");
+        string[][] anchors = await page.EvaluateAsync<string[][]>("() => Array.from(document.querySelectorAll('a')).map(a => [a.href, a.innerText || ''])");
         int linkPoolSize = maxDetailPages * site.DetailLinkOverfetchMultiplier;
-        List<string> candidateLinks = [.. hrefs
-            .Where(h => site.DetailUrlPattern.IsMatch(h))
-            .DistinctBy(WalkSites.CanonicalDetailUrl)
-            .Take(linkPoolSize)];
+        IReadOnlyList<string> candidateLinks = site.CollectDetailLinks([.. anchors.Select(a => new PageLink(a[0], a[1]))], linkPoolSize);
         AnsiConsole.MarkupLineInterpolated($"found {candidateLinks.Count} detail link(s) to consider (cap {maxDetailPages} matching candidate(s))");
 
         // Distinct detail links can still resolve to the same VIN within one pair (two dealers
