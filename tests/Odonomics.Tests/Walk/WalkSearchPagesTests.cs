@@ -35,7 +35,7 @@ public class WalkSearchPagesTests
             [4] = CarvanaCards("c", 9),
         });
 
-        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 200, browser.LoadAsync, CancellationToken.None);
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 200, browser.LoadAsync, (_, _) => { }, CancellationToken.None);
 
         Assert.Equal([1, 2, 3, 4], browser.Loads.Select(l => l.PageNumber));
         Assert.Equal(53, pool.Count);
@@ -53,7 +53,7 @@ public class WalkSearchPagesTests
             [2] = CarvanaCards("b", 5),
         });
 
-        await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 200, browser.LoadAsync, CancellationToken.None);
+        await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 200, browser.LoadAsync, (_, _) => { }, CancellationToken.None);
 
         Assert.Equal(
             [CarvanaSearch, $"{CarvanaSearch}&page=2", $"{CarvanaSearch}&page=3"],
@@ -70,7 +70,7 @@ public class WalkSearchPagesTests
             [3] = CarvanaCards("c", 23),
         });
 
-        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 30, browser.LoadAsync, CancellationToken.None);
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 30, browser.LoadAsync, (_, _) => { }, CancellationToken.None);
 
         Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
         Assert.Equal(30, pool.Count);
@@ -82,7 +82,7 @@ public class WalkSearchPagesTests
     {
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>> { [1] = CarvanaCards("a", 21), [2] = CarvanaCards("b", 21) });
 
-        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 10, browser.LoadAsync, CancellationToken.None);
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 10, browser.LoadAsync, (_, _) => { }, CancellationToken.None);
 
         Assert.Single(browser.Loads);
         Assert.Equal(10, pool.Count);
@@ -97,7 +97,7 @@ public class WalkSearchPagesTests
             [2] = [new PageLink("https://www.carvana.com/vehicle/1?x=2", "")],
         });
 
-        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 200, browser.LoadAsync, CancellationToken.None);
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 200, browser.LoadAsync, (_, _) => { }, CancellationToken.None);
 
         Assert.Equal(["https://www.carvana.com/vehicle/1?x=1"], pool);
         Assert.Equal(2, browser.Loads.Count);
@@ -108,7 +108,7 @@ public class WalkSearchPagesTests
     {
         var browser = new FakeBrowser([]);
 
-        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 60, browser.LoadAsync, CancellationToken.None);
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, CarvanaSearch, 60, browser.LoadAsync, (_, _) => { }, CancellationToken.None);
 
         Assert.Empty(pool);
         Assert.Single(browser.Loads);
@@ -124,10 +124,66 @@ public class WalkSearchPagesTests
             [2] = [new PageLink("https://www.cars.com/vehicledetail/99/?sid=x", "")],
         });
 
-        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 60, browser.LoadAsync, CancellationToken.None);
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 60, browser.LoadAsync, (_, _) => { }, CancellationToken.None);
 
         Assert.Equal([(search, 1)], browser.Loads);
         Assert.Equal(5, pool.Count);
+    }
+
+    [Fact]
+    public async Task Carvana_ALaterPageThatFailsEndsPagingAndKeepsTheLinksAlreadyCollected()
+    {
+        var pages = new Dictionary<int, List<PageLink>> { [1] = CarvanaCards("a", 21) };
+        List<(int PageNumber, string Message)> failures = [];
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.Carvana,
+            CarvanaSearch,
+            200,
+            (_, pageNumber, _) => pageNumber == 1
+                ? Task.FromResult<IReadOnlyList<PageLink>>(pages[1])
+                : throw new TimeoutException("page 2 timed out"),
+            (pageNumber, ex) => failures.Add((pageNumber, ex.Message)),
+            CancellationToken.None);
+
+        Assert.Equal(21, pool.Count);
+        Assert.Equal([(2, "page 2 timed out")], failures);
+    }
+
+    [Fact]
+    public async Task Carvana_AFailingFirstPageStillFailsTheSearch()
+    {
+        await Assert.ThrowsAsync<TimeoutException>(() => WalkSearchPages.CollectLinksAsync(
+            WalkSites.Carvana,
+            CarvanaSearch,
+            200,
+            (_, _, _) => throw new TimeoutException("page 1 timed out"),
+            (_, _) => { },
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Carvana_CancellationDuringALaterPageIsNotSwallowed()
+    {
+        using var cts = new CancellationTokenSource();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => WalkSearchPages.CollectLinksAsync(
+            WalkSites.Carvana,
+            CarvanaSearch,
+            200,
+            (_, pageNumber, ct) =>
+            {
+                if (pageNumber == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<PageLink>>(CarvanaCards("a", 21));
+                }
+
+                cts.Cancel();
+                ct.ThrowIfCancellationRequested();
+                return Task.FromResult<IReadOnlyList<PageLink>>([]);
+            },
+            (_, _) => Assert.Fail("a cancelled walk must not be reported as a failed page"),
+            cts.Token));
     }
 
     [Fact]
@@ -145,7 +201,7 @@ public class WalkSearchPagesTests
             WalkSites.Carvana,
             [CarvanaSearch],
             4,
-            (url, _, poolSize, ct) => WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, url, poolSize, browser.LoadAsync, ct),
+            (url, _, poolSize, ct) => WalkSearchPages.CollectLinksAsync(WalkSites.Carvana, url, poolSize, browser.LoadAsync, (_, _) => { }, ct),
             (link, _, _) =>
             {
                 visited.Add(link);
