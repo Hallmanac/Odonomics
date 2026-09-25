@@ -90,11 +90,11 @@ public class DealerGradeCommandTests
     [Theory]
     [InlineData("Carvana", "", null)]
     [InlineData("Carvana", "ORLANDO FL", "Orlando, FL")]
-    public void ChainSkipReason_BareOrLegacyLocatedCarvana_IsSkippedWithAReason(string name, string normalizedLocation, string? location)
+    public void SkipReason_BareOrLegacyLocatedCarvana_IsSkippedWithAReason(string name, string normalizedLocation, string? location)
     {
         var dealer = new DealerEntity { Name = name, NormalizedName = "CARVANA", NormalizedLocation = normalizedLocation, Location = location };
 
-        string? reason = DealerGradeCommand.ChainSkipReason(dealer);
+        string? reason = DealerGradeCommand.SkipReason(dealer);
 
         Assert.NotNull(reason);
         Assert.Contains("each Carvana hub is graded under its own name", reason);
@@ -103,22 +103,22 @@ public class DealerGradeCommandTests
     [Theory]
     [InlineData("Carvana Winder", "CARVANA WINDER")]
     [InlineData("Holler Honda", "HOLLER HONDA")]
-    public void ChainSkipReason_ACarvanaHubOrAnyOtherDealer_IsLookedUp(string name, string normalizedName)
+    public void SkipReason_ACarvanaHubOrAnyOtherDealer_IsLookedUp(string name, string normalizedName)
     {
         var dealer = new DealerEntity { Name = name, NormalizedName = normalizedName, NormalizedLocation = "" };
 
-        Assert.Null(DealerGradeCommand.ChainSkipReason(dealer));
+        Assert.Null(DealerGradeCommand.SkipReason(dealer));
     }
 
     [Fact]
-    public void ApplyChainSkip_StampsTheBareCarvanaRowCheckedWithItsReasonAndNoGrade()
+    public void ApplySkip_StampsTheBareCarvanaRowCheckedWithItsReasonAndNoGrade()
     {
         // A row a previous grader run had wrongly graded is cleared too: the bare chain never
         // carries a hub's grade.
         var dealer = new DealerEntity { Name = "Carvana", NormalizedName = "CARVANA", NormalizedLocation = "", Grade = "A" };
-        string reason = DealerGradeCommand.ChainSkipReason(dealer) ?? throw new InvalidOperationException("expected a skip reason");
+        string reason = DealerGradeCommand.SkipReason(dealer) ?? throw new InvalidOperationException("expected a skip reason");
 
-        DealerGradeOutcome outcome = DealerGradeCommand.ApplyChainSkip(dealer, reason, CheckedAt);
+        DealerGradeOutcome outcome = DealerGradeCommand.ApplySkip(dealer, reason, CheckedAt);
 
         Assert.Null(dealer.Grade);
         Assert.Equal(reason, dealer.GradeReason);
