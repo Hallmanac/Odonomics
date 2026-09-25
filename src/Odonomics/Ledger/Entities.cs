@@ -86,6 +86,14 @@ public sealed class RunEntity
     /// active"/"gone" comparisons only ever judge a posting against a run that could actually have
     /// seen it.</summary>
     public required string Sources { get; set; }
+
+    /// <summary>The scenario zip this run searched with. Null on a run recorded before the ledger
+    /// kept it, in which case a later run cannot tell whether the search area moved.</summary>
+    public string? Zip { get; set; }
+
+    /// <summary>The scenario radius, in miles, this run searched with. Null on a run recorded
+    /// before the ledger kept it.</summary>
+    public int? RadiusMiles { get; set; }
 }
 
 /// <summary>The NHTSA vPIC decode and safety lookups, and the Marketcheck VIN history, for one VIN,
