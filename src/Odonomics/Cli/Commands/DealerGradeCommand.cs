@@ -14,8 +14,8 @@ namespace Odonomics.Cli.Commands;
 /// later run; a page that merely failed to parse is left unstamped so a later run retries it, and
 /// so is one whose name-matched cards were all in another city or state, or that matched several
 /// same-named cards its partial or absent location could not tell apart. The bare "Carvana" dealer
-/// is never looked up (see <see cref="ChainSkipReason"/>); Carvana's hubs are graded by their own
-/// names like any other dealer. Three consecutive CarEdge 404 pages mean the search URL itself is
+/// and the "Private seller" dealer are never looked up (see <see cref="SkipReason"/>); Carvana's hubs
+/// are graded by their own names like any other dealer. Three consecutive CarEdge 404 pages mean the search URL itself is
 /// dead, not that three dealers in a row are unrateable, so the run stops there and exits non-zero
 /// rather than burning through the rest of the list against a URL that will keep failing; every
 /// dealer it never got to stays ungraded and eligible for the next run.</summary>
@@ -95,9 +95,9 @@ public static class DealerGradeCommand
         for (int i = 0; i < targets.Count; i++)
         {
             DealerEntity dealer = targets[i];
-            if (ChainSkipReason(dealer) is string skipReason)
+            if (SkipReason(dealer) is string skipReason)
             {
-                DealerGradeOutcome skipped = ApplyChainSkip(dealer, skipReason, DateTimeOffset.UtcNow);
+                DealerGradeOutcome skipped = ApplySkip(dealer, skipReason, DateTimeOffset.UtcNow);
                 ungraded++;
                 AnsiConsole.Write(new Text(skipped.Line + Environment.NewLine, new Style(skipped.Color)));
                 await db.SaveChangesAsync(cancellationToken);
@@ -181,16 +181,20 @@ public static class DealerGradeCommand
     /// a search for the bare name returns hub cards, and taking one would grade the chain by an
     /// arbitrary hub. Every carvana posting a hub is known for is linked to that hub's own
     /// dealer, and those are graded by their hub name; the bare dealer keeps the postings no hub is
-    /// known for, which therefore show no grade.</summary>
-    public static string? ChainSkipReason(DealerEntity dealer) =>
-        CarvanaDealers.IsChain(dealer)
-            ? "Carvana is a chain and CarEdge lists it by hub; each Carvana hub is graded under its own name"
-            : null;
+    /// known for, which therefore show no grade. The "Private seller" dealer is every private
+    /// seller at once, and a person has no CarEdge Dealer Rating, so a search for that name could only
+    /// match some unrelated business.</summary>
+    public static string? SkipReason(DealerEntity dealer) => dealer switch
+    {
+        _ when CarvanaDealers.IsChain(dealer) => "Carvana is a chain and CarEdge lists it by hub; each Carvana hub is graded under its own name",
+        _ when PrivateSellerDealers.IsPrivateSeller(dealer) => "a private seller is a person, not a dealer CarEdge rates",
+        _ => null,
+    };
 
     /// <summary>Records that a dealer was deliberately not looked up: stamps it checked, with
     /// <paramref name="reason"/> and no grade, so it is neither retried on every run nor mistaken for
     /// a dealer CarEdge reported unrated.</summary>
-    public static DealerGradeOutcome ApplyChainSkip(DealerEntity dealer, string reason, DateTimeOffset checkedAt)
+    public static DealerGradeOutcome ApplySkip(DealerEntity dealer, string reason, DateTimeOffset checkedAt)
     {
         dealer.Grade = null;
         dealer.GradeReason = reason;
