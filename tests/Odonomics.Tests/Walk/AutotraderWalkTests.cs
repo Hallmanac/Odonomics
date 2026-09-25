@@ -118,11 +118,30 @@ public class AutotraderWalkTests
 
         Assert.Equal(13, links.Count);
         Assert.Equal(13, links.Select(ListingId).Distinct().Count());
-        // The matches come first in page order: the same 13 listings the page's own clickType marks
-        // as an ordinary result, a spotlight, or the sponsored top card, and none it marks as
-        // "supplemental" (beyond the radius) or "similar" (other years, new cars).
-        Assert.All(links, l => Assert.DoesNotMatch("clickType=(supplemental|similar)", l));
-        Assert.Equal("787014112", ListingId(links[0]));
+        // The 13 are exactly the cards the page marks clickType=listing, in page order, and none it
+        // marks "alpha" (the sponsored top card), "supplemental" (beyond the radius) or "similar"
+        // (other years, new cars).
+        Assert.All(links, l => Assert.Contains("clickType=listing", l));
+        Assert.Equal("789050704", ListingId(links[0]));
+    }
+
+    [Fact]
+    public void CollectDetailLinks_SponsoredTopCardOutsideTheResults_DoesNotTakeAMatchesSlot()
+    {
+        const string Base = "https://www.autotrader.com/cars-for-sale/vehicle/";
+        List<PageLink> anchors =
+        [
+            new PageLink($"{Base}900?zip=32833&clickType=alpha", "Certified 2022 Toyota Camry"),
+            new PageLink($"{Base}1?zip=32833&clickType=listing", "2022 Toyota Camry Hybrid"),
+            new PageLink($"{Base}1?zip=32833#purchaseConfidence", "No Accidents"),
+            new PageLink($"{Base}2?zip=32833&clickType=listing", "2023 Toyota Camry Hybrid"),
+            new PageLink($"{Base}3?zip=32833&clickType=listing", "2024 Toyota Camry Hybrid"),
+            new PageLink($"{Base}800?zip=32833&clickType=supplemental", "2024 Toyota Camry"),
+        ];
+
+        IReadOnlyList<string> links = WalkSites.Autotrader.CollectDetailLinks(anchors, poolSize: 60, "3 Matches");
+
+        Assert.Equal(["1", "2", "3"], links.Select(ListingId));
     }
 
     [Fact]

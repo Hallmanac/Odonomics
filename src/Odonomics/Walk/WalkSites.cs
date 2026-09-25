@@ -27,7 +27,9 @@ namespace Odonomics.Walk;
 /// that page's URL (see <see cref="WalkSearchPages"/>). <paramref name="MatchCountPattern"/> is for a site whose search page states
 /// how many listings match ("13 Matches") and keeps filling the page with cards for other models and
 /// years after them (autotrader): its first group is that count, and
-/// <see cref="CollectDetailLinks"/> trusts the count over the cards. <paramref name="PrivateSellerPagePattern"/>
+/// <see cref="CollectDetailLinks"/> trusts the count over the cards. <paramref name="ResultCardLinkPattern"/>
+/// says which of a counted page's links are its result cards (autotrader's <c>clickType=listing</c>), since
+/// the count does not include the sponsored card that sits first in page order. <paramref name="PrivateSellerPagePattern"/>
 /// is for a site whose detail page marks a private seller in its own text (autotrader's
 /// "Sample S (Private Seller)" line): a page it matches is stored with
 /// <see cref="WalkSites.PrivateSellerDealerName"/> and no location, whatever name the extraction
@@ -41,7 +43,8 @@ public sealed record WalkSite(
     Regex? SkippedCardTitlePattern = null,
     Func<string, int, string>? PagedSearchUrl = null,
     Regex? MatchCountPattern = null,
-    Regex? PrivateSellerPagePattern = null)
+    Regex? PrivateSellerPagePattern = null,
+    Regex? ResultCardLinkPattern = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -54,11 +57,16 @@ public sealed record WalkSite(
     /// a count, the page's cards are trusted only that far: a count of zero yields no links at all, and
     /// a positive count yields at most that many, since the matching listings come first in page order
     /// and everything after them is filler (other models, other years, new cars, listings outside the
-    /// search radius) that the search facets never asked for. A page that states no count is taken as
-    /// it comes.</summary>
+    /// search radius) that the search facets never asked for. The exception is a sponsored card, which
+    /// sits first in page order, ignores the search facets, and is not one of the counted matches, so
+    /// when this site has a <see cref="ResultCardLinkPattern"/> and a count is stated, only the links
+    /// that pattern matches are drawn on, and the cap is spent on real results rather than an ad (if
+    /// no link matches the pattern, the page is taken in page order as before). A page that states no
+    /// count is taken as it comes.</summary>
     public IReadOnlyList<string> CollectDetailLinks(IReadOnlyList<PageLink> links, int poolSize, string? searchPageText = null)
     {
-        if (MatchCountIn(searchPageText) is int matchCount)
+        int? statedCount = MatchCountIn(searchPageText);
+        if (statedCount is int matchCount)
         {
             poolSize = Math.Min(poolSize, matchCount);
         }
@@ -69,6 +77,12 @@ public sealed record WalkSite(
             : [.. detailLinks
                 .Where(l => SkippedCardTitlePattern.IsMatch(l.Text))
                 .Select(l => WalkSites.CanonicalDetailUrl(l.Href))];
+
+        if (ResultCardLinkPattern is not null && statedCount is not null)
+        {
+            List<PageLink> resultCards = [.. detailLinks.Where(l => ResultCardLinkPattern.IsMatch(l.Href))];
+            detailLinks = resultCards.Count > 0 ? resultCards : detailLinks;
+        }
 
         return
         [
@@ -186,10 +200,12 @@ public static class WalkSites
     public static string Slugify(string value) => value.ToLowerInvariant().Replace(" ", "-");
 
     /// <summary>Strips a detail link down to scheme, host, and path, dropping every query
-    /// parameter. Both walk targets append a per-search-session id (cars.com's "sid", carried on
-    /// every "/vehicledetail/" href on the page) and cars.com additionally emits more than one
+    /// parameter and any fragment. Every walk site appends a per-search-session or per-click
+    /// parameter (cars.com's "sid", carried on every "/vehicledetail/" href on the page, and
+    /// autotrader's "clickType"), cars.com additionally emits more than one
     /// query-string variant of the same card's link ("?sid=…" and
-    /// "?openLeadForm=true&amp;sid=…"). Canonicalizing before the walk dedupes those variants
+    /// "?openLeadForm=true&amp;sid=…"), and autotrader links a card a second time with a
+    /// "#purchaseConfidence" fragment. Canonicalizing before the walk dedupes those variants
     /// into one candidate and gives <c>ListingCandidate.Url</c> a value that is stable across
     /// runs, so <c>LedgerUpsertService</c>'s (Vin, Source, Url) lookup can actually recognize the
     /// same posting again instead of minting a new one every time the session id changes.</summary>
@@ -283,7 +299,9 @@ public static class WalkSites
     /// /cars-for-sale/&lt;make&gt;/&lt;model&gt;/&lt;city&gt;-&lt;state&gt;?... and honors each parameter. A search
     /// page states "N Matches" and then fills the rest of the page with cards for other years, other
     /// models, new cars and listings outside the radius, so the count is read before the cards are
-    /// trusted (see <see cref="WalkSite.CollectDetailLinks"/>). A detail link is
+    /// trusted (see <see cref="WalkSite.CollectDetailLinks"/>): the count covers only the cards the page
+    /// marks <c>clickType=listing</c>, not the sponsored top card (<c>clickType=alpha</c>), which ignores the
+    /// search facets. A detail link is
     /// /cars-for-sale/vehicle/&lt;digits&gt;, sometimes followed by a query string and a fragment such as
     /// #purchaseConfidence, both of which <see cref="CanonicalDetailUrl"/> strips.</summary>
     public static readonly WalkSite Autotrader = new(
@@ -297,7 +315,8 @@ public static class WalkSites
         new Regex(@"/cars-for-sale/vehicle/\d+", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2,
         MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+Match(?:es)?\b"),
-        PrivateSellerPagePattern: new Regex(@"\(Private Seller\)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline));
+        PrivateSellerPagePattern: new Regex(@"\(Private Seller\)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline),
+        ResultCardLinkPattern: new Regex(@"[?&]clickType=listing(?:&|$)"));
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
