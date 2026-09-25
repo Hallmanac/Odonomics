@@ -156,11 +156,10 @@ public static class WalkCommand
         CancellationToken cancellationToken)
     {
         (string make, string model) = MakeModel.Split(makeModel);
-        int? hybridOnlyFromModelYear = scenario.HybridOnlyFromModelYear.TryGetValue(makeModel, out int hybridYear) ? hybridYear : null;
-        var query = new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage, hybridOnlyFromModelYear);
+        ListingQuery query = ListingQuery.For(scenario, makeModel);
         var recorder = new WalkRecorder(dataDirectory, site.Name, model, currentRun.StartedAt);
 
-        string searchUrl = site.BuildSearchUrl(make, model, scenario.Zip, scenario.RadiusMiles, hybridOnlyFromModelYear.HasValue);
+        string searchUrl = site.BuildSearchUrl(query);
         AnsiConsole.MarkupLineInterpolated($"opening search page for {make} {model} on {site.Name}");
         await page.GotoAsync(searchUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await CdpConnection.HandleChallengeIfPresentAsync(page, cancellationToken);
