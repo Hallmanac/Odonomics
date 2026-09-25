@@ -13,7 +13,8 @@ public class LedgerUpsertServiceTests
         string url = "https://example.com/1",
         string source = "auto.dev",
         string? dealerName = null,
-        string? dealerLocation = null) => new()
+        string? dealerLocation = null,
+        decimal? shippingFee = null) => new()
     {
         Vin = vin,
         Source = source,
@@ -26,6 +27,7 @@ public class LedgerUpsertServiceTests
         Mileage = 40000,
         DealerName = dealerName,
         DealerLocation = dealerLocation,
+        ShippingFee = shippingFee,
     };
 
     private static RunEntity Run(DateTimeOffset startedAt, string command = "search") => new()
@@ -405,5 +407,66 @@ public class LedgerUpsertServiceTests
         await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, dealerName: "Carvanaville Motors", dealerLocation: "Sanford, FL"), run, CancellationToken.None);
 
         Assert.Equal("Sanford, FL", Assert.Single(db.Dealers).Location);
+    }
+
+    [Theory]
+    [InlineData(1590)]
+    [InlineData(0)]
+    [InlineData(null)]
+    public async Task UpsertAsync_FirstSighting_StoresTheShippingFeeOnThePosting(int? fee)
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk carvana");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carvana", shippingFee: fee), run, CancellationToken.None);
+
+        Assert.Equal(fee, (int?)db.Postings.Single().ShippingFee);
+        Assert.Equal(18000m, db.PriceObservations.Single().Price);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_SeenAgainWithADifferentFee_KeepsTheLatestFeeAndAppendsNoObservation()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "walk carvana");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carvana", shippingFee: 1590m), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "walk carvana");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        UpsertOutcome outcome = await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carvana", shippingFee: 0m), run2, CancellationToken.None);
+
+        Assert.False(outcome.PriceChanged);
+        Assert.Equal(0m, db.Postings.Single().ShippingFee);
+        Assert.Single(db.PriceObservations);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_SeenAgainWithNoFee_ReplacesTheEarlierFeeWithNull()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "walk carvana");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carvana", shippingFee: 1590m), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "walk carvana");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carvana"), run2, CancellationToken.None);
+
+        Assert.Null(db.Postings.Single().ShippingFee);
     }
 }

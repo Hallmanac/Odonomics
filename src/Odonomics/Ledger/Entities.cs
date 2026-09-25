@@ -33,6 +33,13 @@ public sealed class PostingEntity
     public required DateTimeOffset LastSeen { get; set; }
     public int? DealerId { get; set; }
 
+    /// <summary>The one-time shipping fee the latest sighting showed for this posting, on top of
+    /// the asking price: 0 for a listing that ships free, null when the source shows none (every
+    /// site but carvana). It lives here and not on <see cref="PriceObservationEntity"/> because it
+    /// is not part of the asking price history, only of what the car costs to take home; the latest
+    /// sighting's value replaces the last one.</summary>
+    public decimal? ShippingFee { get; set; }
+
     public VehicleEntity? Vehicle { get; set; }
     public DealerEntity? Dealer { get; set; }
     public List<PriceObservationEntity> PriceObservations { get; set; } = [];

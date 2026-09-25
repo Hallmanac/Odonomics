@@ -7,7 +7,8 @@ public sealed record UpsertOutcome(bool VehicleIsNew, bool PostingIsNew, bool Pr
 /// <summary>
 /// Upsert semantics: a vehicle seen again updates its last-known year/make/model/trim/mileage and
 /// LastSeen; a posting seen again updates LastSeen and appends a PriceObservation only when the
-/// price actually changed (or this is the posting's first sighting). Nothing is ever deleted.
+/// price actually changed (or this is the posting's first sighting), and takes the candidate's
+/// shipping fee as the posting's latest. Nothing is ever deleted.
 /// </summary>
 public sealed class LedgerUpsertService(OdonomicsDbContext db)
 {
@@ -86,6 +87,10 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         {
             posting.Dealer = dealer;
         }
+
+        // The latest sighting's fee replaces the last one, unlike the dealer link above: a fee is
+        // per car and per buyer zip, so an older figure is stale rather than more informative.
+        posting.ShippingFee = candidate.ShippingFee;
 
         if (priceChanged)
         {
