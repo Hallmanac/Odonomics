@@ -13,7 +13,8 @@ public class ScenarioLoaderTests
         Scenario scenario = ScenarioLoader.Load(DaughterScenarioPath);
 
         Assert.Equal("daughter", scenario.Name);
-        Assert.Equal("32114", scenario.Zip);
+        Assert.Equal("32833", scenario.Zip);
+        Assert.Equal(50, scenario.RadiusMiles);
         Assert.Equal(10, scenario.HoldYears);
         Assert.Equal(120, scenario.HoldMonths);
         Assert.Equal(60, scenario.TermMonths);
