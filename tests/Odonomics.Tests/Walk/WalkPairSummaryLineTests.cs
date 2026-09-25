@@ -74,6 +74,34 @@ public class WalkPairSummaryLineTests
     }
 
     [Fact]
+    public void DroppedCell_NewCarReason_IsWordedAsNewCarListing()
+    {
+        var dropped = new DroppedBreakdown(0, 0, 0, 0, NewCar: 3);
+
+        Assert.Equal("new-car listing", WalkPairSummaryLine.DroppedCell(dropped));
+        Assert.Equal("new-car listing", WalkOutcomeWording.DroppedReason(DetailPageOutcome.NewCar));
+    }
+
+    [Fact]
+    public void Format_NewCarAlongsideTheOtherReasons_NamesEachWithItsOwnCountAndSumsToPages()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 1, NotMatching: 3, Failed: 1, ExtractionFailed: 1, Repeat: 4, NewCar: 11);
+        int saved = 12;
+
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: saved + dropped.Total, saved, dropped);
+
+        Assert.Equal(
+            "cars.com / Toyota Corolla Hybrid: 35 pages, 12 saved, 23 dropped (3 wrong model, 11 new-car listing, 2 missing fields, 1 no VIN, 4 repeat, 1 failed to load, 1 extraction failed)",
+            line);
+    }
+
+    [Fact]
+    public void TableCell_OnlyNewCars_NamesTheReasonWithoutARedundantCount()
+    {
+        Assert.Equal("11 (new-car listing)", WalkPairSummaryLine.TableCell(new DroppedBreakdown(0, 0, 0, 0, NewCar: 11)));
+    }
+
+    [Fact]
     public void DroppedCell_NoneDropped_IsEmpty()
     {
         Assert.Equal("", WalkPairSummaryLine.DroppedCell(new DroppedBreakdown(0, 0, 0, 0)));

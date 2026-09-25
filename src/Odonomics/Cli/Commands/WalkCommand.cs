@@ -204,6 +204,12 @@ public static class WalkCommand
                 string bodyText = await detailPage.EvaluateAsync<string>("() => document.body.innerText");
                 await recorder.WriteAsync($"detail-{i + 1}.txt", bodyText, ct);
 
+                if (site.SkippedCardTitlePattern is not null && NewCarPage.Reads(bodyText))
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NewCar)}[/]");
+                    return DetailPageOutcome.NewCar;
+                }
+
                 ExtractionOutcome outcome = await extraction.ExtractAsync(bodyText, ct);
                 if (outcome.Error is not null || outcome.Result is null)
                 {
