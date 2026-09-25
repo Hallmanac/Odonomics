@@ -20,4 +20,8 @@ public sealed record ListingCandidate
     /// dealer (carvana's "Carvana"), not a name the source gave. The upsert then links it only to a
     /// posting that has no dealer yet.</summary>
     public bool DealerNameIsFallback { get; init; }
+
+    /// <summary>The one-time shipping fee the source's page showed on top of <see cref="Price"/>:
+    /// 0 for free shipping, null when the source shows none (only carvana does).</summary>
+    public decimal? ShippingFee { get; init; }
 }
