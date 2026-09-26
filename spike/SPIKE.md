@@ -37,7 +37,7 @@ Every raw response (API JSON, page text) is written to `spike/recorded/<source>/
 extraction schema and prompt live in `spike/extraction/`.
 
 The app runs the whole query once per invocation and appends one row per source to the report
-table in `SPIKE-FINDINGS.md`. It is run on three separate days.
+table in `docs/spike-findings.md`. It is run on three separate days.
 
 - Day one is run by the build session: build the app, run it, do the hand check and the manual
   Cars.com count, write the findings marked "day 1 of 3", and open the pull request. The
@@ -68,7 +68,7 @@ run: no key", never worked around.
 
 ## What survives
 
-- `SPIKE-FINDINGS.md` at the repo root: the report table for all three days, the hand-check
+- `docs/spike-findings.md`: the report table for all three days, the hand-check
   results, cost per daily run in dollars and minutes, the surprises, and a recommendation per
   source (keep, keep with a paid key, drop) with the reason.
 - The recorded raw responses, which become contract-test fixtures for the real adapters.

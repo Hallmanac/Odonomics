@@ -178,7 +178,7 @@ public static class PageWalkSources
                 .ToDictionary(x => x.url, x => x.candidate!));
 
     // No resolveFromSearchPage for Autotrader: its search-page markup has never been observed
-    // (see SPIKE-FINDINGS.md), so there is no verified data carrier to read a VIN from here.
+    // (see docs/spike-findings.md), so there is no verified data carrier to read a VIN from here.
     // Every candidate falls back to a detail-page fetch, the same as before this fix.
     public static PageWalkListingSource CreateAutotrader(string profileDir, RecordedResponses recorded, ExtractionClient extraction) =>
         new(

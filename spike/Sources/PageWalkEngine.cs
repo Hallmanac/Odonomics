@@ -32,7 +32,7 @@ public sealed record PageWalkResult(
 /// profile reused for a whole run (which would cap a run at a single page), each navigation gets
 /// its own fresh, disposable profile directory: the only way found to get more than one page per
 /// site per run. This trades away the "looks like a returning user with history" realism a
-/// persistent profile is meant to buy; see SPIKE-FINDINGS.md for that trade-off.
+/// persistent profile is meant to buy; see docs/spike-findings.md for that trade-off.
 /// </summary>
 public static class PageWalkEngine
 {

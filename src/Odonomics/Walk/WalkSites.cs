@@ -192,7 +192,7 @@ public readonly record struct ResolvedDealer(string? Name, string? Location, boo
 
 /// <summary>Search-URL shapes and detail-link patterns for the walk targets: cars.com and carvana, whose
 /// hybrid facets the rest of this comment is about, and autotrader (see <see cref="Autotrader"/>). The spike's
-/// SPIKE-FINDINGS.md recorded both sites as having no working hybrid facet, but that recording
+/// docs/spike-findings.md recorded both sites as having no working hybrid facet, but that recording
 /// doesn't hold up against the spike's own day-one capture: the cars.com response to a
 /// "toyota-corolla_hybrid" query (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html)
 /// is a complete, non-degraded results page, yet its own selected_search_filters on that request
