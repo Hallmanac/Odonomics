@@ -189,4 +189,93 @@ public class LedgerSiteFactsTests
 
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(CancellationToken.None));
     }
+
+    [Fact]
+    public async Task UpsertAsync_StoresTheCandidatesAttributesWithTheRunThatSawThem()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = await StartRunAsync(db, FirstRunAt);
+
+        await service.UpsertAsync(
+            Candidate() with { Attributes = new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal", [PostingAttributeNames.PriceDrop] = "Price Drop" } },
+            run,
+            CancellationToken.None);
+
+        using OdonomicsDbContext reread = testDb.CreateContext();
+        PostingEntity posting = await reread.Postings.SingleAsync();
+        Dictionary<string, (string Value, int RunId)> stored = await AttributesOfAsync(reread, posting.Id);
+        Assert.Equal(2, stored.Count);
+        Assert.Equal(("Great Deal", run.Id), stored["deal"]);
+        Assert.Equal(("Price Drop", run.Id), stored["price-drop"]);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_ACandidateWithNoAttributesLeavesTheOnesAnEarlierRunStored()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity first = await StartRunAsync(db, FirstRunAt);
+        RunEntity second = await StartRunAsync(db, SecondRunAt);
+        await service.UpsertAsync(
+            Candidate() with { Attributes = new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Good Deal" } },
+            first,
+            CancellationToken.None);
+
+        await service.UpsertAsync(Candidate(), second, CancellationToken.None);
+
+        using OdonomicsDbContext reread = testDb.CreateContext();
+        PostingEntity posting = await reread.Postings.SingleAsync();
+        Dictionary<string, (string Value, int RunId)> stored = await AttributesOfAsync(reread, posting.Id);
+        Assert.Equal(("Good Deal", first.Id), Assert.Single(stored).Value);
+    }
+
+    [Fact]
+    public async Task SetPostingAttributesByUrlAsync_RefreshesEachPostingAtItsUrlAndIgnoresAnUnknownUrl()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, PostingEntity posting, RunEntity first) = await SeededAsync(db);
+        RunEntity second = await StartRunAsync(db, SecondRunAt);
+        await service.SetPostingAttributesAsync(
+            posting.Id,
+            new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Good Deal", [PostingAttributeNames.Demand] = "High Demand" },
+            first,
+            CancellationToken.None);
+
+        await service.SetPostingAttributesByUrlAsync(
+            "carvana",
+            new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                [Url] = new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal" },
+                ["https://www.carvana.com/vehicle/1"] = new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Good Deal" },
+            },
+            second,
+            CancellationToken.None);
+
+        using OdonomicsDbContext reread = testDb.CreateContext();
+        Dictionary<string, (string Value, int RunId)> stored = await AttributesOfAsync(reread, posting.Id);
+        Assert.Equal(("Great Deal", second.Id), stored["deal"]);
+        Assert.Equal(("High Demand", first.Id), stored["demand"]);
+        Assert.Equal(2, await reread.PostingAttributes.CountAsync());
+    }
+
+    [Fact]
+    public async Task SetPostingAttributesByUrlAsync_OnlyTouchesPostingsOfTheGivenSource()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, _, RunEntity run) = await SeededAsync(db);
+
+        await service.SetPostingAttributesByUrlAsync(
+            "cars.com",
+            new Dictionary<string, IReadOnlyDictionary<string, string>> { [Url] = new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal" } },
+            run,
+            CancellationToken.None);
+
+        using OdonomicsDbContext reread = testDb.CreateContext();
+        Assert.Empty(await reread.PostingAttributes.ToListAsync());
+    }
 }

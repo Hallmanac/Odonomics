@@ -24,4 +24,10 @@ public sealed record ListingCandidate
     /// <summary>The one-time shipping fee the source's page showed on top of <see cref="Price"/>:
     /// 0 for free shipping, null when the source shows none (only carvana does).</summary>
     public decimal? ShippingFee { get; init; }
+
+    /// <summary>The display-only facts the source showed about the listing, such as a deal badge or a
+    /// dealer rating, keyed by the names in <see cref="PostingAttributeNames"/>. The upsert stores
+    /// them as the posting's attributes (see <see cref="PostingAttributeEntity"/>); empty when the
+    /// source showed none.</summary>
+    public IReadOnlyDictionary<string, string> Attributes { get; init; } = new Dictionary<string, string>();
 }
