@@ -77,7 +77,7 @@ namespace Odonomics.Walk;
 /// result card says about the fees behind its price (cargurus, see <see cref="FeeStatements.ReadCarGurusCard"/>), for a site whose card says
 /// it and whose detail page does not agree with it; when it is set, the card's statement is the one a posting is stored with.
 /// <paramref name="AskingPriceFromCard"/> says the card's price is the one to store, for a site whose card shows what the buyer pays
-/// delivered (cargurus, whose detail page shows the car's price at its lot, shipping not in it).
+/// delivered (cargurus, whose detail page also lists the dealer's price at its lot, shipping not in it, in a store-transfer breakdown).
 /// <paramref name="DetailDealerReader"/> reads the dealer a detail page names, ahead of the extraction, for a site whose
 /// dealer is one of many stores under a single name that the extraction does not reliably tell from the site itself
 /// (carmax, see <see cref="CarMaxStores"/>); null for a site whose dealer the extraction reads.
@@ -594,7 +594,7 @@ public static class WalkSites
     /// <c>/details/&lt;digits&gt;</c> followed by a query string of the search's own, which
     /// <see cref="CanonicalDetailUrl"/> drops.
     /// The card is where the price is read, and it is not the detail page's: a card shows what the buyer pays
-    /// delivered ("Price includes $462 shipping" is inside it), while the detail page shows the car's price at its lot
+    /// delivered ("Price includes $462 shipping" is inside it), while a store-transfer detail page also lists the dealer's price at its lot
     /// (see <see cref="WalkSite.AskingPriceFromCard"/>). The card also says whether the price includes the dealer's fees
     /// (see <see cref="FeeStatements.ReadCarGurusCard"/>) and carries CarGurus's deal badge (see
     /// <see cref="CardBadges.CarGurus"/>). The detail page's text prints the VIN, so no HTML reader is needed for it.</summary>
