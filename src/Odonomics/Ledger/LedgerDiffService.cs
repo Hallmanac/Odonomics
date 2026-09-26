@@ -227,7 +227,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             // saw it. A run that covered the pair only partially never looked for the postings it did not
             // reach, so those still carry the LastSeen of the run before it: the search reaches back
             // through partial runs to the newest one that covered the pair in full.
-            List<DateTimeOffset> comparableCoverage = ComparableCoverage(token, priorRuns);
+            List<DateTimeOffset> comparableCoverage = [.. RunSources.CoverageChain(token, priorRuns).Select(r => r.StartedAt)];
             if (comparableCoverage.Count == 0)
             {
                 continue; // this run is the first to ever cover this source/model; nothing to compare against
@@ -259,24 +259,6 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             new AlsoListedEntry(g.Vehicle.Vin, g.Vehicle.Year, g.Vehicle.Make, g.Vehicle.Model, g.Sources, g.Price))];
 
         return new SearchDiff(newEntries, alsoListed, moved, priceDrops, gone);
-    }
-
-    /// <summary>The StartedAt of every prior run whose untouched postings of <paramref name="token"/>'s pair
-    /// are candidates to be gone: the latest run that covered the pair, then, for as long as the run just
-    /// taken covered it only partially, the one before it, ending with the first that covered it in full.</summary>
-    private static List<DateTimeOffset> ComparableCoverage(string token, List<RunEntity> priorRuns)
-    {
-        List<DateTimeOffset> comparable = [];
-        foreach (RunEntity run in priorRuns.Where(r => RunSources.Split(r).Contains(token)).OrderByDescending(r => r.StartedAt))
-        {
-            comparable.Add(run.StartedAt);
-            if (!RunSources.PartialCoverage(run).Contains(token))
-            {
-                break;
-            }
-        }
-
-        return comparable;
     }
 
     private static string GoneReason(VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario, bool pairCoveredPartially)

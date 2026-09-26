@@ -270,22 +270,38 @@ public static class RunSources
         return colonIndex < 0 ? (token, "") : (token[..colonIndex], token[(colonIndex + 1)..]);
     }
 
-    /// <summary>For every source covered by any run in <paramref name="runs"/>, the StartedAt of
-    /// the most recent one that covered it.</summary>
-    public static Dictionary<string, DateTimeOffset> LatestCoverageBySource(IEnumerable<RunEntity> runs)
+    /// <summary>The runs whose sightings of <paramref name="token"/>'s pair are still current, newest
+    /// first: the latest run that covered the pair, then, for as long as the run before covered it only
+    /// partially (see <see cref="PartialKey"/>), the one before that, ending with the first that covered
+    /// it in full. A partial run never looked for the postings it did not reach, so it does not
+    /// supersede the coverage that did; a posting last seen by any run in this chain was still listed
+    /// when the newest of them ended. Empty when no run covered the pair.</summary>
+    public static List<RunEntity> CoverageChain(string token, IEnumerable<RunEntity> runs)
     {
-        var latest = new Dictionary<string, DateTimeOffset>();
-        foreach (RunEntity run in runs)
+        List<RunEntity> chain = [];
+        foreach (RunEntity run in runs.Where(r => Split(r).Contains(token)).OrderByDescending(r => r.StartedAt))
         {
-            foreach (string source in Split(run))
+            chain.Add(run);
+            if (!PartialCoverage(run).Contains(token))
             {
-                if (!latest.TryGetValue(source, out DateTimeOffset existing) || run.StartedAt > existing)
-                {
-                    latest[source] = run.StartedAt;
-                }
+                break;
             }
         }
 
-        return latest;
+        return chain;
+    }
+
+    /// <summary>For every source and model pair covered by any run in <paramref name="runs"/>, the
+    /// StartedAt of the latest run that covered it in full. A run that covered the pair only partially
+    /// (see <see cref="PartialKey"/>) does not replace it, so the postings that run never reached keep
+    /// counting as listed; a pair only ever covered partially reports its first partial run. A posting
+    /// whose LastSeen is at or after this time is still listed as far as the ledger knows.</summary>
+    public static Dictionary<string, DateTimeOffset> LatestCoverageBySource(IEnumerable<RunEntity> runs)
+    {
+        List<RunEntity> allRuns = [.. runs];
+        return allRuns
+            .SelectMany(Split)
+            .Distinct()
+            .ToDictionary(token => token, token => CoverageChain(token, allRuns)[^1].StartedAt);
     }
 }
