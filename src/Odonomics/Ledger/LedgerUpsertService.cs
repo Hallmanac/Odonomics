@@ -1,14 +1,20 @@
 using Microsoft.EntityFrameworkCore;
+using Odonomics.Domain;
 
 namespace Odonomics.Ledger;
 
 public sealed record UpsertOutcome(bool VehicleIsNew, bool PostingIsNew, bool PriceChanged, decimal? PreviousPrice);
 
+/// <summary>What <see cref="LedgerUpsertService.TouchAsync"/> found: whether the ledger held a posting
+/// at the link at all, and whether the touch appended a price observation.</summary>
+public sealed record TouchOutcome(bool Found, bool PriceChanged);
+
 /// <summary>
 /// Upsert semantics: a vehicle seen again updates its last-known year/make/model/trim/mileage and
 /// LastSeen; a posting seen again updates LastSeen and appends a PriceObservation only when the
 /// price actually changed (or this is the posting's first sighting), and takes the candidate's
-/// shipping fee as the posting's latest. Nothing is ever deleted.
+/// shipping fee as the posting's latest. Nothing is ever deleted. A posting can also be touched
+/// without a detail visit (see <see cref="TouchAsync"/>), from a search page's result card alone.
 /// </summary>
 public sealed class LedgerUpsertService(OdonomicsDbContext db)
 {
@@ -105,6 +111,53 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         await db.SaveChangesAsync(cancellationToken);
 
         return new UpsertOutcome(vehicleIsNew, postingIsNew, priceChanged && !postingIsNew, previousPrice);
+    }
+
+    /// <summary>The canonical URL of every posting the ledger holds for <paramref name="source"/>,
+    /// which is what a walk compares a search page's links against to tell a listing it has seen from one
+    /// it has not.</summary>
+    public async Task<HashSet<string>> KnownUrlsAsync(string source, CancellationToken cancellationToken) =>
+        [.. await db.Postings.Where(p => p.Source == source).Select(p => p.Url).ToListAsync(cancellationToken)];
+
+    /// <summary>Records that the run saw the posting at <paramref name="source"/> and
+    /// <paramref name="url"/> on a search page, without opening its detail page. It stamps the posting's
+    /// LastSeen with the run's own StartedAt, so the diff sees a listing still up and finds it "gone"
+    /// only when a run never touches it, and appends a price observation when
+    /// <paramref name="cardPrice"/> is known and differs from the latest, so the diff reports a drop from
+    /// the card alone. A card price below <see cref="PlaceholderPrice.Floor"/> is a misread (a monthly
+    /// payment, say), not an asking price, so it is treated as unknown. Everything else about the posting
+    /// stays as the last detail visit left it: its dealer, its shipping fee, and its vehicle row. When
+    /// <paramref name="url"/> matches no posting nothing is written and <see cref="TouchOutcome.Found"/>
+    /// is false.</summary>
+    public async Task<TouchOutcome> TouchAsync(string source, string url, decimal? cardPrice, RunEntity run, CancellationToken cancellationToken)
+    {
+        List<PostingEntity> postings = await db.Postings
+            .Include(p => p.PriceObservations)
+            .Where(p => p.Source == source && p.Url == url)
+            .ToListAsync(cancellationToken);
+
+        bool priceChanged = false;
+        foreach (PostingEntity posting in postings)
+        {
+            posting.LastSeen = run.StartedAt;
+            decimal? latest = posting.PriceObservations
+                .OrderByDescending(o => o.ObservedAt)
+                .Select(o => (decimal?)o.Price)
+                .FirstOrDefault();
+            if (cardPrice is decimal price && !PlaceholderPrice.IsBelowFloor(price) && latest != price)
+            {
+                posting.PriceObservations.Add(new PriceObservationEntity
+                {
+                    PostingId = posting.Id,
+                    Price = price,
+                    ObservedAt = run.StartedAt,
+                });
+                priceChanged = true;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return new TouchOutcome(postings.Count > 0, priceChanged);
     }
 
     /// <summary>The dealer a sighting whose source named none (<see cref="ListingCandidate.DealerNameIsFallback"/>,
