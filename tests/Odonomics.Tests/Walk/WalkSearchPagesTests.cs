@@ -12,7 +12,7 @@ public class WalkSearchPagesTests
     private static List<PageLink> CarvanaCards(string prefix, int count) =>
         [.. Enumerable.Range(0, count).Select(i => new PageLink($"https://www.carvana.com/vehicle/{prefix}{i}", ""))];
 
-    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, CancellationToken cancellationToken) => ValueTask.FromResult(false);
+    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 
     private static string Fixture(string name) =>
         File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", name));

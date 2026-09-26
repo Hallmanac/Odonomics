@@ -306,6 +306,7 @@ public static class WalkCommand
                 }
 
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
+                string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
                 var candidate = new ListingCandidate
                 {
                     Vin = outcome.Result.Vin,
@@ -314,7 +315,7 @@ public static class WalkCommand
                     // parameter that's different on every run, and LedgerUpsertService keys a
                     // posting on (Vin, Source, Url), so storing the raw URL would mint a new
                     // posting every run instead of recognizing the one already in the ledger.
-                    Url = WalkSites.CanonicalDetailUrl(detailUrl),
+                    Url = canonicalUrl,
                     Year = outcome.Result.Year.Value,
                     Make = outcome.Result.Make ?? make,
                     // The canonical model this pair was walked for, not the extraction's own
@@ -333,6 +334,7 @@ public static class WalkCommand
                     DealerLocation = dealer.Location,
                     DealerNameIsFallback = dealer.IsFallback,
                     ShippingFee = site.ReadShippingFee(bodyText),
+                    Attributes = knownTouches.BadgesOfNewLink(canonicalUrl),
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);
