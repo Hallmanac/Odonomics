@@ -165,6 +165,26 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>Sets the shipping fee and pickup city on the postings of <paramref name="source"/> at each
+    /// URL of <paramref name="feesByUrl"/>, in one save so either every posting's fee lands or none does.
+    /// This is how a known posting touched from its search card (see <see cref="TouchAsync"/>) gets the
+    /// fee the card printed without a detail visit, replacing the last sighting's fee and pickup city the
+    /// way an upsert does. A URL that matches no posting writes nothing.</summary>
+    public async Task SetCardFeesByUrlAsync(string source, IReadOnlyDictionary<string, (decimal ShippingFee, string? PickupLocation)> feesByUrl, CancellationToken cancellationToken)
+    {
+        string[] urls = [.. feesByUrl.Keys];
+        List<PostingEntity> postings = await db.Postings
+            .Where(p => p.Source == source && urls.Contains(p.Url))
+            .ToListAsync(cancellationToken);
+
+        foreach (PostingEntity posting in postings)
+        {
+            (posting.ShippingFee, posting.PickupLocation) = feesByUrl[posting.Url];
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     private void ApplyAttributes(int postingId, List<PostingAttributeEntity> existing, IReadOnlyDictionary<string, string> attributes, RunEntity run)
     {
         foreach ((string rawName, string rawValue) in attributes)
@@ -224,7 +244,8 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     /// it is treated as unknown. A posting whose latest observation already carries the run's StartedAt (a
     /// detail visit this run recorded it) gets no card observation, since the detail page's price is the
     /// firmer reading and two observations at one instant would leave "latest" to row order. Everything
-    /// else about a posting stays as the last detail visit left it: its dealer, its shipping fee, its pickup option, its fee
+    /// else about a posting stays as the last detail visit left it: its dealer, its shipping fee (unless
+    /// <see cref="SetCardFeesByUrlAsync"/> replaces it from the card), its pickup option, its fee
     /// posture, and its vehicle row. A URL that matches no posting writes nothing and is not counted in
     /// <see cref="TouchOutcome.Found"/>.</summary>
     public async Task<TouchOutcome> TouchAsync(string source, IReadOnlyDictionary<string, decimal?> cardPricesByUrl, RunEntity run, CancellationToken cancellationToken)

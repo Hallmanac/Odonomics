@@ -34,8 +34,8 @@ public sealed class PostingEntity
     public int? DealerId { get; set; }
 
     /// <summary>The one-time shipping fee the latest sighting showed for this posting, on top of
-    /// the asking price: 0 for a listing that ships free, null when the source shows none (every
-    /// site but carvana). It lives here and not on <see cref="PriceObservationEntity"/> because it
+    /// the asking price: 0 for a listing that ships free or is at a nearby store, null when the source
+    /// shows none (every site but carvana and carmax). It lives here and not on <see cref="PriceObservationEntity"/> because it
     /// is not part of the asking price history, only of what the car costs to take home; the latest
     /// sighting's value replaces the last one.</summary>
     public decimal? ShippingFee { get; set; }
@@ -56,7 +56,9 @@ public sealed class PostingEntity
     /// or none was read.</summary>
     public decimal? PickupFee { get; set; }
 
-    /// <summary>Where the car would be picked up, for <see cref="PickupFee"/>; null when unknown.</summary>
+    /// <summary>Where the car would be picked up: the city a carmax card names for a car at a nearby store
+    /// (with <see cref="ShippingFee"/> 0 and no <see cref="PickupFee"/>), or the place <see cref="PickupFee"/>
+    /// is charged for; null when unknown.</summary>
     public string? PickupLocation { get; set; }
 
     /// <summary>The StartedAt of the run whose detail visit found this posting's page saying the car
