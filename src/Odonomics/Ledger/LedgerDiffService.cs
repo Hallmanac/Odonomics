@@ -100,6 +100,13 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             List<PriceObservationEntity> observations = [.. posting.PriceObservations.OrderBy(o => o.ObservedAt)];
             decimal currentPrice = observations[^1].Price;
 
+            // A placeholder price already stored (from before the sources rejected them) is never
+            // news: not a new car, not a price drop to or from a real figure.
+            if (PlaceholderPrice.IsBelowFloor(currentPrice))
+            {
+                continue;
+            }
+
             if (vehicle.FirstSeen == currentRun.StartedAt)
             {
                 if (newEntryVins.Add(vehicle.Vin))
