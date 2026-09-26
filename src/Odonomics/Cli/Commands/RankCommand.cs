@@ -23,6 +23,7 @@ public static class RankCommand
         List<VehicleEntity> vehicles = await db.Vehicles
             .Include(v => v.Postings).ThenInclude(p => p.PriceObservations)
             .Include(v => v.Postings).ThenInclude(p => p.Dealer)
+            .Include(v => v.Postings).ThenInclude(p => p.Attributes)
             .ToListAsync(cancellationToken);
 
         List<VinRecordEntity> vinRecords = await db.VinRecords.ToListAsync(cancellationToken);
@@ -32,25 +33,35 @@ public static class RankCommand
         var research = new Dictionary<string, ResearchStatus>();
         foreach (VehicleEntity vehicle in vehicles)
         {
-            PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource);
-            var forScoring = new VehicleForScoring
-            {
-                Vin = vehicle.Vin,
-                Year = vehicle.Year,
-                Make = vehicle.Make,
-                Model = vehicle.Model,
-                Mileage = vehicle.Mileage,
-                LowestCurrentPrice = purchasePrice?.Asking,
-                ShippingFee = purchasePrice?.ShippingFee,
-                DealerGrade = DealerGradeSummary(vehicle),
-                OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade?.StartsWith('F') == true),
-            };
+            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource);
             scores.Add(Scorer.Score(forScoring, scenario));
             research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource));
         }
 
         RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets, detail);
         return 0;
+    }
+
+    /// <summary>The slice of a ledger vehicle the scorer reads, plus the site badge rank shows beside
+    /// it. The price, the shipping fee, and the badge all come from the same posting: the cheapest one
+    /// to take home (see <see cref="VehiclePricing.LowestCurrentPurchasePosting"/>).</summary>
+    public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
+    {
+        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource);
+        PostingEntity? cheapest = VehiclePricing.LowestCurrentPurchasePosting(vehicle, latestCoverageBySource);
+        return new VehicleForScoring
+        {
+            Vin = vehicle.Vin,
+            Year = vehicle.Year,
+            Make = vehicle.Make,
+            Model = vehicle.Model,
+            Mileage = vehicle.Mileage,
+            LowestCurrentPrice = purchasePrice?.Asking,
+            ShippingFee = purchasePrice?.ShippingFee,
+            DealerGrade = DealerGradeSummary(vehicle),
+            OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade?.StartsWith('F') == true),
+            SiteBadge = cheapest is null ? null : SiteBadgeText.For(cheapest.Attributes),
+        };
     }
 
     private static ResearchStatus ResearchStatusFor(VinRecordEntity? record, decimal? currentPrice)

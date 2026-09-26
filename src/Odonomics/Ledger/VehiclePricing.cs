@@ -23,18 +23,28 @@ public static class VehiclePricing
     /// plus its shipping fee when one is known, so a far-away carvana car is compared honestly with
     /// one that has no fee. A posting with a null fee costs its asking price, as before. When two
     /// postings cost the same to take home, the one with the lower asking price is reported.</summary>
-    public static PurchasePrice? LowestCurrentPurchasePrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
+    public static PurchasePrice? LowestCurrentPurchasePrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
+        CheapestPosting(vehicle, latestCoverageBySource)?.Price;
+
+    /// <summary>The active posting <see cref="LowestCurrentPurchasePrice"/> reports the price of, so a
+    /// display that sits beside that price (a site's own badge for the listing) speaks for the same
+    /// listing; null when no active posting has a price.</summary>
+    public static PostingEntity? LowestCurrentPurchasePosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
+        CheapestPosting(vehicle, latestCoverageBySource)?.Posting;
+
+    private static (PostingEntity Posting, PurchasePrice Price)? CheapestPosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
     {
-        PurchasePrice[] known =
+        (PostingEntity Posting, PurchasePrice Price)[] known =
         [
             .. ActivePostings(vehicle, latestCoverageBySource)
-                .Select<PostingEntity, PurchasePrice?>(p => LatestAskingPrice(p) is decimal asking ? new PurchasePrice(asking, p.ShippingFee) : null)
-                .OfType<PurchasePrice>(),
+                .Select(p => (Posting: p, Asking: LatestAskingPrice(p)))
+                .Where(p => p.Asking is not null)
+                .Select(p => (p.Posting, new PurchasePrice(p.Asking.GetValueOrDefault(), p.Posting.ShippingFee))),
         ];
 
         return known.Length == 0
             ? null
-            : known.OrderBy(p => p.Total).ThenBy(p => p.Asking).First();
+            : known.OrderBy(p => p.Price.Total).ThenBy(p => p.Price.Asking).First();
     }
 
     private static IEnumerable<PostingEntity> ActivePostings(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
