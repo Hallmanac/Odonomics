@@ -97,6 +97,23 @@ public class RunSourcesTests
         Assert.Equal(full.StartedAt, latest[prius]);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LatestCoverageBySource_ACappedRunAndAnUnreadRunInEitherOrder_BothAreSteppedPastToTheFullCoverage(bool unreadIsNewer)
+    {
+        string prius = RunSources.Key("cars.com", "Prius");
+        RunEntity full = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), prius);
+        RunEntity older = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), $"{prius},{(unreadIsNewer ? RunSources.PartialKey(prius) : RunSources.UnreadKey(prius))}");
+        RunEntity newer = Run(new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), $"{prius},{(unreadIsNewer ? RunSources.UnreadKey(prius) : RunSources.PartialKey(prius))}");
+
+        List<RunEntity> chain = RunSources.CoverageChain(prius, [full, older, newer]);
+        Dictionary<string, DateTimeOffset> latest = RunSources.LatestCoverageBySource([full, older, newer]);
+
+        Assert.Equal([newer, older, full], chain);
+        Assert.Equal(full.StartedAt, latest[prius]);
+    }
+
     [Fact]
     public void LatestCoverageBySource_ACappedRunOverOnePair_LeavesTheRunsOtherPairAlone()
     {
