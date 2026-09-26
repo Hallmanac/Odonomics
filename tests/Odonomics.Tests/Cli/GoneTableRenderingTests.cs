@@ -14,6 +14,7 @@ public class GoneTableRenderingTests
         new("JTDKN3DU0A0000001", 2020, "Toyota", "Corolla Hybrid", "auto.dev", "https://auto.dev/c", 123456m, GoneReasons.NotOnSearchPage),
         new("JTDKN3DU0A0000002", 2020, "Toyota", "Prius", "marketcheck", "https://mc/d", 15000m, GoneReasons.OverMileage),
         new("JTDKN3DU0A0000003", 2021, "Toyota", "Prius", "carvana", "https://carvana.com/e", 16000m, GoneReasons.BeyondTheCap),
+        new("JTDKN3DU0A0000004", 2021, "Toyota", "Prius", "carvana", "https://carvana.com/f", 17000m, GoneReasons.PagesUnread),
     ];
 
     [Fact]
@@ -48,13 +49,20 @@ public class GoneTableRenderingTests
     [Fact]
     public void GoneHeading_WithRowsBeyondTheCap_SaysHowManyThereAre()
     {
-        Assert.Equal("Gone (5, 1 beyond the cap)", DiffRenderer.GoneHeading(Entries));
+        Assert.Equal("Gone (6, 1 beyond the cap, 1 pages unread)", DiffRenderer.GoneHeading(Entries));
     }
 
     [Fact]
-    public void GoneHeading_WithNoRowsBeyondTheCap_IsTheBareCount()
+    public void GoneHeading_WithOnlyOneKindOfUnreachedRow_NamesOnlyThatKind()
     {
-        Assert.Equal("Gone (4)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason != GoneReasons.BeyondTheCap)]));
+        Assert.Equal("Gone (5, 1 pages unread)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason != GoneReasons.BeyondTheCap)]));
+        Assert.Equal("Gone (5, 1 beyond the cap)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason != GoneReasons.PagesUnread)]));
+    }
+
+    [Fact]
+    public void GoneHeading_WithNoRowsTheWalkNeverReached_IsTheBareCount()
+    {
+        Assert.Equal("Gone (4)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason is not (GoneReasons.BeyondTheCap or GoneReasons.PagesUnread))]));
         Assert.Equal("Gone (0)", DiffRenderer.GoneHeading([]));
     }
 }
