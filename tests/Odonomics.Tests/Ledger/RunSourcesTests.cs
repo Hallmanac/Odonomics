@@ -51,6 +51,19 @@ public class RunSourcesTests
     }
 
     [Fact]
+    public void Split_LeavesOutTheUnreadCoverageMarkersAndUnreadCoverageNamesThem()
+    {
+        RunEntity run = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), $"carvana:Prius,{RunSources.UnreadKey("carvana:Prius")},cars.com:Prius,{RunSources.PartialKey("cars.com:Prius")}");
+
+        Assert.Equal(["carvana:Prius", "cars.com:Prius"], RunSources.Split(run));
+        Assert.Equal(["carvana:Prius"], RunSources.UnreadCoverage(run));
+        Assert.Equal(["cars.com:Prius"], RunSources.PartialCoverage(run));
+        Assert.True(RunSources.IsPartial(run, "carvana:Prius"));
+        Assert.True(RunSources.IsPartial(run, "cars.com:Prius"));
+        Assert.False(RunSources.IsPartial(run, "carvana:Insight"));
+    }
+
+    [Fact]
     public void LatestCoverageBySource_APartialMarker_IsNotACoverageEntryOfItsOwn()
     {
         RunEntity run = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), $"carvana:Prius,{RunSources.PartialKey("carvana:Prius")}");
@@ -68,6 +81,18 @@ public class RunSourcesTests
         RunEntity capped = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), $"{prius},{RunSources.PartialKey(prius)}");
 
         Dictionary<string, DateTimeOffset> latest = RunSources.LatestCoverageBySource([capped, full]);
+
+        Assert.Equal(full.StartedAt, latest[prius]);
+    }
+
+    [Fact]
+    public void LatestCoverageBySource_AnUnreadRun_DoesNotSupersedeTheFullCoverageBeforeIt()
+    {
+        string prius = RunSources.Key("carvana", "Prius");
+        RunEntity full = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), prius);
+        RunEntity unread = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), $"{prius},{RunSources.UnreadKey(prius)}");
+
+        Dictionary<string, DateTimeOffset> latest = RunSources.LatestCoverageBySource([unread, full]);
 
         Assert.Equal(full.StartedAt, latest[prius]);
     }
