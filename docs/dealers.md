@@ -26,7 +26,7 @@ The "Private seller" row that Autotrader's private listings share is never looke
 
 With `--all`, it looks up every dealer that has never been checked on CarEdge's Dealer Ratings. It's paced, and it pauses for challenges, the same way the walk is. `odo dealer grade <vin>` does the same for the dealers behind that VIN's postings, and it only looks up the ones not yet checked, printing what's already stored for the rest. Each dealer is looked up by searching `https://caredge.com/dealers?q=<dealer name and location>` and reading the matching result card's letter grade off the page. The same card prints the dealer's doc fee and an add-ons line ("No add-ons" or, for example, "$358 add-ons"). Whenever a grade is recorded, the run stores the doc fee as a dollar amount ("$1,199" is stored as 1199) and the add-ons line as printed.
 
-`--refresh` looks up dealers that already have a grade again, along with the never-checked ones, and it works with `--all` or with a VIN. It exists so a dealer graded before the ledger kept the doc fee and add-ons note can pick them up. A dealer that was stamped checked with no grade, either because CarEdge has no rating for it or because the run skipped it on purpose, is not looked up again, since a second look has nothing to add. A refresh that comes back with a new grade replaces the old one, and one that can't read the page leaves everything as it was. A refresh that finds CarEdge no longer has a card for the dealer keeps the stored grade, doc fee, and add-ons note, and says so.
+`--refresh` looks up dealers that already have a grade again, along with the never-checked ones, and it works with `--all` or with a VIN. It exists so a dealer graded before the ledger kept the doc fee and add-ons note can pick them up. A dealer that was stamped checked with no grade, either because CarEdge has no rating for it or because the run skipped it on purpose, is not looked up again, since a second look has nothing to add. A refresh that comes back with a new grade replaces the old one, and one that can't read the page leaves everything as it was. A refresh that finds CarEdge no longer has a card for the dealer keeps the stored grade, doc fee, and add-ons note, says so, and counts the dealer as kept in the closing tally rather than as ungraded. A refresh that finds the dealer's own card now marked "Not rated" is different, because CarEdge is positively saying there is no rating: the run clears the stored grade, doc fee, and add-ons note and stamps the dealer checked with no grade.
 
 ### How a card is matched
 
@@ -34,7 +34,7 @@ A card is only taken for a dealer when the dealer's location agrees with the car
 
 ### What counts as checked
 
-Each dealer is checked at most once. A dealer that CarEdge positively says it has no rating for gets stamped as checked, meaning no card names it at all or its own card is marked "Not rated". The fetched-at timestamp is what the cache rule keys off, and not the grade itself, so that dealer is never looked up again on a later run.
+Unless `--refresh` is given, each dealer is checked at most once. A dealer that CarEdge positively says it has no rating for gets stamped as checked, meaning no card names it at all or its own card is marked "Not rated". The fetched-at timestamp is what the cache rule keys off, and not the grade itself, so that dealer is never looked up again on a later run.
 
 Some outcomes leave the dealer unstamped and retried on the next run, so they're never recorded as "not on CarEdge":
 

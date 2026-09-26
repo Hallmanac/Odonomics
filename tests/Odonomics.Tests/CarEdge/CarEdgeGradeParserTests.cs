@@ -49,13 +49,13 @@ public class CarEdgeGradeParserTests
     }
 
     [Fact]
-    public async Task Parse_SingleResultCardMatchesDealerButNotRated_ReturnsNotFound()
+    public async Task Parse_SingleResultCardMatchesDealerButNotRated_ReturnsNotRated()
     {
         string pageText = await ReadFixtureAsync("dealers-q-carmax-sanford.txt");
 
         CarEdgeGradeResult result = CarEdgeGradeParser.Parse(pageText, "CarMax Sanford", null);
 
-        Assert.Equal(CarEdgeGradeStatus.NotFound, result.Status);
+        Assert.Equal(CarEdgeGradeStatus.NotRated, result.Status);
         Assert.Null(result.Grade);
     }
 

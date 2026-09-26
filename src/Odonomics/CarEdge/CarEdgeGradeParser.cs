@@ -164,7 +164,7 @@ public static partial class CarEdgeGradeParser
             Card chosenCard = nameMatches[0];
             if (!chosenCard.Graded)
             {
-                return CarEdgeGradeResult.NotFound;
+                return CarEdgeGradeResult.NotRated;
             }
 
             string grade = chosenCard.Match.Groups["grade"].Value.ToUpperInvariant();
