@@ -40,9 +40,59 @@ public sealed class PostingEntity
     /// sighting's value replaces the last one.</summary>
     public decimal? ShippingFee { get; set; }
 
+    /// <summary>How the site says this posting's price relates to its fees, one of the
+    /// <see cref="FeePostures"/> strings: null when no run has read it. It is a typed column because
+    /// the cost model and the red flags read it, along with <see cref="ItemizedFeesTotal"/>,
+    /// <see cref="PickupFee"/>, and <see cref="PickupLocation"/>.</summary>
+    public string? FeePosture { get; set; }
+
+    /// <summary>The sum of the itemized fees the site listed on top of the asking price, when its
+    /// <see cref="FeePosture"/> is itemized; null when none were read.</summary>
+    public decimal? ItemizedFeesTotal { get; set; }
+
+    /// <summary>The fee for picking the car up instead of having it delivered, recorded beside
+    /// <see cref="ShippingFee"/> as an option and never as a default; null when the site offers none
+    /// or none was read.</summary>
+    public decimal? PickupFee { get; set; }
+
+    /// <summary>Where the car would be picked up, for <see cref="PickupFee"/>; null when unknown.</summary>
+    public string? PickupLocation { get; set; }
+
     public VehicleEntity? Vehicle { get; set; }
     public DealerEntity? Dealer { get; set; }
     public List<PriceObservationEntity> PriceObservations { get; set; } = [];
+    public List<PostingAttributeEntity> Attributes { get; set; } = [];
+}
+
+/// <summary>The values <see cref="PostingEntity.FeePosture"/> takes. A posting whose fees have never
+/// been read has a null posture, which is different from <see cref="Unknown"/>: unknown says a run
+/// read the page and could not tell.</summary>
+public static class FeePostures
+{
+    /// <summary>The site's price already includes its fees.</summary>
+    public const string AllIn = "all-in";
+
+    /// <summary>The site lists its fees separately, on top of the price.</summary>
+    public const string Itemized = "itemized";
+
+    /// <summary>A run read the page and could not tell which of the two it is.</summary>
+    public const string Unknown = "unknown";
+}
+
+/// <summary>One display-only fact a site showed about a posting, such as a badge or a rating,
+/// keyed by <see cref="Name"/>. Nothing arithmetic or a red flag reads lives here (that is a typed
+/// column on <see cref="PostingEntity"/>), so a value is just text for `odo show` to print. A posting
+/// holds at most one row per name: a later observation replaces the earlier one, and
+/// <see cref="ObservedRunId"/> names the run that made it.</summary>
+public sealed class PostingAttributeEntity
+{
+    public int Id { get; set; }
+    public required int PostingId { get; set; }
+    public required string Name { get; set; }
+    public required string Value { get; set; }
+    public required int ObservedRunId { get; set; }
+
+    public PostingEntity? Posting { get; set; }
 }
 
 /// <summary>A selling dealer, keyed by its normalized name and location (see
@@ -51,7 +101,9 @@ public sealed class PostingEntity
 /// <see cref="GradeCheckedAt"/> come from `odo dealer grade`: <see cref="GradeCheckedAt"/> is
 /// stamped the moment CarEdge is checked regardless of whether it had a rating, which is what lets
 /// a dealer CarEdge has no rating for stay ungraded without being looked up again on every later
-/// run.</summary>
+/// run. <see cref="DocFee"/> and <see cref="AddOnsNote"/> are what CarEdge's card printed for the
+/// dealer when it was graded; they stay null on a dealer graded before the ledger kept them until a
+/// refresh (`odo dealer grade --all --refresh`) reads the card again.</summary>
 public sealed class DealerEntity
 {
     public int Id { get; set; }
@@ -62,6 +114,12 @@ public sealed class DealerEntity
     public string? Grade { get; set; }
     public string? GradeReason { get; set; }
     public DateTimeOffset? GradeCheckedAt { get; set; }
+
+    /// <summary>The dealer's documentation fee in dollars, as CarEdge printed it on the card.</summary>
+    public decimal? DocFee { get; set; }
+
+    /// <summary>CarEdge's add-ons line for the dealer, as printed ("No add-ons" or "$358 add-ons").</summary>
+    public string? AddOnsNote { get; set; }
 
     public List<PostingEntity> Postings { get; set; } = [];
 }
