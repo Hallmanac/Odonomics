@@ -31,11 +31,13 @@ public sealed record ListingCandidate
     /// source showed none.</summary>
     public IReadOnlyDictionary<string, string> Attributes { get; init; } = new Dictionary<string, string>();
 
-    /// <summary>What it costs to pick the car up instead of having it delivered, and where, when the
-    /// source's page offers that (only carvana does). Both are null when it shows no pickup option,
-    /// and the fee is 0 when the option prints none.</summary>
+    /// <summary>What it costs to pick the car up instead of having it delivered, when the source's page
+    /// offers that (only carvana does). Null when it shows no pickup option, and 0 when the option
+    /// prints no fee.</summary>
     public decimal? PickupFee { get; init; }
 
+    /// <summary>Where the car can be picked up: carvana's pickup block, or the city a carmax car that is
+    /// already at a store names ("Available today·Orlando"). Null when the source names none.</summary>
     public string? PickupLocation { get; init; }
 
     /// <summary>How the source's page says the price relates to the dealer's fees, one of the
