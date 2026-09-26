@@ -12,9 +12,10 @@ odo research [<vin> ...] [--refresh] [--quiet]
                                     safety ratings and VIN history, with a red-flags summary
 odo dealer grade (--all | <vin>) [--refresh]
                                     look up each ungraded dealer's CarEdge grade
-odo budget                          the fixed monthly running cost, then the max purchase price
+odo budget [--fulfillment delivery|pickup]
+                                    the fixed monthly running cost, then the max purchase price
                                     for each target monthly budget
-odo rank [--budget N] [--term M] [--detail]
+odo rank [--budget N] [--term M] [--detail] [--fulfillment delivery|pickup]
                                     score every vehicle in the ledger against the scenario
 odo show <vin> [--refresh] [--all-history]
                                     everything odo knows about one vehicle, with its monthly cost
@@ -45,11 +46,11 @@ odo finalist <vin>                  mark a vehicle a finalist
 
 ## budget
 
-`odo budget` prints the fixed monthly running cost first, then the payment room and the maximum purchase price for each target monthly budget in the scenario. It has no flags beyond `--scenario`, and [cost-model.md](cost-model.md#budget) explains the figures.
+`odo budget` prints the fixed monthly running cost first, then the payment room and the maximum purchase price for each target monthly budget in the scenario. `--fulfillment delivery|pickup` overrides the scenario's `fulfillment` for the run, which decides whether the closing line says the maximum counts a shipping fee or a pickup fee. [cost-model.md](cost-model.md#budget) explains the figures.
 
 ## rank
 
-`odo rank` scores every vehicle in the ledger against the scenario. `--budget N` moves any vehicle whose during-loan monthly cost is above N under a separate over-budget heading, rather than leaving it in the ranked list. `--term M` overrides the scenario's loan term with M months (48, 60, or 72, say). `--detail` adds a line under each ranked row with that vehicle's loan payment, and [cost-model.md](cost-model.md#rank) explains what the columns mean.
+`odo rank` scores every vehicle in the ledger against the scenario. `--budget N` moves any vehicle whose during-loan monthly cost is above N under a separate over-budget heading, rather than leaving it in the ranked list. `--term M` overrides the scenario's loan term with M months (48, 60, or 72, say). `--fulfillment delivery|pickup` overrides the scenario's `fulfillment`, so a run can price every Carvana car as collected instead of shipped without editing the file. `--detail` adds a line under each ranked row with that vehicle's loan payment, and [cost-model.md](cost-model.md#rank) explains what the columns mean.
 
 ## show
 

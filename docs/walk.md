@@ -68,7 +68,7 @@ Instead, the walk touches that posting from its card. It stamps the posting as s
 
 A touched link never enters the pool of detail visits and never spends any of `--max`. That means `--max`, when you give it, goes only to cars the ledger has never seen, and paging on Carvana goes on past pages made only of known cars until the pool of new links is full or the search runs out. What a card can't tell the walk stays as the last detail visit left it: the dealer, the Carvana shipping fee, and the vehicle's year, mileage, and trim. A card price under $1,000 is treated as a misread and not a price.
 
-`--revisit` turns all of this off and opens a detail page for every link, as the walk did before. Use it to refresh the dealer or shipping fee of cars the ledger already holds, or to check a site whose cards the walk can't read yet. A posting that was dropped on its detail visit (the wrong model, a new car) never reached the ledger, so it's opened again on every walk.
+`--revisit` turns all of this off and opens a detail page for every link, as the walk did before. Use it to refresh the dealer, shipping fee, or pickup option of cars the ledger already holds, or to check a site whose cards the walk can't read yet. A posting that was dropped on its detail visit (the wrong model, a new car) never reached the ledger, so it's opened again on every walk.
 
 ### Badges
 
@@ -179,7 +179,11 @@ A Carvana card's price is the amount after "Current price:".
 
 Carvana ships every car to the buyer, and its detail page prints a one-time shipping fee beside the price ("Free shipping" or, for example, "$1,590 shipping", and again in the delivery block). The fee depends on the car and on the buyer's zip. The walk reads that line straight off the page text, with no model in between. "Free shipping" stores 0, "$1,590 shipping" stores 1590, and a page that shows neither stores nothing, so an unknown fee is never mistaken for free. It reads only the page's own line, ahead of the "Need it sooner?" block that lists other cars.
 
-The fee is stored on the posting as its own `ShippingFee` column, not in the price history, because it isn't part of the asking price, only of what taking the car home costs. Each sighting replaces the last one's value, so a later walk that finds a different fee (or none) leaves the newer figure. Every other site stores no fee. [cost-model.md](cost-model.md#what-a-purchase-price-means) covers how the fee counts.
+The page also offers pickup, in a "Pickup and Delivery" block that lists the two options one after the other: "Pickup Wednesday", "Pick it up from our Orlando location", "Orlando, FL", then "or", then "Delivery Tuesday", "Delivered to you within 3 days", "Orlando, FL", and the shipping amount. The shipping fee sits under the delivery option only, and the pickup option prints no fee. The walk reads the block from the page text the same way, with no model in between. The location is the city line under the pickup line, and the pickup fee is 0 unless a dollar amount or "Free" is printed under the pickup option before the "or". A page whose block never rendered stores no pickup fee and no location, and keeps its shipping fee from the price header, so an unread pickup is never mistaken for a free one.
+
+The block renders lazily, only once the page has been scrolled about a third of the way down. A Carvana detail page therefore gets one screen of scrolling as every page does, and if the text still lacks "Pickup and Delivery", up to three more screens, each with its own pause, stopping as soon as the block appears. Some cars never render it, and the walk gives up on those after the last step rather than waiting.
+
+The fee is stored on the posting as its own `ShippingFee` column, not in the price history, because it isn't part of the asking price, only of what taking the car home costs. The pickup option goes in the posting's `PickupFee` and `PickupLocation` columns. Each sighting replaces the last one's values, so a later walk that finds a different fee (or none) leaves the newer figure, and a later page whose block didn't render clears the pickup option rather than keeping an old one. Every other site stores no fee. [cost-model.md](cost-model.md#what-a-purchase-price-means) covers how each fee counts, and how the scenario's `fulfillment` chooses between them.
 
 ### Autotrader
 

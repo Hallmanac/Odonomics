@@ -20,6 +20,7 @@ Only some fields can be loose, and the list below marks them. The others are pla
 - `maintenancePerMile` (loose) is the dollars per mile you expect to spend on maintenance, and `emergencyReservePerMonth` (loose) is a monthly amount set aside for surprises.
 - `salesTaxStateRate` applies to the whole price. `countySurtaxRate` applies to the first $5,000 of it only, and `countySurtaxSource` is a note saying where that rate came from. odo doesn't read the note when it does the math.
 - `fees` (loose) is the one-time cost on top of the price and tax, and `residualFraction` (loose) is the share of the purchase cost you expect the car to be worth when the hold ends.
+- `fulfillment` is optional, and it's either `"delivery"` or `"pickup"`. It says how you'd take a car home, which decides whether a listing's shipping fee or its pickup fee is added to the asking price (see [cost-model.md](cost-model.md#what-a-purchase-price-means)). Leaving it out means `"delivery"`, so a scenario written before the field existed prices as it did. Choose `"pickup"` when you'd collect the car yourself, or to see what a pickup would save. `ScenarioLoader` rejects any other value. `odo rank` and `odo budget` take `--fulfillment` to override the field for one run.
 - `targetMonthlyBudgets` is the list of monthly figures that `odo budget` solves for, and it's what `odo rank` checks the cheapest vehicle against.
 
 [cost-model.md](cost-model.md) says how these inputs turn into the figures on screen.
