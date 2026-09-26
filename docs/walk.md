@@ -152,7 +152,7 @@ Two kinds of detail page are recognized from their text before extraction is att
 
 A sold page carries other cars' cards, so the extraction would otherwise read one of those and drop the page as "no VIN". When the link is already a posting on the ledger, which happens under `--revisit`, the walk stamps that posting as sold for this run. The posting is not touched otherwise, so the diff lists it under "Gone" with the reason "sold". A sold page for a link the ledger never held marks nothing. A page with no price never creates or updates a price observation, since the car is still for sale and only its price is unknown.
 
-Each site carries its own patterns for the two pages, and a site without them drops such a page for whatever the extraction makes of it. Only Autotrader has them so far: its sold page says "It looks like this Toyota Corolla has already found a new home", and its no-price page prints "Contact Dealer For Price" on a line of its own. The cars.com and Carvana wording is added once a page saying so has been recorded.
+Each site carries its own patterns for the two pages, and a site without them drops such a page for whatever the extraction makes of it. Only Autotrader has them so far: its sold page says "It looks like this Toyota Corolla has already found a new home", and its no-price page prints "Contact Dealer For Price" on a line of its own in the page header (the dealer's other cars, listed further down, are not read, since an unpriced one prints the same prompt on a page whose own car is priced). The cars.com and Carvana wording is added once a page saying so has been recorded.
 
 ## Per site
 

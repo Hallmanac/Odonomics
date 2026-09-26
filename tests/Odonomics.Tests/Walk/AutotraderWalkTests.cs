@@ -316,6 +316,24 @@ public class AutotraderWalkTests
     }
 
     [Fact]
+    public void ReadsAsNoPrice_PricedPageWhoseCarouselHoldsAnUnpricedCard_IsNotNoPrice()
+    {
+        const string page = "Used 2024 Toyota Prius LE FWD\n$26,093\nSee estimated payment\nCheck Availability\nView similar vehicles\n"
+            + "Check out similar styles from this dealer\nUsed\n2021 Toyota Prius\nLE\n43K mi\nHybrid\nContact Dealer For Price\n";
+
+        Assert.False(WalkSites.Autotrader.ReadsAsNoPrice(page));
+    }
+
+    [Fact]
+    public void ReadsAsNoPrice_PromptInTheHeaderOfAPageWithACarousel_IsNoPrice()
+    {
+        const string page = "Used 2021 Toyota Prius LE FWD\nContact Dealer For Price\nCheck Availability\nView similar vehicles\n"
+            + "Used\n2024 Toyota Prius\nLE\n44K mi\nHybrid\n26,093\n";
+
+        Assert.True(WalkSites.Autotrader.ReadsAsNoPrice(page));
+    }
+
+    [Fact]
     public void ReadsAsSoldOrNoPrice_SiteWithNoPatterns_IsNeitherWhateverThePageSays()
     {
         const string page = "It looks like this Toyota Corolla has already found a new home.\nContact Dealer For Price\n";

@@ -429,9 +429,14 @@ public static class WalkSites
         // found a new home." above a set of similar cars, and a page with no asking price prints
         // "Contact Dealer For Price" as a line of its own where the price would be (recorded in walk
         // run 20260926-121057, corolla-hybrid/detail-21 and prius/detail-15). The price prompt has to be
-        // a whole line, so a longer sentence that merely contains it never reads as a page with none.
+        // a whole line, so a longer sentence that merely contains it never reads as a page with none, and
+        // it has to come before the "View similar vehicles" line that ends the page's header: further
+        // down, the dealer's other cars are listed as cards, and an unpriced card prints the same prompt
+        // on a page whose own car is priced.
         SoldPagePattern: new Regex(@"has already found a new home", RegexOptions.IgnoreCase),
-        NoPricePagePattern: new Regex(@"^\s*Contact Dealer For Price\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline),
+        NoPricePagePattern: new Regex(
+            @"\A(?:(?!^\s*View similar vehicles\s*$)[\s\S])*^\s*Contact Dealer For Price\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline),
         CardBadgeReader: CardBadges.Autotrader);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch

@@ -1209,6 +1209,60 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_VinGoneOnTwoSourcesAndFoundSoldOnTheLaterOne_IsGoneForSoldOnThatSource()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        const string vin = "JTDKN3DU0A0000008";
+        const string autotraderUrl = "https://www.autotrader.com/cars-for-sale/vehicle/4";
+
+        RunEntity run1 = Run(FirstRunAt, "cars.com:Prius,autotrader:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate(vin, 15000m, "https://www.cars.com/vehicledetail/4/", "cars.com"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate(vin, 15000m, autotraderUrl, "autotrader"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "cars.com:Prius,autotrader:Prius", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.MarkSoldAsync("autotrader", autotraderUrl, run2, CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal(GoneReasons.Sold, gone.Reason);
+        Assert.Equal("autotrader", gone.Source);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_VinGoneOnTwoSourcesAndFoundSoldOnTheEarlierOne_StaysGoneForSold()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        const string vin = "JTDKN3DU0A0000009";
+        const string carsComUrl = "https://www.cars.com/vehicledetail/5/";
+
+        RunEntity run1 = Run(FirstRunAt, "cars.com:Prius,autotrader:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate(vin, 15000m, carsComUrl, "cars.com"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate(vin, 15000m, "https://www.autotrader.com/cars-for-sale/vehicle/5", "autotrader"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "cars.com:Prius,autotrader:Prius", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.MarkSoldAsync("cars.com", carsComUrl, run2, CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal(GoneReasons.Sold, gone.Reason);
+        Assert.Equal("cars.com", gone.Source);
+    }
+
+    [Fact]
     public async Task ComputeAsync_StoredPlaceholderPriceOnANewVehicle_IsNotListedUnderNew()
     {
         using var testDb = new LedgerTestDatabase();
