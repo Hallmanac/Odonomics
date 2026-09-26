@@ -87,6 +87,8 @@ odo budget                          the fixed monthly running cost, then the pay
 
 Every command that scores against a scenario defaults to `scenarios/daughter.json`; pass `--scenario <path>` to use a different one.
 
+`odo search` asks both APIs for used cars only, matching the walk, which already drops new-car listings: Marketcheck's search carries `car_type=used`, and Auto.dev's listings request carries `condition=used` together with `condition=certified pre-owned`, so certified pre-owned cars (which are used cars) still come through. As a backstop against a filter an API ignores, a record either API still marks as new (Auto.dev's `condition`, Marketcheck's `inventory_type`) is dropped with a rejection naming its VIN, and the per-source summary line counts it among the rejected like any other rejection. A record with no such field is kept. The scenario's minimum model year and maximum mileage are still sent as facets, unchanged.
+
 ## Background research and red flags
 
 `odo show <vin>` and `odo research` both pull the same two pieces of free background research for a
