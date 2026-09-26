@@ -774,4 +774,48 @@ public class LedgerDiffServiceTests
 
         Assert.Equal(GoneReasons.OverMileage, gone.Reason);
     }
+
+    [Fact]
+    public async Task ComputeAsync_StoredPlaceholderPriceOnANewVehicle_IsNotListedUnderNew()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDBCMFE2T3156781", 0m, "https://cars.com/zero"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a"), run1, CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run1, DaughterScenario, CancellationToken.None);
+
+        NewPostingEntry entry = Assert.Single(diff.New);
+        Assert.Equal("1HGCM82633A004352", entry.Vin);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PriceFallingToAPlaceholderOrRisingFromOne_IsNeverListedUnderPriceDrops()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDBCMFE2T3156781", 0m, "https://cars.com/zero"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 0m, "https://cars.com/a"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDBCMFE2T3156781", 15000m, "https://cars.com/zero"), run2, CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        Assert.Empty(diff.PriceDrops);
+        Assert.Empty(diff.New);
+    }
 }
