@@ -5,6 +5,10 @@ namespace Odonomics.Ledger;
 
 public sealed record NewPostingEntry(string Vin, int Year, string Make, string Model, string Source, string Url, decimal Price);
 
+/// <summary>A vehicle the ledger already knew that this run found on additional sources: one entry per VIN,
+/// naming every source it gained this run, with the price on the first posting the run saw.</summary>
+public sealed record AlsoListedEntry(string Vin, int Year, string Make, string Model, IReadOnlyList<string> Sources, decimal Price);
+
 public sealed record MovedPostingEntry(string Vin, int Year, string Make, string Model, string Source, string OldUrl, string NewUrl);
 
 public sealed record PriceDropEntry(string Vin, int Year, string Make, string Model, string Source, string Url, decimal PreviousPrice, decimal CurrentPrice);
@@ -23,25 +27,28 @@ public static class GoneReasons
 
 public sealed record SearchDiff(
     IReadOnlyList<NewPostingEntry> New,
+    IReadOnlyList<AlsoListedEntry> AlsoListed,
     IReadOnlyList<MovedPostingEntry> Moved,
     IReadOnlyList<PriceDropEntry> PriceDrops,
     IReadOnlyList<GonePostingEntry> Gone);
 
 /// <summary>
 /// Diffs one run against whatever ran before it, per source and model. A vehicle counts as "new"
-/// because this run is the one that first created its ledger row (its FirstSeen matches the run's
-/// own timestamp), or because this run created its first-ever posting on a source that VIN has
-/// never been seen on before: a VIN the ledger already knew about through one source is still
-/// "new" the first time a different source turns up a posting for it, since that's genuinely new
-/// information about where the car is listed. What a VIN the ledger already knew about never gets
-/// reported as "new" for is a fresh posting row on a source it was already known on (a relisted
-/// URL, or, before URL canonicalization, a per-run query-string change); that's either "moved"
-/// (the same source's posting reappeared under a different URL, price unchanged or higher) or
-/// folded into "price-dropped" (same shape, but the new posting's price is actually lower than the
-/// stale posting's last known price) rather than "new". A posting is "price-dropped" when this run
-/// itself appended a lower price than the one before it on that same posting row, and "gone" when
-/// the last run to cover that posting's own source and model before this one had it active but
-/// this run never touched it. See LedgerUpsertService: every posting touched by a run is stamped
+/// only because this run is the one that created its ledger row (its FirstSeen matches the run's
+/// own timestamp), and it is reported once per VIN even when two sources or two postings returned
+/// it in the same run; the source shown is the first posting the run saw. A vehicle the ledger
+/// already knew about is never "new". When this run created its first-ever posting on a source that
+/// VIN had never been seen on before, that is genuinely new information about where the car is
+/// listed, so it is reported as "also listed": one entry per VIN naming every source it gained this
+/// run, with the price on the first such posting the run saw. What a known VIN never gets reported
+/// for is a fresh posting row on a source it was already known on (a relisted URL, or, before URL
+/// canonicalization, a per-run query-string change); that's either "moved" (the same source's
+/// posting reappeared under a different URL, price unchanged or higher) or folded into
+/// "price-dropped" (same shape, but the new posting's price is actually lower than the stale
+/// posting's last known price). A posting is "price-dropped" when this run itself appended a lower
+/// price than the one before it on that same posting row, and "gone" when the last run to cover
+/// that posting's own source and model before this one had it active but this run never touched
+/// it. See LedgerUpsertService: every posting touched by a run is stamped
 /// with that run's own StartedAt, not wall-clock time, which is what makes this an exact equality
 /// comparison rather than an elapsed-time heuristic. Scoping "gone" to each posting's own source
 /// and model (via <see cref="RunEntity.Sources"/>, one "source:model" token per pair the run
@@ -69,7 +76,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         var moved = new List<MovedPostingEntry>();
         var priceDrops = new List<PriceDropEntry>();
         var newEntryVins = new HashSet<string>();
-        var newSourceSightings = new HashSet<(string Vin, string Source)>();
+        var alsoListedByVin = new Dictionary<string, (VehicleEntity Vehicle, decimal Price, List<string> Sources)>();
         var movedSightings = new HashSet<(string Vin, string Source)>();
         var priceDropSightings = new HashSet<(string Vin, string Source)>();
 
@@ -125,17 +132,19 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                 if (stale is null)
                 {
                     // First time this already-known VIN has ever been seen on this source: not a
-                    // move (nothing on this source to have moved from), so it's reported under
-                    // "New" alongside genuinely new vehicles, the same heading this posting would
-                    // have landed under before New was keyed on the vehicle's own FirstSeen rather
-                    // than the posting's. The vehicle itself isn't new, but this sighting is. Deduped
-                    // by (VIN, source) rather than VIN alone: unlike the genuinely-new-vehicle branch
-                    // above, where one entry per VIN is the right call, the same already-known VIN can
-                    // legitimately turn up new on two different sources in the same run (a bare `odo
-                    // walk` covers every walk site together), and each is its own new sighting.
-                    if (newSourceSightings.Add((vehicle.Vin, posting.Source)))
+                    // move (nothing on this source to have moved from), and not "New" either, since
+                    // the vehicle itself was already on the ledger. It is collected per VIN so that a
+                    // car this run found on several sources at once is one "also listed" row naming
+                    // each of them, not one row per source.
+                    if (!alsoListedByVin.TryGetValue(vehicle.Vin, out (VehicleEntity Vehicle, decimal Price, List<string> Sources) gained))
                     {
-                        newEntries.Add(new NewPostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, currentPrice));
+                        gained = (vehicle, currentPrice, []);
+                        alsoListedByVin.Add(vehicle.Vin, gained);
+                    }
+
+                    if (!gained.Sources.Contains(posting.Source))
+                    {
+                        gained.Sources.Add(posting.Source);
                     }
 
                     continue;
@@ -182,7 +191,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         // A VIN sighted anywhere this run, under any posting, is never "gone" even if the specific
         // posting that used to carry it went untouched: a relisted URL, a second dealer's listing,
         // or (before URL canonicalization) a per-run query-string change all leave the old posting
-        // stale while the vehicle itself is still on the market. See the "New" and "Moved" entries
+        // stale while the vehicle itself is still on the market. See the "New", "Also listed", and "Moved" entries
         // above for where that fresh sighting itself gets reported, if it gets reported at all.
         var vinsSightedThisRun = new HashSet<string>(touchedThisRun.Select(p => p.VehicleVin));
 
@@ -222,7 +231,10 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             }
         }
 
-        return new SearchDiff(newEntries, moved, priceDrops, gone);
+        List<AlsoListedEntry> alsoListed = [.. alsoListedByVin.Values.Select(g =>
+            new AlsoListedEntry(g.Vehicle.Vin, g.Vehicle.Year, g.Vehicle.Make, g.Vehicle.Model, g.Sources, g.Price))];
+
+        return new SearchDiff(newEntries, alsoListed, moved, priceDrops, gone);
     }
 
     private static string GoneReason(VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario)
