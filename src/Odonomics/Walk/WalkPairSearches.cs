@@ -21,6 +21,10 @@ public static class WalkPairSearches
     /// "search-2.txt", "search-3.txt" and so on.</summary>
     public static string SearchFileName(int searchIndex) => searchIndex == 0 ? "search.txt" : $"search-{searchIndex + 1}.txt";
 
+    /// <summary>The recorder file name for the detail links, with their card text, of the search page at
+    /// <paramref name="searchIndex"/>: "cards.json" beside "search.txt", then "cards-2.json" and so on.</summary>
+    public static string CardsFileName(int searchIndex) => searchIndex == 0 ? "cards.json" : $"cards-{searchIndex + 1}.json";
+
     /// <summary>Walks each of <paramref name="searchUrls"/> in turn. <paramref name="collectLinksAsync"/>
     /// opens one search page (given its URL and index) and returns the candidate detail links to
     /// consider from it, at most the pool size it is handed: the search's cap share times the
