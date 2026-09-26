@@ -91,6 +91,7 @@ public static class DealerGradeCommand
 
         int graded = 0;
         int ungraded = 0;
+        int kept = 0;
         int unmatched = 0;
         int failed = 0;
         var deadSearchUrlGate = new ConsecutiveDeadSearchUrlGate();
@@ -134,6 +135,9 @@ public static class DealerGradeCommand
                     case DealerGradeTally.Ungraded:
                         ungraded++;
                         break;
+                    case DealerGradeTally.Kept:
+                        kept++;
+                        break;
                     case DealerGradeTally.Unmatched:
                         unmatched++;
                         break;
@@ -175,7 +179,7 @@ public static class DealerGradeCommand
             }
         }
 
-        AnsiConsole.MarkupLineInterpolated($"graded {graded}, recorded {ungraded} ungraded, {unmatched} unmatched, {failed} failed");
+        AnsiConsole.MarkupLineInterpolated($"graded {graded}, recorded {ungraded} ungraded, kept {kept} stored, {unmatched} unmatched, {failed} failed");
         return deadSearchUrlGate.ShouldStop ? 1 : 0;
     }
 
@@ -216,11 +220,12 @@ public static class DealerGradeCommand
     }
 
     /// <summary>Applies what the parser made of a dealer's CarEdge page to that dealer, and says how
-    /// to report it. <see cref="DealerEntity.GradeCheckedAt"/> is stamped only for the two outcomes
-    /// that are final, a grade or CarEdge positively having none; every other outcome leaves the
-    /// dealer untouched so a later run looks it up again. A dealer that already has a grade and now
-    /// comes back with no card keeps that grade, doc fee, and add-ons note: a refresh never discards
-    /// what an earlier look found.</summary>
+    /// to report it. <see cref="DealerEntity.GradeCheckedAt"/> is stamped only for the outcomes
+    /// that are final, a grade or CarEdge having none; every other outcome leaves the dealer
+    /// untouched so a later run looks it up again. A dealer that already has a grade and now comes
+    /// back with no card at all keeps that grade, doc fee, and add-ons note, since a missing card
+    /// says nothing about the rating. A card marked "Not rated" is CarEdge positively saying there
+    /// is none, so it clears the stored grade, doc fee, and add-ons note.</summary>
     public static DealerGradeOutcome ApplyResult(DealerEntity dealer, CarEdgeGradeResult result, DateTimeOffset checkedAt, string searchUrl)
     {
         switch (result.Status)
@@ -232,15 +237,26 @@ public static class DealerGradeCommand
                 dealer.AddOnsNote = result.AddOnsNote;
                 dealer.GradeCheckedAt = checkedAt;
                 return new DealerGradeOutcome($"{dealer.Name}: {result.Grade}", Color.Default, DealerGradeTally.Graded, Stamped: true);
-            case CarEdgeGradeStatus.NotFound:
+            case CarEdgeGradeStatus.NotFound when dealer.Grade is not null:
                 dealer.GradeCheckedAt = checkedAt;
                 return new DealerGradeOutcome(
-                    dealer.Grade is null
-                        ? $"{dealer.Name}: not on CarEdge"
-                        : $"{dealer.Name}: no longer on CarEdge, keeping the stored grade {dealer.Grade}",
+                    $"{dealer.Name}: no longer on CarEdge, keeping the stored grade {dealer.Grade}",
                     Color.Grey,
-                    DealerGradeTally.Ungraded,
+                    DealerGradeTally.Kept,
                     Stamped: true);
+            case CarEdgeGradeStatus.NotFound:
+                dealer.GradeCheckedAt = checkedAt;
+                return new DealerGradeOutcome($"{dealer.Name}: not on CarEdge", Color.Grey, DealerGradeTally.Ungraded, Stamped: true);
+            case CarEdgeGradeStatus.NotRated:
+                string line = dealer.Grade is null
+                    ? $"{dealer.Name}: not rated on CarEdge"
+                    : $"{dealer.Name}: CarEdge now shows this dealer as not rated, cleared the stored grade {dealer.Grade}";
+                dealer.Grade = null;
+                dealer.GradeReason = null;
+                dealer.DocFee = null;
+                dealer.AddOnsNote = null;
+                dealer.GradeCheckedAt = checkedAt;
+                return new DealerGradeOutcome(line, Color.Grey, DealerGradeTally.Ungraded, Stamped: true);
             case CarEdgeGradeStatus.Ambiguous:
                 return new DealerGradeOutcome(
                     $"{dealer.Name}: several CarEdge dealers share this name and the location on record is missing or too partial to pick one, left ungraded until a fuller location is known",
@@ -290,6 +306,7 @@ public enum DealerGradeTally
 {
     Graded,
     Ungraded,
+    Kept,
     Unmatched,
     Failed,
 }

@@ -131,6 +131,41 @@ public class DealerGradeCommandTests
         Assert.Equal(1199m, dealer.DocFee);
         Assert.Equal("No add-ons", dealer.AddOnsNote);
         Assert.Equal("Holler Honda: no longer on CarEdge, keeping the stored grade B", outcome.Line);
+        Assert.Equal(DealerGradeTally.Kept, outcome.Tally);
+        Assert.Equal(CheckedAt, dealer.GradeCheckedAt);
+    }
+
+    [Fact]
+    public void ApplyResult_NotRated_StampsTheDealerAsCheckedWithNoGrade()
+    {
+        DealerEntity dealer = Dealer();
+
+        DealerGradeOutcome outcome = DealerGradeCommand.ApplyResult(dealer, CarEdgeGradeResult.NotRated, CheckedAt, SearchUrl);
+
+        Assert.Equal(CheckedAt, dealer.GradeCheckedAt);
+        Assert.Null(dealer.Grade);
+        Assert.True(outcome.Stamped);
+        Assert.Equal(DealerGradeTally.Ungraded, outcome.Tally);
+        Assert.Equal("Holler Honda: not rated on CarEdge", outcome.Line);
+    }
+
+    [Fact]
+    public void ApplyResult_RefreshThatFindsTheCardNowNotRated_ClearsTheGradeAndFees()
+    {
+        DealerEntity dealer = Dealer();
+        dealer.Grade = "F";
+        dealer.DocFee = 1199m;
+        dealer.AddOnsNote = "$358 add-ons";
+
+        DealerGradeOutcome outcome = DealerGradeCommand.ApplyResult(dealer, CarEdgeGradeResult.NotRated, CheckedAt, SearchUrl);
+
+        Assert.Null(dealer.Grade);
+        Assert.Null(dealer.DocFee);
+        Assert.Null(dealer.AddOnsNote);
+        Assert.Equal(CheckedAt, dealer.GradeCheckedAt);
+        Assert.True(outcome.Stamped);
+        Assert.Equal(DealerGradeTally.Ungraded, outcome.Tally);
+        Assert.Equal("Holler Honda: CarEdge now shows this dealer as not rated, cleared the stored grade F", outcome.Line);
     }
 
     [Fact]

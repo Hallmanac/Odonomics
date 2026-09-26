@@ -3,9 +3,11 @@ using System.Globalization;
 namespace Odonomics.CarEdge;
 
 /// <summary>What a CarEdge dealer search page's text resolved to. <see cref="Graded"/> is the only
-/// status carrying a grade. <see cref="NotFound"/> covers CarEdge positively having nothing for this
-/// dealer, whether the search returned no card for it at all or returned a card for it marked "Not
-/// rated" (safe to stamp as checked for good either way). <see cref="Unrecognized"/> means the page
+/// status carrying a grade. <see cref="NotFound"/> means the search returned no card for this dealer
+/// at all, and <see cref="NotRated"/> means it returned the dealer's own card marked "Not rated".
+/// Both are safe to stamp as checked for good, but only <see cref="NotRated"/> is CarEdge
+/// positively saying the dealer has no rating, so it alone clears a grade already on record.
+/// <see cref="Unrecognized"/> means the page
 /// matched no known shape at all (a slow render, a challenge, a layout change) and should be
 /// retried rather than recorded as either outcome. <see cref="CarEdgeSearchUrlInvalid"/> means the
 /// page is CarEdge's own 404, which means the search URL itself is dead, not this one dealer.
@@ -18,6 +20,7 @@ public enum CarEdgeGradeStatus
 {
     Graded,
     NotFound,
+    NotRated,
     Unrecognized,
     CarEdgeSearchUrlInvalid,
     Ambiguous,
@@ -46,6 +49,7 @@ public sealed record CarEdgeGradeResult(
             : null;
 
     public static readonly CarEdgeGradeResult NotFound = new(CarEdgeGradeStatus.NotFound, null, null, null, null, null, null);
+    public static readonly CarEdgeGradeResult NotRated = new(CarEdgeGradeStatus.NotRated, null, null, null, null, null, null);
     public static readonly CarEdgeGradeResult Unrecognized = new(CarEdgeGradeStatus.Unrecognized, null, null, null, null, null, null);
     public static readonly CarEdgeGradeResult CarEdgeSearchUrlInvalid = new(CarEdgeGradeStatus.CarEdgeSearchUrlInvalid, null, null, null, null, null, null);
     public static readonly CarEdgeGradeResult Ambiguous = new(CarEdgeGradeStatus.Ambiguous, null, null, null, null, null, null);
