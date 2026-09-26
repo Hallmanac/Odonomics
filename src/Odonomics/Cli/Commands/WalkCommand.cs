@@ -249,7 +249,16 @@ public static class WalkCommand
                 site,
                 searchUrl,
                 linkPoolSize,
-                knownTouches.TryTouchAsync,
+                async (canonicalUrl, cardPrice, cardBadges, touchCt) =>
+                {
+                    bool known = await knownTouches.TryTouchAsync(canonicalUrl, cardPrice, cardBadges, touchCt);
+                    if (known && cardTextByUrl.TryGetValue(canonicalUrl, out string? knownCardText))
+                    {
+                        knownTouches.RememberCardFee(canonicalUrl, site.ReadCardFee(knownCardText));
+                    }
+
+                    return known;
+                },
                 (pageUrl, pageNumber, pageCt) => LoadSearchPageAsync(pageUrl, searchLabel, searchIndex, pageNumber, pageCt),
                 (pageNumber, ex) =>
                 {

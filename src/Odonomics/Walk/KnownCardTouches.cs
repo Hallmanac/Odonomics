@@ -8,7 +8,8 @@ namespace Odonomics.Walk;
 /// already on the ledger is instead touched from its result card (see
 /// <see cref="LedgerUpsertService.TouchAsync"/>), so its LastSeen moves to this run and a lower card
 /// price is recorded, and the diff keeps reporting price drops and gone listings from the search pages.
-/// The badges the card shows are refreshed the same way, as the posting's display-only attributes.
+/// The badges the card shows are refreshed the same way, as the posting's display-only attributes, and so
+/// is the fee a card prints (see <see cref="RememberCardFee"/>), on a site whose cards print one.
 /// A link the ledger does not hold is not touched, but the badges its card showed are remembered
 /// (see <see cref="BadgesOfNewLink"/>) for the detail visit that will record it.
 /// <see cref="TryTouchAsync"/> is what <see cref="WalkSearchPages"/> asks of each link before it goes
@@ -28,6 +29,7 @@ public sealed class KnownCardTouches
     private readonly Dictionary<string, decimal?> _pendingPricesByUrl = [];
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _pendingBadgesByUrl = [];
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _newLinkBadgesByUrl = [];
+    private readonly Dictionary<string, (decimal ShippingFee, string? PickupLocation)> _pendingFeesByUrl = [];
 
     private KnownCardTouches(LedgerUpsertService ledger, string source, RunEntity run, HashSet<string> knownUrls)
     {
@@ -77,6 +79,19 @@ public sealed class KnownCardTouches
         return ValueTask.FromResult(true);
     }
 
+    /// <summary>Remembers the fee a card printed for a link that <see cref="TryTouchAsync"/> reported as known,
+    /// for <see cref="CommitAsync"/> to store on its posting: a fee is per car and per buyer, so the latest
+    /// card's figure replaces the one the last sighting stored. A null <paramref name="fee"/> (the card
+    /// printed none, or the site's cards never do) remembers nothing, so a card that omits the line never
+    /// erases a stored fee. The first fee seen for a link this run is the one kept.</summary>
+    public void RememberCardFee(string canonicalUrl, CardFee? fee)
+    {
+        if (fee is CardFee read && _knownUrls.Contains(canonicalUrl))
+        {
+            _pendingFeesByUrl.TryAdd(canonicalUrl, (read.ShippingFee, read.PickupLocation));
+        }
+    }
+
     /// <summary>The badges the card of a link that <see cref="TryTouchAsync"/> reported as new showed, for
     /// the caller to store with the posting its detail visit records (the pool holds only hrefs, and the
     /// card is gone by the time the page opens); empty when the card showed none or the link was not
@@ -84,7 +99,7 @@ public sealed class KnownCardTouches
     public IReadOnlyDictionary<string, string> BadgesOfNewLink(string canonicalUrl) =>
         _newLinkBadgesByUrl.GetValueOrDefault(canonicalUrl) ?? new Dictionary<string, string>();
 
-    /// <summary>Writes every touch remembered so far to the ledger, prices and then badges, for the caller to run
+    /// <summary>Writes every touch remembered so far to the ledger, prices, then badges, then fees, for the caller to run
     /// when the pair's walk has completed and not before.</summary>
     public async Task CommitAsync(CancellationToken cancellationToken)
     {
@@ -96,6 +111,11 @@ public sealed class KnownCardTouches
         if (_pendingBadgesByUrl.Count > 0)
         {
             await _ledger.SetPostingAttributesByUrlAsync(_source, _pendingBadgesByUrl, _run, cancellationToken);
+        }
+
+        if (_pendingFeesByUrl.Count > 0)
+        {
+            await _ledger.SetCardFeesByUrlAsync(_source, _pendingFeesByUrl, cancellationToken);
         }
     }
 }
