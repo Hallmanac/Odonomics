@@ -570,4 +570,43 @@ public class LedgerUpsertServiceTests
         Assert.Null(posting.PickupFee);
         Assert.Null(posting.PickupLocation);
     }
+
+    [Fact]
+    public async Task UpsertAsync_FirstSighting_StoresThePickupLocationBesideAZeroFee()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk carmax");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carmax", shippingFee: 0m, pickupLocation: "Orlando"), run, CancellationToken.None);
+
+        PostingEntity posting = db.Postings.Single();
+        Assert.Equal(0m, posting.ShippingFee);
+        Assert.Equal("Orlando", posting.PickupLocation);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_SeenAgainAsATransfer_ReplacesThePickupLocationWithNull()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "walk carmax");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carmax", shippingFee: 0m, pickupLocation: "Orlando"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "walk carmax");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carmax", shippingFee: 149m), run2, CancellationToken.None);
+
+        PostingEntity posting = db.Postings.Single();
+        Assert.Equal(149m, posting.ShippingFee);
+        Assert.Null(posting.PickupLocation);
+    }
 }
