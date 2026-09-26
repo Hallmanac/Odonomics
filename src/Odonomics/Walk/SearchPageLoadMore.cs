@@ -18,7 +18,7 @@ public readonly record struct LoadMoreResult(int Presses, int Cards)
 
 /// <summary>
 /// Loads the rest of a search page's cards for a site that hides them behind a control instead of a
-/// page number (CarMax's "Show 25 matches"; see <see cref="WalkSite.LoadMoreControlPattern"/>). The
+/// page number (CarMax's "Show 25 matches" or "Load more"; see <see cref="WalkSite.LoadMoreControlPattern"/>). The
 /// control is pressed until the page holds as many cards as it states matches, or until pressing
 /// adds nothing new. A press that adds nothing is given one more pause and a second look before it
 /// ends the run, since the cards arrive a moment after the click. The run also ends when the control

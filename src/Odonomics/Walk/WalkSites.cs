@@ -67,7 +67,7 @@ namespace Odonomics.Walk;
 /// prints it on every card, see <see cref="CarMaxCards"/>); null for a site whose fee, if it prints one, is read off the detail page.
 /// <paramref name="DetailHtmlVinReader"/> reads the VIN off a detail page's HTML for a site whose visible text does
 /// not print it (carmax, see <see cref="CarMaxVin"/>); null for a site whose text does. <paramref name="LoadMoreControlPattern"/>
-/// matches the label of the control a site's search page has to be pressed at to show more cards ("Show 25 matches"),
+/// matches the label of the control a site's search page has to be pressed at to show more cards ("Show 25 matches" or "Load more"),
 /// for a site that loads its cards that way instead of by page number (see <see cref="SearchPageLoadMore"/>).
 /// <paramref name="SponsoredLinkPattern"/> matches a detail link a search page carries for a sponsored card (cargurus's
 /// <c>sponsoredType=PRIORITY</c>, <c>FEATURED</c>, and <c>HIGHLIGHT</c>, everything but <c>NONE</c>): such a link is never a candidate, since a sponsored card ignores the search's facets and
@@ -80,7 +80,10 @@ namespace Odonomics.Walk;
 /// delivered (cargurus, whose detail page shows the car's price at its lot, shipping not in it).
 /// <paramref name="DetailDealerReader"/> reads the dealer a detail page names, ahead of the extraction, for a site whose
 /// dealer is one of many stores under a single name that the extraction does not reliably tell from the site itself
-/// (carmax, see <see cref="CarMaxStores"/>); null for a site whose dealer the extraction reads.</summary>
+/// (carmax, see <see cref="CarMaxStores"/>); null for a site whose dealer the extraction reads.
+/// <paramref name="DetailTitleModelReader"/> reads the model off a detail page's own title line, for a site whose extraction can
+/// leave the model blank on a page that prints it there (carmax, see <see cref="CarMaxTitles"/>); null for a site whose
+/// extraction is taken as it comes.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -109,7 +112,8 @@ public sealed record WalkSite(
     Func<string, string?>? PagingTokenReader = null,
     Func<string, FeeStatement>? CardFeeStatementReader = null,
     bool AskingPriceFromCard = false,
-    Func<string, ResolvedDealer?>? DetailDealerReader = null)
+    Func<string, ResolvedDealer?>? DetailDealerReader = null,
+    Func<string, string?, int?, string?>? DetailTitleModelReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -253,6 +257,15 @@ public sealed record WalkSite(
     /// <summary>The VIN a detail page's HTML carries, read by this site's <see cref="DetailHtmlVinReader"/>,
     /// or null when the site has none or the HTML carries none.</summary>
     public string? ReadDetailHtmlVin(string html) => DetailHtmlVinReader?.Invoke(html);
+
+    /// <summary>The model to store for a detail page whose extraction returned <paramref name="extractedModel"/>: that model
+    /// when it is not blank, otherwise the one the page's own title line prints (see <see cref="DetailTitleModelReader"/>)
+    /// for the page's <paramref name="make"/> and <paramref name="year"/>, or the blank model back when this site has no
+    /// reader or the title names none.</summary>
+    public string? ResolveModel(string? extractedModel, string? make, int? year, string pageText) =>
+        string.IsNullOrWhiteSpace(extractedModel)
+            ? DetailTitleModelReader?.Invoke(pageText, make, year) ?? extractedModel
+            : extractedModel;
 
     /// <summary>The dealer name to store for a page whose extraction returned
     /// <paramref name="extractedDealerName"/>: that name (trimmed) when the page gave one, such as
@@ -567,7 +580,8 @@ public static class WalkSites
         CardFeeReader: CarMaxCards.ReadFee,
         DetailHtmlVinReader: CarMaxVin.Read,
         DetailDealerReader: CarMaxStores.Read,
-        LoadMoreControlPattern: new Regex(@"^\s*Show\s+\d+\s+match(?:es)?\s*$", RegexOptions.IgnoreCase));
+        LoadMoreControlPattern: new Regex(@"^\s*(?:Show\s+\d+\s+match(?:es)?|Load\s+more)\s*$", RegexOptions.IgnoreCase),
+        DetailTitleModelReader: CarMaxTitles.ReadModel);
 
     /// <summary>CarGurus: a marketplace of dealers' cars, searched by the ids CarGurus gives the make and model (see
     /// <see cref="CarGurusSearch"/>) within the scenario's radius. A search page states "N vehicles found", and that
