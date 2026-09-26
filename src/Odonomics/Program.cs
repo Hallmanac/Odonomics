@@ -18,7 +18,7 @@ searchCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(searchCommand);
 
-var walkSiteArgument = new Argument<string?>("site") { Description = "cars.com, carvana, autotrader, or carmax; omit to walk all four", Arity = ArgumentArity.ZeroOrOne };
+var walkSiteArgument = new Argument<string?>("site") { Description = "cars.com, carvana, autotrader, carmax, or cargurus; omit to walk all five", Arity = ArgumentArity.ZeroOrOne };
 var walkModelOption = new Option<string?>("--model") { Description = "which target model to visit this run (\"Make Model\"); defaults to every model in the scenario's allowed list" };
 var walkMaxOption = WalkCommand.CreateMaxOption();
 var walkRevisitOption = WalkCommand.CreateRevisitOption();

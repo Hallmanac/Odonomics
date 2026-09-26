@@ -14,7 +14,7 @@ namespace Odonomics.Cli.Commands;
 
 /// <summary>
 /// The assisted browser walk: connects over CDP to a browser the operator already launched by
-/// hand, never launches one itself. With no site argument it walks cars.com, then carvana, then autotrader, then carmax; a
+/// hand, never launches one itself. With no site argument it walks cars.com, then carvana, then autotrader, then carmax, then cargurus; a
 /// site argument narrows it to that one site. With no --model it walks every model in the
 /// scenario's allowed list, in order, on whichever site(s) it's covering; --model narrows it to
 /// that one model exactly, on whichever site(s) it's covering. The scenario's facets are the only
@@ -47,14 +47,14 @@ public static class WalkCommand
         List<WalkSite> sites;
         if (siteName is null)
         {
-            sites = [WalkSites.CarsCom, WalkSites.Carvana, WalkSites.Autotrader, WalkSites.CarMax];
+            sites = [WalkSites.CarsCom, WalkSites.Carvana, WalkSites.Autotrader, WalkSites.CarMax, WalkSites.CarGurus];
         }
         else
         {
             WalkSite? site = WalkSites.Find(siteName);
             if (site is null)
             {
-                AnsiConsole.MarkupLineInterpolated($"[red]unknown walk target \"{siteName}\"; expected cars.com, carvana, autotrader, or carmax[/]");
+                AnsiConsole.MarkupLineInterpolated($"[red]unknown walk target \"{siteName}\"; expected cars.com, carvana, autotrader, carmax, or cargurus[/]");
                 return 1;
             }
 
@@ -237,7 +237,12 @@ public static class WalkCommand
                 cardTextByUrl.TryAdd(WalkSites.CanonicalDetailUrl(link.Href), link.CardText);
             }
 
-            return new SearchPageContent(links, searchBodyText);
+            // The token that lines a later page up with the first is in the first page's HTML.
+            string? pagingToken = site.PagingTokenReader is not null && pageNumber == 1
+                ? site.ReadPagingToken(await page.ContentAsync())
+                : null;
+
+            return new SearchPageContent(links, searchBodyText, pagingToken);
         }
 
         async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
@@ -255,6 +260,7 @@ public static class WalkCommand
                     if (known && cardTextByUrl.TryGetValue(canonicalUrl, out string? knownCardText))
                     {
                         knownTouches.RememberCardFee(canonicalUrl, site.ReadCardFee(knownCardText));
+                        knownTouches.RememberCardFeeStatement(canonicalUrl, site.ReadCardFeeStatement(knownCardText));
                     }
 
                     return known;
@@ -368,24 +374,28 @@ public static class WalkCommand
                     return DetailPageOutcome.NotMatching;
                 }
 
-                if (outcome.Result.Year is null || outcome.Result.Price is null || outcome.Result.Mileage is null)
+                // The card's own text for this link, when the search pages showed it: for a site whose card is what
+                // says the price and its fees (see WalkSite.AskingPriceFromCard), the walk's figures come from it.
+                string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
+                cardTextByUrl.TryGetValue(canonicalUrl, out string? cardText);
+                decimal? listedPrice = site.AskingPriceOf(outcome.Result.Price, cardText);
+
+                if (outcome.Result.Year is null || listedPrice is null || outcome.Result.Mileage is null)
                 {
                     AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage; {vin})[/]");
                     return DetailPageOutcome.MissingFields;
                 }
 
                 PickupOption? pickup = site.ReadPickup(bodyText);
-                string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
                 FeeStatement? feeStatement = null;
-                decimal askingPrice = outcome.Result.Price.Value;
-                if (site.ReadFeeStatement(bodyText) is FeeStatement readStatement)
+                decimal askingPrice = listedPrice.Value;
+                FeeStatement? statement = site.FeeStatementOf(cardText, bodyText);
+                if (statement is not null)
                 {
-                    (feeStatement, askingPrice) = readStatement.ReconciledWith(askingPrice);
+                    (feeStatement, askingPrice) = statement.ReconciledWith(askingPrice);
                 }
 
-                CardFee? cardFee = cardTextByUrl.TryGetValue(canonicalUrl, out string? cardText)
-                    ? site.ReadCardFee(cardText)
-                    : null;
+                CardFee? cardFee = cardText is null ? null : site.ReadCardFee(cardText);
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
                 var candidate = new ListingCandidate
                 {

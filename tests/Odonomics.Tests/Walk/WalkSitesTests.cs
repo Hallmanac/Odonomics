@@ -28,12 +28,12 @@ public class WalkSitesTests
     {
         string first = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Corolla")).Single();
 
-        string second = WalkSites.CarsCom.PagedSearchUrl!(first, 2);
+        string second = WalkSites.CarsCom.PagedSearchUrl!(first, 2, null);
 
         Assert.Equal(first + "&page=2", second);
         Assert.Equal(
             "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla&zip=32114&maximum_distance=50&year_min=2019&mileage_max=100000&page=3",
-            WalkSites.CarsCom.PagedSearchUrl!(first, 3));
+            WalkSites.CarsCom.PagedSearchUrl!(first, 3, null));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class WalkSitesTests
                 "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry_hybrid&zip=32833&maximum_distance=50&year_min=2018&mileage_max=100000&page=2",
                 "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry&zip=32833&maximum_distance=50&year_min=2025&mileage_max=100000&page=2",
             ],
-            [.. urls.Select(url => WalkSites.CarsCom.PagedSearchUrl!(url, 2))]);
+            [.. urls.Select(url => WalkSites.CarsCom.PagedSearchUrl!(url, 2, null))]);
     }
 
     [Fact]
