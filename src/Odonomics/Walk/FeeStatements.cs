@@ -41,8 +41,8 @@ public sealed record FeeStatement(string Posture, decimal? ItemizedTotal, decima
     }
 }
 
-/// <summary>Reads a dealer's own fee statements off a cars.com or Autotrader detail page's text into
-/// a <see cref="FeeStatement"/>. It is read here and not by the extraction model because it decides
+/// <summary>Reads a dealer's own fee statements off a cars.com or Autotrader detail page's text, or a CarGurus
+/// search card's, into a <see cref="FeeStatement"/>. It is read here and not by the extraction model because it decides
 /// what a car costs to take home and whether a red flag fires, so it should never depend on a model's
 /// reading. Every reader answers one question: does the page say the price it shows already contains
 /// the dealer's fees? A page that says so is all-in, whatever fee lines it also itemizes, because the
@@ -66,6 +66,8 @@ public static class FeeStatements
     private const string AutotraderNoAdditionalFees = "No Additional Dealer Fees";
     private const string AutotraderTotalPrice = "Total Price";
     private const string AutotraderFeesIncluded = "Dealer Fees Included";
+    private const string CarGurusFeesIncluded = "Price includes fees";
+    private const string CarGurusNoAdditionalFees = "No additional dealer fees";
 
     private static readonly Regex Amount = new(@"^\$(?<amount>\d[\d,]*(?:\.\d{2})?)$", RegexOptions.Compiled);
     private static readonly Regex AddedAmount = new(@"^\+\s*\$(?<amount>\d[\d,]*(?:\.\d{2})?)$", RegexOptions.Compiled);
@@ -179,6 +181,20 @@ public static class FeeStatements
         }
 
         return Itemized(fees, listingPrice, null);
+    }
+
+    /// <summary>A CarGurus card says one of two things about fees, on a line of its own: "Price includes fees", or
+    /// "No additional dealer fees" (which every store-transfer card printed on the pages recorded on 2026-09-26). A card
+    /// that names shipping ("Price includes $462 shipping") is all-in too, since the price includes that. Any of the
+    /// three means the price is all-in. A card with none is unknown. CarGurus's own statement is what is read: a dealer's
+    /// disclaimer on the detail page may still say fees are extra, and this reader never looks at it.</summary>
+    public static FeeStatement ReadCarGurusCard(string cardText)
+    {
+        bool allIn = PageLines(cardText).Any(l =>
+            l.Equals(CarGurusFeesIncluded, StringComparison.OrdinalIgnoreCase)
+            || l.Equals(CarGurusNoAdditionalFees, StringComparison.OrdinalIgnoreCase))
+            || CarGurusCards.IncludedShipping(cardText) is not null;
+        return allIn ? AllIn(null, null, null) : Unknown;
     }
 
     private static readonly FeeStatement Unknown = new(FeePostures.Unknown, null);

@@ -50,6 +50,18 @@ public static class CardBadges
             ("Free shipping", PostingAttributeNames.Shipping),
         ]);
 
+    /// <summary>CarGurus prints its verdict on the price as a line of its own: "Great Deal", "Good Deal", "Fair Deal",
+    /// "High Priced", or "Overpriced", and "Uncertain" for a car it could not rate, which says nothing and is not read.</summary>
+    public static IReadOnlyDictionary<string, string> CarGurus(string cardText) => Read(
+        cardText,
+        [
+            ("Great Deal", PostingAttributeNames.Deal),
+            ("Good Deal", PostingAttributeNames.Deal),
+            ("Fair Deal", PostingAttributeNames.Deal),
+            ("High Priced", PostingAttributeNames.Deal),
+            ("Overpriced", PostingAttributeNames.Deal),
+        ]);
+
     /// <summary>Every card line that is one of <paramref name="badges"/>, or that matches
     /// <paramref name="dealerRatingLine"/> when one is given, in card order. A name a card shows twice
     /// keeps its first value.</summary>
