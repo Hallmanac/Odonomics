@@ -6,7 +6,7 @@ The table below lists the commands in the order you'd run them. [running.md](run
 
 ```
 odo search                          run Auto.dev and Marketcheck, upsert the ledger, print the diff
-odo walk [cars.com|carvana|autotrader|carmax] [--model "Make Model"] [--max N] [--revisit]
+odo walk [cars.com|carvana|autotrader|carmax|cargurus] [--model "Make Model"] [--max N] [--revisit]
                                     an operator-assisted browser walk of the shortlist
 odo research [<vin> ...] [--refresh] [--quiet]
                                     safety ratings and VIN history, with a red-flags summary
@@ -31,7 +31,7 @@ odo finalist <vin>                  mark a vehicle a finalist
 
 `odo walk` connects to a browser you've already launched, so [walk.md](walk.md) is the page to read before your first one. Its flags narrow or change what a walk visits:
 
-- The optional site argument is `cars.com`, `carvana`, `autotrader`, or `carmax`, and leaving it out walks all four.
+- The optional site argument is `cars.com`, `carvana`, `autotrader`, `carmax`, or `cargurus`, and leaving it out walks all five.
 - `--model "Make Model"` narrows the walk to that one model, matching the scenario's own casing case-insensitively.
 - `--max N` limits how many matching detail pages a site-and-model pair visits. Without it, a pair visits every car its search returns that the ledger doesn't already hold.
 - `--revisit` opens a detail page for every link, including cars the ledger already holds.
