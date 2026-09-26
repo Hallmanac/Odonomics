@@ -44,7 +44,9 @@ namespace Odonomics.Walk;
 /// page alone (see <see cref="ReadCardPrice"/>); null for a site whose card shape has not been confirmed
 /// from a recorded page, whose known listings are then seen again without a price. <paramref name="CardContainerSelector"/>
 /// is a CSS selector for the element that is one result card, for a site where the nearest ancestor holding
-/// a dollar amount (the default, see <see cref="SearchPageLinks"/>) is not the card.</summary>
+/// a dollar amount (the default, see <see cref="SearchPageLinks"/>) is not the card. <paramref name="CardBadgeReader"/>
+/// reads the site's own badges off a card's text as display-only posting attributes (see
+/// <see cref="ReadCardBadges"/>); null for a site whose card shape has not been confirmed.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -59,7 +61,8 @@ public sealed record WalkSite(
     Func<string, decimal?>? ShippingFeeReader = null,
     Regex? ExhaustedSearchPattern = null,
     Func<string, decimal?>? CardPriceReader = null,
-    string? CardContainerSelector = null)
+    string? CardContainerSelector = null,
+    Func<string, IReadOnlyDictionary<string, string>>? CardBadgeReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -141,6 +144,13 @@ public sealed record WalkSite(
     /// site's <see cref="CardPriceReader"/>, or null when the site has none or the card shows no price
     /// it can read.</summary>
     public decimal? ReadCardPrice(string cardText) => CardPriceReader?.Invoke(cardText);
+
+    /// <summary>The badges a result card shows, read off <paramref name="cardText"/> by this site's
+    /// <see cref="CardBadgeReader"/> and keyed by <see cref="Odonomics.Ledger.PostingAttributeNames"/>: empty when
+    /// the site has no reader or the card shows no badge. They are stored for display and never
+    /// scored.</summary>
+    public IReadOnlyDictionary<string, string> ReadCardBadges(string cardText) =>
+        CardBadgeReader?.Invoke(cardText) ?? new Dictionary<string, string>();
 
     /// <summary>The dealer name to store for a page whose extraction returned
     /// <paramref name="extractedDealerName"/>: that name (trimmed) when the page gave one, such as
@@ -307,7 +317,8 @@ public static class WalkSites
         CardPriceReader: CardPrices.FirstDollarAmount,
         // cars.com pages with a plain page=N on the same URL, and each search asks for the largest
         // page size its per-page selector offers so a search takes as few page loads as it can.
-        PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}");
+        PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}",
+        CardBadgeReader: CardBadges.CarsCom);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
@@ -340,7 +351,8 @@ public static class WalkSites
         ExhaustedSearchPattern: new Regex("No exact matches", RegexOptions.IgnoreCase),
         // A carvana card names its asking price after "Current price:", and a marked-down one then
         // prints "Original price: was $..." as well, so only the amount after "Current price:" counts.
-        CardPriceReader: CardPrices.CarvanaCurrentPrice);
+        CardPriceReader: CardPrices.CarvanaCurrentPrice,
+        CardBadgeReader: CardBadges.Carvana);
 
     /// <summary>What a private seller's listing is stored as: one dealer row for every private seller,
     /// with no location, so no individual's name or city enters the ledger and
@@ -379,7 +391,8 @@ public static class WalkSites
         DetailLinkOverfetchMultiplier: 2,
         MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+Match(?:es)?\b"),
         PrivateSellerPagePattern: new Regex(@"\(Private Seller\)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline),
-        ResultCardLinkPattern: new Regex(@"[?&]clickType=listing(?:&|$)"));
+        ResultCardLinkPattern: new Regex(@"[?&]clickType=listing(?:&|$)"),
+        CardBadgeReader: CardBadges.Autotrader);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
