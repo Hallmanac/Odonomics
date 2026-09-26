@@ -239,7 +239,7 @@ public static class ShowRenderer
 
             if (price.FeePosture is string posture)
             {
-                console.MarkupLine($"  {"Fee posture".PadRight(MonthlyCostLabelWidth)}{FeePostureText(posture)}");
+                console.MarkupLine($"  {"Fee posture".PadRight(MonthlyCostLabelWidth)}{FeePostureText(posture, price.IncludedFees)}");
             }
         }
 
@@ -259,9 +259,11 @@ public static class ShowRenderer
     }
 
     /// <summary>What a fee posture means for the price above it, in a few words: the price holds the
-    /// fees, the fees come on top of it (and are the itemized line), or the page did not say.</summary>
-    private static string FeePostureText(string posture) => posture switch
+    /// fees (naming how much of the price they are, when the page listed them), the fees come on top of
+    /// it (and are the itemized line), or the page did not say.</summary>
+    private static string FeePostureText(string posture, decimal? includedFees) => posture switch
     {
+        FeePostures.AllIn when includedFees is decimal included => $"all-in ({Format.Money(included)} of fees are in the price)",
         FeePostures.AllIn => "all-in (fees are in the price)",
         FeePostures.Itemized => "itemized (fees are on top)",
         FeePostures.Unknown => "unknown (the page did not say)",

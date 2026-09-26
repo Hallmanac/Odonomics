@@ -42,7 +42,8 @@ public sealed record ListingCandidate
     /// <see cref="FeePostures"/> strings: null when no reader for the source ran (carvana).</summary>
     public string? FeePosture { get; init; }
 
-    /// <summary>The sum of the fee lines the page itemized on top of <see cref="Price"/>, when
-    /// <see cref="FeePosture"/> is itemized; null otherwise.</summary>
+    /// <summary>The sum of the fee lines the page itemized: on top of <see cref="Price"/> when
+    /// <see cref="FeePosture"/> is itemized, or already inside it when the posture is all-in; null
+    /// when the page itemized none.</summary>
     public decimal? ItemizedFeesTotal { get; init; }
 }

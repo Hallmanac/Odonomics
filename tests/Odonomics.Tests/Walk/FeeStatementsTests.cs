@@ -41,7 +41,7 @@ public class FeeStatementsTests
         FeeStatement statement = FeeStatements.ReadCarsCom(Fixture("carscom-detail-price-breakdown.txt"));
 
         Assert.Equal(FeePostures.AllIn, statement.Posture);
-        Assert.Null(statement.ItemizedTotal);
+        Assert.Equal(995m + 499m, statement.ItemizedTotal);
     }
 
     [Fact]
@@ -76,7 +76,67 @@ public class FeeStatementsTests
         FeeStatement statement = FeeStatements.ReadAutotrader(Fixture("autotrader-detail-fees-included.txt"));
 
         Assert.Equal(FeePostures.AllIn, statement.Posture);
-        Assert.Null(statement.ItemizedTotal);
+        Assert.Equal(598m + 1298m + 189m, statement.ItemizedTotal);
+        Assert.Equal(25664m, statement.ListingPrice);
+        Assert.Equal(27749m, statement.TotalPrice);
+    }
+
+    [Fact]
+    public void ReadCarsCom_UndisclosedNoticeBeforeALaterListingsAllInStatement_IsUnknown()
+    {
+        string page = "Seller has not disclosed fees\nSimilar vehicles\nSeller has no extra fees";
+
+        Assert.Equal(FeePostures.Unknown, FeeStatements.ReadCarsCom(page).Posture);
+    }
+
+    [Fact]
+    public void ForAskingPrice_AllInPageWhoseStoredPriceIsTheListingPrice_IsItemizedBecauseTheFeesAreNotInIt()
+    {
+        FeeStatement statement = FeeStatements.ReadAutotrader(Fixture("autotrader-detail-fees-included.txt"));
+
+        FeeStatement corrected = statement.ForAskingPrice(25664m);
+
+        Assert.Equal(FeePostures.Itemized, corrected.Posture);
+        Assert.Equal(598m + 1298m + 189m, corrected.ItemizedTotal);
+    }
+
+    [Fact]
+    public void ForAskingPrice_AllInPageWhoseStoredPriceIsTheTotal_StaysAllIn()
+    {
+        FeeStatement statement = FeeStatements.ReadAutotrader(Fixture("autotrader-detail-fees-included.txt"));
+
+        Assert.Equal(statement, statement.ForAskingPrice(27749m));
+    }
+
+    [Fact]
+    public void ForAskingPrice_ItemizedPageWhoseStoredPriceIsTheTotal_IsAllInSoTheFeesAreNotCountedTwice()
+    {
+        string page = WithoutLines(Fixture("autotrader-detail-fees-included.txt"), "Dealer Fees Included");
+        FeeStatement statement = FeeStatements.ReadAutotrader(page);
+        Assert.Equal(FeePostures.Itemized, statement.Posture);
+
+        FeeStatement corrected = statement.ForAskingPrice(27749m);
+
+        Assert.Equal(FeePostures.AllIn, corrected.Posture);
+        Assert.Equal(598m + 1298m + 189m, corrected.ItemizedTotal);
+        Assert.Equal(FeePostures.Itemized, statement.ForAskingPrice(25664m).Posture);
+    }
+
+    [Fact]
+    public void ForAskingPrice_StoredPriceMatchingNeitherFigure_OrNoStoredPrice_LeavesTheReadingAlone()
+    {
+        FeeStatement statement = FeeStatements.ReadAutotrader(Fixture("autotrader-detail-fees-included.txt"));
+
+        Assert.Equal(statement, statement.ForAskingPrice(26000m));
+        Assert.Equal(statement, statement.ForAskingPrice(null));
+    }
+
+    [Fact]
+    public void ForAskingPrice_CarsComBreakdownWhoseStoredPriceIsTheVehiclePrice_IsItemized()
+    {
+        FeeStatement statement = FeeStatements.ReadCarsCom(Fixture("carscom-detail-price-breakdown.txt"));
+
+        Assert.Equal(FeePostures.Itemized, statement.ForAskingPrice(statement.ListingPrice).Posture);
     }
 
     [Fact]
