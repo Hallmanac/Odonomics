@@ -17,6 +17,10 @@ namespace Odonomics.Domain;
 /// <param name="IncludedFees">The sum of the fee lines an all-in listing itemized inside its asking
 /// price, for display; null when it itemized none. It never changes the total, because those fees are
 /// already in the asking price.</param>
+/// <param name="ShippingIncluded">True when the listing's asking price already holds <paramref name="ShippingFee"/>
+/// (cargurus's "Price includes $462 shipping" card, all-in), so the fee is shown and never added: adding it would count
+/// the shipping twice. It applies to the pickup fallback too, since a shipping fee that is in the price is not one a
+/// buyer who picks the car up would be assumed to pay.</param>
 public readonly record struct PurchasePrice(
     decimal Asking,
     decimal? ShippingFee,
@@ -25,18 +29,22 @@ public readonly record struct PurchasePrice(
     Fulfillment Fulfillment = Fulfillment.Delivery,
     decimal? ItemizedFees = null,
     string? FeePosture = null,
-    decimal? IncludedFees = null)
+    decimal? IncludedFees = null,
+    bool ShippingIncluded = false)
 {
-    /// <summary>The fee the chosen <see cref="Fulfillment"/> adds, or null when the listing gives none.</summary>
+    private decimal? ShippingFeeAdded => ShippingIncluded ? null : ShippingFee;
+
+    /// <summary>The fee the chosen <see cref="Fulfillment"/> adds, or null when the listing gives none (or its
+    /// only fee is one the asking price already holds, see <see cref="ShippingIncluded"/>).</summary>
     public decimal? AppliedFee => Fulfillment switch
     {
-        Fulfillment.Pickup => PickupFee ?? ShippingFee,
-        _ => ShippingFee,
+        Fulfillment.Pickup => PickupFee ?? ShippingFeeAdded,
+        _ => ShippingFeeAdded,
     };
 
     /// <summary>True when the fulfillment is pickup but no pickup fee was read, so the shipping fee
     /// stands in for it.</summary>
-    public bool PickupFeeAssumed => Fulfillment == Fulfillment.Pickup && PickupFee is null && ShippingFee is not null;
+    public bool PickupFeeAssumed => Fulfillment == Fulfillment.Pickup && PickupFee is null && ShippingFeeAdded is not null;
 
     public decimal Total => Asking + (AppliedFee ?? 0m) + (ItemizedFees ?? 0m);
 }

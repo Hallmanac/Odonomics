@@ -211,7 +211,8 @@ public static class ShowRenderer
             console.MarkupLine($"  {"Asking price".PadRight(MonthlyCostLabelWidth)}{Format.Money(price.Asking)}");
             if (price.ShippingFee is decimal shippingFee)
             {
-                console.MarkupLine($"  {"Shipping fee".PadRight(MonthlyCostLabelWidth)}{Format.Money(shippingFee)}");
+                string included = price.ShippingIncluded ? " (already in the asking price)" : "";
+                console.MarkupLine($"  {"Shipping fee".PadRight(MonthlyCostLabelWidth)}{Format.Money(shippingFee)}{included}");
             }
 
             if (price.PickupFee is decimal pickupFee)

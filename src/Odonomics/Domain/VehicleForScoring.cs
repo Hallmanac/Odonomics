@@ -17,6 +17,10 @@ public sealed record VehicleForScoring
     /// <summary>The one-time shipping fee of that same posting, null when it shows none.</summary>
     public decimal? ShippingFee { get; init; }
 
+    /// <summary>True when that shipping fee is already in the asking price (see
+    /// <see cref="PurchasePrice.ShippingIncluded"/>).</summary>
+    public bool ShippingIncluded { get; init; }
+
     /// <summary>The pickup fee and location of that same posting, null when its page showed no pickup
     /// option.</summary>
     public decimal? PickupFee { get; init; }
@@ -53,7 +57,7 @@ public sealed record VehicleForScoring
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>
     public PurchasePrice? PurchasePrice => LowestCurrentPrice is decimal asking
-        ? new PurchasePrice(asking, ShippingFee, PickupFee, PickupLocation, Fulfillment, ItemizedFees, FeePosture)
+        ? new PurchasePrice(asking, ShippingFee, PickupFee, PickupLocation, Fulfillment, ItemizedFees, FeePosture, ShippingIncluded: ShippingIncluded)
         : null;
 
     public string MakeModel => $"{Make} {Model}";

@@ -1,6 +1,7 @@
 using Odonomics.Cli;
 using Odonomics.Cli.Commands;
 using Odonomics.Domain;
+using Odonomics.Ledger;
 using Spectre.Console.Testing;
 
 namespace Odonomics.Tests.Cli;
@@ -187,6 +188,19 @@ public class ShowRendererMonthlyCostRenderingTests
         Assert.Equal(["Purchase", "price", "$17,950", "with", "delivery"], Cells(lines[3]));
         Assert.Equal(["Loan", "payment", "$324-$348"], Cells(lines[4]));
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_ShippingAlreadyInTheAskingPrice_PrintsTheFeeAsIncludedAndNoPurchasePriceLine()
+    {
+        var purchasePrice = new PurchasePrice(27697m, 699m, FeePosture: FeePostures.AllIn, ShippingIncluded: true);
+
+        string[] lines = Render(null, "no price", purchasePrice);
+
+        Assert.Equal(["Asking", "price", "$27,697"], Cells(lines[1]));
+        Assert.Equal(["Shipping", "fee", "$699", "(already", "in", "the", "asking", "price)"], Cells(lines[2]));
+        Assert.DoesNotContain(lines, line => line.Contains("Purchase price"));
+        Assert.Equal(["Fee", "posture", "all-in", "(fees", "are", "in", "the", "price)"], Cells(lines[3]));
     }
 
     [Fact]
