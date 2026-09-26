@@ -8,9 +8,11 @@ namespace Odonomics.Walk;
 /// the per-pair cap is split across the searches and each search's own links are walked in turn,
 /// so the pair still never spends more than the cap in total. With no cap at all (the walk's default)
 /// there is nothing to split: every search's whole link pool is collected and every link not already
-/// known is visited. A capped pair whose cap ended the walk with links or searches never visited
-/// says so on its tally (<see cref="DetailWalkTally.Capped"/>), so the run can record that pair's
-/// coverage as partial.
+/// known is visited. A capped pair whose cap ended the walk with a search never opened, or (only when
+/// every link is visited again) with collected links never visited, says so on its tally
+/// (<see cref="DetailWalkTally.Capped"/>), so the run can record that pair's coverage as partial.
+/// Without <c>revisit</c> the links a cap leaves unvisited are all new to the ledger, so they say
+/// nothing about a posting the ledger holds.
 /// </summary>
 public static class WalkPairSearches
 {
@@ -59,7 +61,10 @@ public static class WalkPairSearches
     /// <paramref name="announceVisits"/>, when given, is told once, before the pair's first detail
     /// visit, how many detail pages the pair is about to visit and whether the count is only what the
     /// first search's own walk starts with (a capped pair with searches still to run, whose later
-    /// searches are not known yet). An uncapped pair's count is always the whole pair's.</para></summary>
+    /// searches are not known yet). An uncapped pair's count is always the whole pair's.</para>
+    ///
+    /// <para><paramref name="revisit"/> says the pool holds links the ledger already knows, so a link the
+    /// cap leaves unvisited is a posting the walk did not touch and makes the pair capped.</para></summary>
     public static async Task<DetailWalkTally> RunAsync(
         WalkSite site,
         IReadOnlyList<string> searchUrls,
@@ -68,7 +73,8 @@ public static class WalkPairSearches
         Func<string, int, CancellationToken, Task<DetailPageOutcome>> visitLinkAsync,
         Func<CancellationToken, Task> gapBeforeNextLinkAsync,
         CancellationToken cancellationToken,
-        Action<int, bool>? announceVisits = null)
+        Action<int, bool>? announceVisits = null,
+        bool revisit = false)
     {
         if (maxDetailPages is not int cap)
         {
@@ -133,7 +139,7 @@ public static class WalkPairSearches
 
             if (remaining <= 0)
             {
-                capped = true;
+                capped |= revisit;
                 break;
             }
 
@@ -141,7 +147,7 @@ public static class WalkPairSearches
             DetailWalkTally tally = await WalkAsync(links, remaining);
             total = total.Plus(tally);
             remaining -= tally.SpentOnCap;
-            capped |= tally.Visited < links.Count;
+            capped |= revisit && tally.Visited < links.Count;
         }
 
         return total with { Capped = capped };

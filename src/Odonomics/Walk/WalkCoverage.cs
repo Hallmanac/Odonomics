@@ -4,8 +4,9 @@ namespace Odonomics.Walk;
 
 /// <summary>What one (site, model) pair's walk actually visited, and how many of the ledger's known
 /// links it kept current from their search cards without visiting them. <see cref="Capped"/> is true when
-/// an explicit --max ended the pair before the site ran out of results (the link pool filled, or the cap
-/// left collected links unvisited), so the pair's coverage is partial.</summary>
+/// an explicit --max ended the pair before the site ran out of results (the link pool filled while more pages
+/// remained, a search was never opened, or with --revisit the cap left collected links unvisited), so the
+/// pair's coverage is partial.</summary>
 public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>

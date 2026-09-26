@@ -909,6 +909,73 @@ public class LedgerDiffServiceTests
         Assert.Empty(diff.Gone);
     }
 
+    private static readonly DateTimeOffset ThirdRunAt = new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>Upserts <paramref name="candidate"/> in the first run only, saves every later run with no
+    /// sighting, and returns the diff of the last one.</summary>
+    private static async Task<SearchDiff> DiffAfterRunsAsync(ListingCandidate candidate, params RunEntity[] runs)
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        db.Runs.Add(runs[0]);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(candidate, runs[0], CancellationToken.None);
+        foreach (RunEntity run in runs[1..])
+        {
+            db.Runs.Add(run);
+        }
+
+        await db.SaveChangesAsync(CancellationToken.None);
+        return await new LedgerDiffService(db).ComputeAsync(runs[^1], DaughterScenario, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PostingAPartialRunNeverReached_IsStillGoneOnTheNextFullRunOfThePair()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000010", 15000m, "https://cars.com/prius", "cars.com");
+
+        SearchDiff diff = await DiffAfterRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, $"cars.com:Prius,{RunSources.PartialKey("cars.com:Prius")}", "32833", 50),
+            Run(ThirdRunAt, "cars.com:Prius", "32833", 50));
+
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PostingAPartialRunNeverReached_IsBeyondTheCapAgainOnALaterPartialRun()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000011", 15000m, "https://cars.com/prius", "cars.com");
+        string partial = $"cars.com:Prius,{RunSources.PartialKey("cars.com:Prius")}";
+
+        SearchDiff diff = await DiffAfterRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, partial, "32833", 50),
+            Run(ThirdRunAt, partial, "32833", 50));
+
+        Assert.Equal(GoneReasons.BeyondTheCap, Assert.Single(diff.Gone).Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PostingLastSeenBeforeAFullRun_IsNotReportedGoneAgainAfterALaterPartialRun()
+    {
+        // The full second run already reported it (LastSeen is the first run's), so the chain stops there.
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000012", 15000m, "https://cars.com/prius", "cars.com");
+
+        SearchDiff diff = await DiffAfterRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, "cars.com:Prius", "32833", 50),
+            Run(ThirdRunAt, $"cars.com:Prius,{RunSources.PartialKey("cars.com:Prius")}", "32833", 50));
+
+        Assert.Empty(diff.Gone);
+    }
+
     [Fact]
     public async Task ComputeAsync_VehicleBelowTheYearFacetAfterTheSearchMoved_IsStillGoneForBelowYearFacet()
     {

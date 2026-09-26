@@ -131,7 +131,23 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
-    public async Task CarsCom_APageWithMoreNewLinksThanThePoolHasRoomFor_ReportsTheCollectionAsCapped()
+    public async Task CarsCom_APageWithMoreLinksThanThePoolHasRoomFor_ReportsTheCollectionAsCappedWhenEveryLinkIsVisitedAgain()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = [.. Enumerable.Range(0, 5).Select(i => new PageLink($"https://www.cars.com/vehicledetail/{i}/?sid=x", ""))],
+        });
+        int capped = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 3, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => capped++, CancellationToken.None, revisit: true);
+
+        Assert.Equal(3, pool.Count);
+        Assert.Equal(1, capped);
+    }
+
+    [Fact]
+    public async Task CarsCom_APageWithMoreNewLinksThanThePoolHasRoomFor_IsNotCappedSinceItsKnownLinksWereAllTouched()
     {
         const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
@@ -143,7 +159,7 @@ public class WalkSearchPagesTests
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 3, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => capped++, CancellationToken.None);
 
         Assert.Equal(3, pool.Count);
-        Assert.Equal(1, capped);
+        Assert.Equal(0, capped);
     }
 
     [Fact]
