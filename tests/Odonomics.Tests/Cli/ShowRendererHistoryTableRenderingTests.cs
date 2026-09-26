@@ -62,7 +62,7 @@ public class ShowRendererHistoryTableRenderingTests
     [Fact]
     public void BuildGroupedHistoryTable_MileageRangeWithSixDigitHighEnd_RendersBothInFull()
     {
-        // A dealer-name-stem-merged group spanning the 100k-mile mark (the README's own documented
+        // A dealer-name-stem-merged group spanning the 100k-mile mark (docs/research.md's own documented
         // case: "even when the mileage moved between them") must not have its six-digit high end
         // ellipsized away, the same defect shape as the five-digit case above, just one digit up.
         DateTimeOffset day1 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
