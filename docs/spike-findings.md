@@ -294,7 +294,7 @@ is work for a future day.
   underscored form this entry says didn't apply (project home `notes/run-session-2026-09-22.md`,
   "Facet URLs from Brian"). What differs between that request and this spike's (cookies, an A/B
   bucket, some other session state) is unconfirmed, but the operator-built URL is what the walk
-  now trusts; see `WalkSites.cs`'s class remarks and `README.md`'s walk section for how. The
+  now trusts; see `WalkSites.cs`'s class remarks and `docs/walk.md` for how. The
   `MatchesExtractedVehicle`-as-safety-net conclusion two paragraphs up still holds regardless of
   which facet value turns out to work.
 - **Craigslist's canonical listing URL has moved.** Individual postings are no longer at the
