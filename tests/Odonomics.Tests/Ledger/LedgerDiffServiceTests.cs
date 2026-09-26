@@ -41,6 +41,26 @@ public class LedgerDiffServiceTests
         return Assert.Single(diff.Gone);
     }
 
+    /// <summary>Two runs over one posting where the second run's detail visit found the page saying the car
+    /// sold (<paramref name="soldInSecondRun"/>), or an earlier run did (false, stamping the first run).</summary>
+    private static async Task<GonePostingEntry> GoneAfterSoldVisitAsync(ListingCandidate candidate, RunEntity run1, RunEntity run2, Scenario scenario, bool soldInSecondRun = true)
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(candidate, run1, CancellationToken.None);
+
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.MarkSoldAsync(candidate.Source, candidate.Url, soldInSecondRun ? run2 : run1, CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, scenario, CancellationToken.None);
+        return Assert.Single(diff.Gone);
+    }
+
     [Fact]
     public async Task ComputeAsync_FirstRunEver_EverythingIsNewAndNothingIsGone()
     {
@@ -1141,6 +1161,51 @@ public class LedgerDiffServiceTests
             DaughterScenario);
 
         Assert.Equal(GoneReasons.OverMileage, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PostingThisRunFoundSold_IsGoneForSold()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000006", 15000m, "https://www.autotrader.com/cars-for-sale/vehicle/1", "autotrader");
+
+        GonePostingEntry gone = await GoneAfterSoldVisitAsync(
+            prius,
+            Run(FirstRunAt, "autotrader:Prius", "32833", 50),
+            Run(SecondRunAt, "autotrader:Prius", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.Sold, gone.Reason);
+        Assert.Equal("sold", gone.Reason);
+        Assert.Equal(15000m, gone.LastKnownPrice);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_SoldPostingBelowTheYearFacetOverMileageAfterTheSearchMoved_IsStillGoneForSold()
+    {
+        ListingCandidate insight = Candidate("JHMZE2H79AS041645", 4000m, "https://www.autotrader.com/cars-for-sale/vehicle/2", "autotrader", "Insight", "Honda", year: 2010, mileage: 150000);
+
+        GonePostingEntry gone = await GoneAfterSoldVisitAsync(
+            insight,
+            Run(FirstRunAt, "autotrader:Insight", "32114", 50),
+            Run(SecondRunAt, "autotrader:Insight", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.Sold, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PostingFoundSoldByAnEarlierRun_IsNotGoneForSoldInALaterOne()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000007", 15000m, "https://www.autotrader.com/cars-for-sale/vehicle/3", "autotrader");
+
+        GonePostingEntry gone = await GoneAfterSoldVisitAsync(
+            prius,
+            Run(FirstRunAt, "autotrader:Prius", "32833", 50),
+            Run(SecondRunAt, "autotrader:Prius", "32833", 50),
+            DaughterScenario,
+            soldInSecondRun: false);
+
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
     }
 
     [Fact]

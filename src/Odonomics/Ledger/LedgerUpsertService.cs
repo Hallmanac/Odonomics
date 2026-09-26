@@ -259,6 +259,28 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         return new TouchOutcome(postings.Count, priceChanges);
     }
 
+    /// <summary>Marks every posting the ledger holds at <paramref name="source"/> and
+    /// <paramref name="url"/> as sold for this run, because its detail page said the car has sold: stamps
+    /// <see cref="PostingEntity.SoldSeenAt"/> with the run's own StartedAt. Nothing else about the posting
+    /// changes: not <see cref="PostingEntity.LastSeen"/>, since the run did not see the car for sale, so
+    /// the diff reports it gone with the reason "sold", and never a price observation, since a sold page
+    /// carries other cars' prices. Returns how many postings were marked, zero for a link the ledger
+    /// does not hold (a sold page for a car this walk never saved has nothing to mark).</summary>
+    public async Task<int> MarkSoldAsync(string source, string url, RunEntity run, CancellationToken cancellationToken)
+    {
+        List<PostingEntity> postings = await db.Postings
+            .Where(p => p.Source == source && p.Url == url)
+            .ToListAsync(cancellationToken);
+
+        foreach (PostingEntity posting in postings)
+        {
+            posting.SoldSeenAt = run.StartedAt;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return postings.Count;
+    }
+
     /// <summary>The dealer a sighting whose source named none (<see cref="ListingCandidate.DealerNameIsFallback"/>,
     /// carvana's "Carvana") links its posting to, or null to leave the posting's link as it is. The
     /// VIN history the ledger already stores may name the hub the car sits in for this posting's
