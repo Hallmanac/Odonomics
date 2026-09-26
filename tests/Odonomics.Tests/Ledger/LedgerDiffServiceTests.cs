@@ -825,6 +825,91 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_PairCoveredPartiallyByThisRun_ReportsAnUntouchedPostingAsBeyondTheCap()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000006", 15000m, "https://cars.com/prius", "cars.com");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, $"cars.com:Prius,{RunSources.PartialKey("cars.com:Prius")}", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.BeyondTheCap, gone.Reason);
+        Assert.Equal("beyond the cap", gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_AnotherPairCoveredPartially_LeavesThisPairsGoneAsNotOnSearchPage()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000007", 15000m, "https://cars.com/prius", "cars.com");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius,carvana:Prius", "32833", 50),
+            Run(SecondRunAt, $"cars.com:Prius,carvana:Prius,{RunSources.PartialKey("carvana:Prius")}", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PartialPairWhoseSearchMoved_IsStillGoneForSearchMoved()
+    {
+        ListingCandidate camry = Candidate("4T1DAACK9TU267794", 24000m, "https://cars.com/daytona", "cars.com", "Camry Hybrid", "Toyota", year: 2026);
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            camry,
+            Run(FirstRunAt, "cars.com:Camry Hybrid", "32114", 50),
+            Run(SecondRunAt, $"cars.com:Camry Hybrid,{RunSources.PartialKey("cars.com:Camry Hybrid")}", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.SearchMoved, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PartialPairWithAVehicleOverMileageOrBelowTheYearFacet_KeepsTheEarlierReasons()
+    {
+        ListingCandidate insight = Candidate("JHMZE2H79AS041645", 4000m, "https://cars.com/insight", "cars.com", "Insight", "Honda", year: 2010, mileage: 150000);
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000008", 4000m, "https://cars.com/prius", "cars.com", mileage: 150000);
+
+        GonePostingEntry belowYear = await GoneAfterTwoRunsAsync(
+            insight,
+            Run(FirstRunAt, "cars.com:Insight", "32833", 50),
+            Run(SecondRunAt, $"cars.com:Insight,{RunSources.PartialKey("cars.com:Insight")}", "32833", 50),
+            DaughterScenario);
+        GonePostingEntry overMileage = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, $"cars.com:Prius,{RunSources.PartialKey("cars.com:Prius")}", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.BelowYearFacet, belowYear.Reason);
+        Assert.Equal(GoneReasons.OverMileage, overMileage.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PartialPairsMarkerAlone_DoesNotCountAsCoverageOfItsOwn()
+    {
+        // A marker with no plain token beside it names no covered pair, so it can vouch for nothing.
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000009", 15000m, "https://cars.com/prius", "cars.com");
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        RunEntity run1 = Run(FirstRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(prius, run1, CancellationToken.None);
+        RunEntity run2 = Run(SecondRunAt, RunSources.PartialKey("cars.com:Prius"), "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        Assert.Empty(diff.Gone);
+    }
+
+    [Fact]
     public async Task ComputeAsync_VehicleBelowTheYearFacetAfterTheSearchMoved_IsStillGoneForBelowYearFacet()
     {
         ListingCandidate insight = Candidate("JHMZE2H79AS041643", 9000m, "https://cars.com/insight", "cars.com", "Insight", "Honda", year: 2010);
