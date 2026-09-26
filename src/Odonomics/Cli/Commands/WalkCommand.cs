@@ -220,7 +220,11 @@ public static class WalkCommand
 
             if (site.LoadMoreControlPattern is not null)
             {
-                await LoadMoreCardsAsync(page, site, site.LoadMoreControlPattern, pacing, ct);
+                // Cards the control never loaded are results the walk never read, the same as a full pool.
+                if (!await LoadMoreCardsAsync(page, site, site.LoadMoreControlPattern, pacing, ct))
+                {
+                    linkCollectionCapped = true;
+                }
             }
 
             string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
@@ -520,8 +524,10 @@ public static class WalkCommand
 
     /// <summary>Presses the search page's "show more" control until the page holds the cards its stated
     /// count promises or nothing new appears (see <see cref="SearchPageLoadMore"/>), pausing like a person
-    /// between presses and stopping for a bot-defense challenge if one appears.</summary>
-    private static async Task LoadMoreCardsAsync(IPage page, WalkSite site, Regex controlPattern, WalkPacing pacing, CancellationToken cancellationToken)
+    /// between presses and stopping for a bot-defense challenge if one appears. Returns false when loading
+    /// stopped short, so some of the site's results were never on the page (see
+    /// <see cref="LoadMoreResult.LoadedAll"/>).</summary>
+    private static async Task<bool> LoadMoreCardsAsync(IPage page, WalkSite site, Regex controlPattern, WalkPacing pacing, CancellationToken cancellationToken)
     {
         int? statedCount = site.MatchCountIn(await page.EvaluateAsync<string>("() => document.body.innerText"));
 
@@ -564,6 +570,12 @@ public static class WalkCommand
         LoadMoreResult result = await SearchPageLoadMore.RunAsync(statedCount, CountCardsAsync, PressControlAsync, PauseAsync, cancellationToken);
         string statedText = statedCount is int stated ? $"{stated} matches stated" : "no match count stated";
         AnsiConsole.MarkupLineInterpolated($"loaded {result.Cards} card(s) by pressing the show-more control {result.Presses} time(s) ({statedText})");
+        if (!result.LoadedAll(statedCount))
+        {
+            AnsiConsole.MarkupLineInterpolated($"[yellow]the show-more control stopped short of the stated count, so the results past those cards are not read and the pair's coverage is partial[/]");
+        }
+
+        return result.LoadedAll(statedCount);
     }
 
     private const float ControlClickTimeoutMs = 10_000;

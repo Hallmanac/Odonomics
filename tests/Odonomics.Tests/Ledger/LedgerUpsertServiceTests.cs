@@ -289,6 +289,29 @@ public class LedgerUpsertServiceTests
     }
 
     [Fact]
+    public async Task UpsertAsync_CarMaxFallbackSightingOfACarWithCarvanaHubHistory_LinksTheCarMaxDealerNotTheHub()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        const string vin = "1HGCM82633A004352";
+        RunEntity run1 = Run(FirstWalk);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate(vin, 18000m, source: "cars.com", dealerName: "Some Dealer"), run1, CancellationToken.None);
+        await AddHistoryAsync(db, vin, "Carvana Winder", FirstWalk.AddDays(-4), FirstWalk.AddHours(13));
+
+        RunEntity run2 = Run(LaterWalk);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        ListingCandidate sighting = Candidate(vin, 18000m, source: "carmax", dealerName: "CarMax") with { DealerNameIsFallback = true };
+        await service.UpsertAsync(sighting, run2, CancellationToken.None);
+
+        PostingEntity carMaxPosting = db.Postings.Include(p => p.Dealer).Single(p => p.Source == "carmax");
+        Assert.Equal("CarMax", carMaxPosting.Dealer!.Name);
+    }
+
+    [Fact]
     public async Task UpsertAsync_LaterWalkOfAPostingOnALocatedCarvanaRowAndHistoryNamesAHub_MovesItToTheHubRow()
     {
         using var testDb = new LedgerTestDatabase();

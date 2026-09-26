@@ -506,7 +506,7 @@ public static class WalkSites
         MatchCountPattern: new Regex(@"(?<!Show\s)(?<![\d,])(\d[\d,]*)\s+match(?:es)?\b", RegexOptions.IgnoreCase),
         CardFeeReader: CarMaxCards.ReadFee,
         DetailHtmlVinReader: CarMaxVin.Read,
-        LoadMoreControlPattern: new Regex(@"^\s*Show\s+\d+\s+matches\s*$", RegexOptions.IgnoreCase));
+        LoadMoreControlPattern: new Regex(@"^\s*Show\s+\d+\s+match(?:es)?\s*$", RegexOptions.IgnoreCase));
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {

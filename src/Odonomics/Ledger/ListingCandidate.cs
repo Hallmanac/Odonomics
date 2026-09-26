@@ -22,7 +22,7 @@ public sealed record ListingCandidate
     public bool DealerNameIsFallback { get; init; }
 
     /// <summary>The one-time shipping fee the source's page showed on top of <see cref="Price"/>:
-    /// 0 for free shipping, null when the source shows none (only carvana does).</summary>
+    /// 0 for free shipping, null when the source shows none (carvana and carmax do).</summary>
     public decimal? ShippingFee { get; init; }
 
     /// <summary>The display-only facts the source showed about the listing, such as a deal badge or a

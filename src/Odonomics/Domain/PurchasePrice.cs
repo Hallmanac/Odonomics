@@ -3,7 +3,7 @@ namespace Odonomics.Domain;
 /// <summary>What a car costs to take home before tax and fees: the asking price plus the one-time fee
 /// for the way the buyer takes it home (<see cref="Fulfillment"/>), plus the fees the listing itemized on
 /// top of its price when it says they are not in it (see <see cref="ItemizedFees"/>). Under delivery the
-/// one-time fee is the shipping fee when the listing shows one (carvana); under pickup it is the pickup
+/// one-time fee is the shipping fee when the listing shows one (carvana, carmax); under pickup it is the pickup
 /// fee, and a listing whose pickup fee was never read is assumed to cost its shipping fee, since nothing
 /// says pickup is cheaper. A null fee means the listing showed none, and adds nothing; a fee of 0 means it
 /// was free. Every purchase-price figure the cost model uses is <see cref="Total"/>; the asking price alone

@@ -116,4 +116,21 @@ public class SearchPageLoadMoreTests
 
         Assert.Equal(new LoadMoreResult(SearchPageLoadMore.MaxPresses, SearchPageLoadMore.MaxPresses), result);
     }
+
+    [Theory]
+    [InlineData(50, 526, false)]
+    [InlineData(526, 526, true)]
+    [InlineData(530, 526, true)]
+    public void LoadedAll_WithAStatedCount_MeansTheCardsReachedIt(int cards, int stated, bool expected)
+    {
+        Assert.Equal(expected, new LoadMoreResult(3, cards).LoadedAll(stated));
+    }
+
+    [Theory]
+    [InlineData(3, true)]
+    [InlineData(SearchPageLoadMore.MaxPresses, false)]
+    public void LoadedAll_WithNoStatedCount_MeansTheRunDidNotHitThePressLimit(int presses, bool expected)
+    {
+        Assert.Equal(expected, new LoadMoreResult(presses, 75).LoadedAll(null));
+    }
 }

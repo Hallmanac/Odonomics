@@ -124,6 +124,7 @@ public class CarMaxWalkTests
     [InlineData("Show 25 matches", true)]
     [InlineData("  Show 25 matches ", true)]
     [InlineData("Show 5 matches", true)]
+    [InlineData("Show 1 match", true)]
     [InlineData("526 matches", false)]
     [InlineData("Show all filters", false)]
     public void LoadMoreControlPattern_MatchesOnlyTheShowControlLabel(string label, bool expected)

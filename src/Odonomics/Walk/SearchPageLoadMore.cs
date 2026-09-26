@@ -2,7 +2,19 @@ namespace Odonomics.Walk;
 
 /// <summary>How a load-more run ended: how many times the control was pressed and how many distinct
 /// detail links the page held at the end.</summary>
-public readonly record struct LoadMoreResult(int Presses, int Cards);
+public readonly record struct LoadMoreResult(int Presses, int Cards)
+{
+    /// <summary>True when the page holds every card the run set out to load: at least as many as
+    /// <paramref name="statedCount"/>, or, when the page states no count, a run that ended because
+    /// nothing new appeared and not because it hit <see cref="SearchPageLoadMore.MaxPresses"/>. A run
+    /// that ends short of that (a control that could not be pressed, a press that added nothing, the
+    /// press limit) leaves results the walk never saw, which must not be read as cars that left the
+    /// market.</summary>
+    public bool LoadedAll(int? statedCount) =>
+        statedCount is int stated
+            ? Cards >= stated
+            : Presses < SearchPageLoadMore.MaxPresses;
+}
 
 /// <summary>
 /// Loads the rest of a search page's cards for a site that hides them behind a control instead of a
