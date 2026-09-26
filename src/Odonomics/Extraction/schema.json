@@ -38,8 +38,12 @@
     "dealerLocation": {
       "type": ["string", "null"],
       "description": "The selling dealer's city and state as printed on the page, e.g. 'Winter Park, FL'. Null if no dealer location is stated."
+    },
+    "fuelType": {
+      "type": ["string", "null"],
+      "description": "The fuel or drivetrain type as the page states it in a spec line, e.g. Gas, Hybrid, Plug-in Hybrid, Electric. Null if no spec line states one."
     }
   },
-  "required": ["vin", "year", "make", "model", "trim", "price", "mileage", "dealerName", "dealerLocation"],
+  "required": ["vin", "year", "make", "model", "trim", "price", "mileage", "dealerName", "dealerLocation", "fuelType"],
   "additionalProperties": false
 }

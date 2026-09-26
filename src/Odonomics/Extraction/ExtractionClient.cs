@@ -15,7 +15,8 @@ public sealed record ExtractionResult(
     [property: JsonPropertyName("price")] decimal? Price,
     [property: JsonPropertyName("mileage")] int? Mileage,
     [property: JsonPropertyName("dealerName")] string? DealerName,
-    [property: JsonPropertyName("dealerLocation")] string? DealerLocation);
+    [property: JsonPropertyName("dealerLocation")] string? DealerLocation,
+    [property: JsonPropertyName("fuelType")] string? FuelType = null);
 
 public sealed record ExtractionOutcome(ExtractionResult? Result, decimal CostUsd, string? Error);
 
