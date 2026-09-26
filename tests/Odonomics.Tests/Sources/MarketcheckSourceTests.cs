@@ -166,4 +166,46 @@ public class MarketcheckSourceTests
         Assert.Empty(result.ModelsCovered);
         Assert.Contains(result.Rejections, r => r.Contains("HTTP 401"));
     }
+
+    [Theory]
+    [InlineData("0", "placeholder price 0")]
+    [InlineData("-5", "placeholder price -5")]
+    [InlineData("999", "placeholder price 999")]
+    public async Task RunAsync_ZeroNegativeOrSubFloorPrice_IsRejectedAsAPlaceholder(string price, string expectedFragment)
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        int yearMax = DateTime.UtcNow.Year + 1;
+        string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
+                     $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+        string body = $$"""
+            { "listings": [ { "vin": "19XZE4F52ME000999", "vdp_url": "https://marketcheck.com/listing/1", "price": {{price}}, "miles": 69599, "build": { "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX" } } ] }
+            """;
+        var source = new MarketcheckSource("test-key", new HttpClient(new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body })));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Empty(result.Candidates);
+        Assert.Contains(result.Rejections, r => r.Contains(expectedFragment) && r.Contains("19XZE4F52ME000999"));
+        Assert.Equal(["Insight"], result.ModelsCovered);
+    }
+
+    [Fact]
+    public async Task RunAsync_MissingPrice_KeepsTheExistingRejectionReason()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        int yearMax = DateTime.UtcNow.Year + 1;
+        string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
+                     $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+        const string body = """
+            { "listings": [ { "vin": "19XZE4F52ME000999", "vdp_url": "https://marketcheck.com/listing/1", "miles": 69599, "build": { "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX" } } ] }
+            """;
+        var source = new MarketcheckSource("test-key", new HttpClient(new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body })));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Empty(result.Candidates);
+        Assert.Contains(result.Rejections, r => r.Contains("missing price/mileage") && !r.Contains("placeholder"));
+    }
 }

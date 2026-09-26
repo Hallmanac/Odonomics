@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Odonomics.Domain;
 using Odonomics.Ledger;
 
 namespace Odonomics.Sources;
@@ -91,6 +92,12 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
         if (year is null || !query.MatchesYear(year) || mileage is null || !query.MatchesMileage(mileage) || price is null)
         {
             result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, out of query range or missing price/mileage ({vin})");
+            return;
+        }
+
+        if (PlaceholderPrice.IsBelowFloor(price.Value))
+        {
+            result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, placeholder price {price.Value:0.##} ({vin})");
             return;
         }
 
