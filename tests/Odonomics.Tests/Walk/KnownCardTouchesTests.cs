@@ -65,8 +65,9 @@ public class KnownCardTouchesTests
         return (service, await StartRunAsync(db, SecondRunAt));
     }
 
-    private static Task<IReadOnlyList<string>> CollectAsync(KnownCardTouches touches, Dictionary<int, List<PageLink>> pages, int poolSize, List<int>? loadedPages = null) =>
-        WalkSearchPages.CollectLinksAsync(
+    private static async Task<IReadOnlyList<string>> CollectAsync(KnownCardTouches touches, Dictionary<int, List<PageLink>> pages, int poolSize, List<int>? loadedPages = null)
+    {
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.Carvana,
             Search,
             poolSize,
@@ -79,6 +80,9 @@ public class KnownCardTouchesTests
             (_, _) => { },
             _ => { },
             CancellationToken.None);
+        await touches.CommitAsync(CancellationToken.None);
+        return pool;
+    }
 
     [Fact]
     public async Task ARepeatWalk_TouchesKnownCardsAndHandsOnlyNewLinksToTheDetailPool()
@@ -216,6 +220,7 @@ public class KnownCardTouchesTests
             (_, _) => { },
             _ => { },
             CancellationToken.None);
+        await touches.CommitAsync(CancellationToken.None);
 
         Assert.Equal([CardUrl(2), CardUrl(3)], pool);
         Assert.Equal(1, touches.Count);
@@ -238,6 +243,42 @@ public class KnownCardTouchesTests
         Assert.True(again);
         Assert.False(unknown);
         Assert.Equal(1, touches.Count);
+        await touches.CommitAsync(CancellationToken.None);
+        Assert.Equal([18000m, 17000m], (await db.PriceObservations.ToListAsync()).OrderBy(o => o.ObservedAt).Select(o => o.Price));
+    }
+
+    [Fact]
+    public async Task ATouchIsOnlyRemembered_UntilTheCallerCommitsAtTheEndOfAPair()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        await touches.TryTouchAsync(CardUrl(1), 17000m, CancellationToken.None);
+
+        Assert.Equal(1, touches.Count);
+        Assert.Equal(FirstRunAt, (await db.Postings.SingleAsync()).LastSeen);
+        Assert.Single(db.PriceObservations);
+
+        await touches.CommitAsync(CancellationToken.None);
+
+        Assert.Equal(SecondRunAt, (await db.Postings.SingleAsync()).LastSeen);
+        Assert.Equal(2, await db.PriceObservations.CountAsync());
+    }
+
+    [Fact]
+    public async Task AKnownLinkWhoseFirstCardPriceWasUnreadable_TakesThePriceOfALaterCard()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        await touches.TryTouchAsync(CardUrl(1), null, CancellationToken.None);
+        await touches.TryTouchAsync(CardUrl(1), 17000m, CancellationToken.None);
+        await touches.CommitAsync(CancellationToken.None);
+
         Assert.Equal([18000m, 17000m], (await db.PriceObservations.ToListAsync()).OrderBy(o => o.ObservedAt).Select(o => o.Price));
     }
 
@@ -263,6 +304,7 @@ public class KnownCardTouchesTests
             (_, _) => { },
             _ => { },
             CancellationToken.None);
+        await touches.CommitAsync(CancellationToken.None);
 
         Assert.Empty(pool);
         Assert.Equal(1, touches.Count);

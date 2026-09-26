@@ -49,6 +49,9 @@ public class LedgerTouchTests
         return (service, await StartRunAsync(db, SecondRunAt));
     }
 
+    private static Task<TouchOutcome> TouchOneAsync(LedgerUpsertService service, string source, string url, decimal? cardPrice, RunEntity run) =>
+        service.TouchAsync(source, new Dictionary<string, decimal?> { [url] = cardPrice }, run, CancellationToken.None);
+
     [Fact]
     public async Task TouchAsync_SeenAgainAtALowerCardPrice_YieldsAPriceDropAndNoGone()
     {
@@ -56,11 +59,11 @@ public class LedgerTouchTests
         using OdonomicsDbContext db = testDb.CreateContext();
         (LedgerUpsertService service, RunEntity second) = await SeededAsync(db);
 
-        TouchOutcome outcome = await service.TouchAsync("carvana", Url, 17000m, second, CancellationToken.None);
+        TouchOutcome outcome = await TouchOneAsync(service, "carvana", Url, 17000m, second);
         SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(second, DaughterScenario, CancellationToken.None);
 
-        Assert.True(outcome.Found);
-        Assert.True(outcome.PriceChanged);
+        Assert.Equal(1, outcome.Found);
+        Assert.Equal(1, outcome.PriceChanged);
         PriceDropEntry drop = Assert.Single(diff.PriceDrops);
         Assert.Equal((18000m, 17000m), (drop.PreviousPrice, drop.CurrentPrice));
         Assert.Empty(diff.Gone);
@@ -87,7 +90,7 @@ public class LedgerTouchTests
         using OdonomicsDbContext db = testDb.CreateContext();
         (LedgerUpsertService service, RunEntity second) = await SeededAsync(db);
 
-        await service.TouchAsync("carvana", Url, 17000m, second, CancellationToken.None);
+        await TouchOneAsync(service, "carvana", Url, 17000m, second);
 
         PostingEntity posting = await db.Postings.Include(p => p.Dealer).SingleAsync();
         Assert.Equal(SecondRunAt, posting.LastSeen);
@@ -106,10 +109,10 @@ public class LedgerTouchTests
         using OdonomicsDbContext db = testDb.CreateContext();
         (LedgerUpsertService service, RunEntity second) = await SeededAsync(db);
 
-        TouchOutcome outcome = await service.TouchAsync("carvana", Url, 18000m, second, CancellationToken.None);
+        TouchOutcome outcome = await TouchOneAsync(service, "carvana", Url, 18000m, second);
 
-        Assert.True(outcome.Found);
-        Assert.False(outcome.PriceChanged);
+        Assert.Equal(1, outcome.Found);
+        Assert.Equal(0, outcome.PriceChanged);
         Assert.Single(db.PriceObservations);
         Assert.Equal(SecondRunAt, (await db.Postings.SingleAsync()).LastSeen);
     }
@@ -123,11 +126,11 @@ public class LedgerTouchTests
         using OdonomicsDbContext db = testDb.CreateContext();
         (LedgerUpsertService service, RunEntity second) = await SeededAsync(db);
 
-        TouchOutcome outcome = await service.TouchAsync("carvana", Url, unreadablePrice, second, CancellationToken.None);
+        TouchOutcome outcome = await TouchOneAsync(service, "carvana", Url, unreadablePrice, second);
         SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(second, DaughterScenario, CancellationToken.None);
 
-        Assert.True(outcome.Found);
-        Assert.False(outcome.PriceChanged);
+        Assert.Equal(1, outcome.Found);
+        Assert.Equal(0, outcome.PriceChanged);
         Assert.Single(db.PriceObservations);
         Assert.Equal(SecondRunAt, (await db.Postings.SingleAsync()).LastSeen);
         Assert.Empty(diff.Gone);
@@ -141,13 +144,47 @@ public class LedgerTouchTests
         using OdonomicsDbContext db = testDb.CreateContext();
         (LedgerUpsertService service, RunEntity second) = await SeededAsync(db);
 
-        TouchOutcome wrongUrl = await service.TouchAsync("carvana", "https://www.carvana.com/vehicle/999", 17000m, second, CancellationToken.None);
-        TouchOutcome wrongSource = await service.TouchAsync("cars.com", Url, 17000m, second, CancellationToken.None);
+        TouchOutcome wrongUrl = await TouchOneAsync(service, "carvana", "https://www.carvana.com/vehicle/999", 17000m, second);
+        TouchOutcome wrongSource = await TouchOneAsync(service, "cars.com", Url, 17000m, second);
 
-        Assert.False(wrongUrl.Found);
-        Assert.False(wrongSource.Found);
+        Assert.Equal(0, wrongUrl.Found);
+        Assert.Equal(0, wrongSource.Found);
         Assert.Single(db.PriceObservations);
         Assert.Equal(FirstRunAt, (await db.Postings.SingleAsync()).LastSeen);
+    }
+
+    [Fact]
+    public async Task TouchAsync_APostingAlreadyObservedThisRunByADetailVisit_GetsNoSecondObservationAtTheSameInstant()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await SeededAsync(db);
+        await service.UpsertAsync(Candidate(price: 17500m), second, CancellationToken.None);
+
+        TouchOutcome outcome = await TouchOneAsync(service, "carvana", Url, 17000m, second);
+
+        Assert.Equal(1, outcome.Found);
+        Assert.Equal(0, outcome.PriceChanged);
+        Assert.Equal([18000m, 17500m], (await db.PriceObservations.ToListAsync()).OrderBy(o => o.ObservedAt).Select(o => o.Price));
+    }
+
+    [Fact]
+    public async Task TouchAsync_ManyLinks_TouchesEachOneInASingleSave()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await SeededAsync(db);
+        string otherUrl = "https://www.carvana.com/vehicle/5";
+        await service.UpsertAsync(Candidate(vin: "JTDKN3DU5A0000002", url: otherUrl), (await db.Runs.FirstAsync()), CancellationToken.None);
+
+        TouchOutcome outcome = await service.TouchAsync(
+            "carvana",
+            new Dictionary<string, decimal?> { [Url] = 17000m, [otherUrl] = 18000m, ["https://www.carvana.com/vehicle/999"] = 1m },
+            second,
+            CancellationToken.None);
+
+        Assert.Equal(new TouchOutcome(2, 1), outcome);
+        Assert.All(await db.Postings.ToListAsync(), p => Assert.Equal(SecondRunAt, p.LastSeen));
     }
 
     [Fact]
