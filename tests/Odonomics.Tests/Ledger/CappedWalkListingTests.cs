@@ -6,15 +6,16 @@ using Spectre.Console.Testing;
 
 namespace Odonomics.Tests.Ledger;
 
-/// <summary>Walks a real ledger fully and then again with a cap that misses one car, and proves the
-/// rank pipeline (pricing, scoring, rendering) still lists the car the capped walk never reached.</summary>
+/// <summary>Walks a real ledger fully and then again with a cap, or a result page that failed to load, that
+/// misses one car, and proves the rank pipeline (pricing, scoring, rendering) still lists the car the
+/// partial walk never reached.</summary>
 public class CappedWalkListingTests
 {
     private const string ReachedVin = "JTDKN3DU0A0000001";
     private const string MissedVin = "JTDKN3DU0A0000002";
     private const string Token = "cars.com:Prius";
     private static readonly DateTimeOffset FullWalkAt = new(2026, 9, 24, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset CappedWalkAt = new(2026, 9, 25, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset PartialWalkAt = new(2026, 9, 25, 0, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset LaterFullWalkAt = new(2026, 9, 26, 0, 0, 0, TimeSpan.Zero);
 
     private static Scenario DaughterScenario { get; } = ScenarioLoader.Load(Path.Combine(TestPaths.RepoRoot, "scenarios", "daughter.json"));
@@ -32,31 +33,32 @@ public class CappedWalkListingTests
         Mileage = 40000,
     };
 
-    private static async Task<RunEntity> StartWalkAsync(OdonomicsDbContext db, DateTimeOffset startedAt, bool capped)
+    private static async Task<RunEntity> StartWalkAsync(OdonomicsDbContext db, DateTimeOffset startedAt, string? partialMarker = null)
     {
         var run = new RunEntity
         {
             Command = "walk",
             StartedAt = startedAt,
-            Sources = capped ? $"{Token},{RunSources.PartialKey(Token)}" : Token,
+            Sources = partialMarker is null ? Token : $"{Token},{partialMarker}",
         };
         db.Runs.Add(run);
         await db.SaveChangesAsync(CancellationToken.None);
         return run;
     }
 
-    /// <summary>A full walk that sees both cars, then a capped walk that reaches only the first one.</summary>
-    private static async Task<OdonomicsDbContext> LedgerAfterFullThenCappedWalkAsync(LedgerTestDatabase testDb)
+    /// <summary>A full walk that sees both cars, then a partial walk, marked with <paramref name="partialMarker"/>,
+    /// that reaches only the first one.</summary>
+    private static async Task<OdonomicsDbContext> LedgerAfterFullThenPartialWalkAsync(LedgerTestDatabase testDb, string partialMarker)
     {
         OdonomicsDbContext db = testDb.CreateContext();
         var upsert = new LedgerUpsertService(db);
 
-        RunEntity fullWalk = await StartWalkAsync(db, FullWalkAt, capped: false);
+        RunEntity fullWalk = await StartWalkAsync(db, FullWalkAt);
         await upsert.UpsertAsync(Candidate(ReachedVin, 15000m), fullWalk, CancellationToken.None);
         await upsert.UpsertAsync(Candidate(MissedVin, 14000m), fullWalk, CancellationToken.None);
 
-        RunEntity cappedWalk = await StartWalkAsync(db, CappedWalkAt, capped: true);
-        await upsert.UpsertAsync(Candidate(ReachedVin, 15000m), cappedWalk, CancellationToken.None);
+        RunEntity partialWalk = await StartWalkAsync(db, PartialWalkAt, partialMarker);
+        await upsert.UpsertAsync(Candidate(ReachedVin, 15000m), partialWalk, CancellationToken.None);
         return db;
     }
 
@@ -94,7 +96,7 @@ public class CappedWalkListingTests
     public async Task RankPipeline_CappedWalkThatMissedACar_StillPricesScoresAndListsIt()
     {
         using var testDb = new LedgerTestDatabase();
-        using OdonomicsDbContext db = await LedgerAfterFullThenCappedWalkAsync(testDb);
+        using OdonomicsDbContext db = await LedgerAfterFullThenPartialWalkAsync(testDb, RunSources.PartialKey(Token));
         Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(await db.Runs.ToListAsync(CancellationToken.None));
         List<VehicleEntity> vehicles = await LoadVehiclesAsync(db);
         VehicleEntity missed = vehicles.Single(v => v.Vin == MissedVin);
@@ -112,11 +114,31 @@ public class CappedWalkListingTests
     }
 
     [Fact]
+    public async Task RankPipeline_WalkWhoseLaterPageFailedToLoad_StillPricesScoresAndListsTheCarOnThatPage()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = await LedgerAfterFullThenPartialWalkAsync(testDb, RunSources.UnreadKey(Token));
+        Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(await db.Runs.ToListAsync(CancellationToken.None));
+        List<VehicleEntity> vehicles = await LoadVehiclesAsync(db);
+        VehicleEntity missed = vehicles.Single(v => v.Vin == MissedVin);
+
+        Assert.Equal(FullWalkAt, missed.Postings.Single().LastSeen);
+        Assert.Equal(new PurchasePrice(14000m, null), VehiclePricing.LowestCurrentPurchasePrice(missed, coverage, Fulfillment.Delivery));
+
+        List<Score> scores = [.. vehicles.Select(v => ScoreOf(v, coverage))];
+
+        Assert.All(scores, score => Assert.DoesNotContain(score.FailureReasons, reason => reason.Contains("no current asking price")));
+        string output = RenderRank(scores);
+        Assert.Contains(ReachedVin, output);
+        Assert.Contains(MissedVin, output);
+    }
+
+    [Fact]
     public async Task RankPipeline_FullWalkAfterTheCappedOneThatDoesNotSeeACar_ExcludesIt()
     {
         using var testDb = new LedgerTestDatabase();
-        using OdonomicsDbContext db = await LedgerAfterFullThenCappedWalkAsync(testDb);
-        RunEntity laterFullWalk = await StartWalkAsync(db, LaterFullWalkAt, capped: false);
+        using OdonomicsDbContext db = await LedgerAfterFullThenPartialWalkAsync(testDb, RunSources.PartialKey(Token));
+        RunEntity laterFullWalk = await StartWalkAsync(db, LaterFullWalkAt);
         await new LedgerUpsertService(db).UpsertAsync(Candidate(ReachedVin, 15000m), laterFullWalk, CancellationToken.None);
         Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(await db.Runs.ToListAsync(CancellationToken.None));
         List<VehicleEntity> vehicles = await LoadVehiclesAsync(db);
