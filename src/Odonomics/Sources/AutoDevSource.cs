@@ -5,7 +5,16 @@ using Odonomics.Ledger;
 namespace Odonomics.Sources;
 
 /// <summary>Auto.dev listings API, free tier. Structured JSON with VIN already on it: no model
-/// extraction needed. Ported from spike/Sources/AutoDevSource.cs.</summary>
+/// extraction needed. Ported from spike/Sources/AutoDevSource.cs.
+/// <para>Used cars only. The listings endpoint takes a repeatable <c>condition</c> query parameter,
+/// checked against the live endpoint on 2026-09-26 (the public docs do not list it): each
+/// <c>condition=</c> value selects the records whose <c>condition</c> property equals it,
+/// lower-case, and repeating the parameter ORs the values. The property carries <c>used</c>,
+/// <c>certified pre-owned</c> and <c>new</c>. <c>condition=used</c> alone drops the certified
+/// pre-owned records, which are used cars, and a comma-joined value matches nothing, so the URL
+/// repeats the parameter for <c>used</c> and <c>certified pre-owned</c>. As a backstop against the
+/// filter being ignored, a record whose <c>condition</c> says <c>new</c> is rejected; a record with
+/// no <c>condition</c> is kept.</para></summary>
 public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSource
 {
     public string Name => "auto.dev";
@@ -29,7 +38,8 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
             {
                 string model = Uri.EscapeDataString(query.Model);
                 string url = $"https://auto.dev/api/listings?apikey={apiKey}&zip={query.Zip}&radius={query.RadiusMiles}" +
-                             $"&make={query.Make}&model={model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                             $"&make={query.Make}&model={model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}" +
+                             "&condition=used&condition=certified%20pre-owned";
 
                 HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
                 string body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -76,10 +86,17 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
         string? dealerName = record.TryGetProperty("dealerName", out JsonElement dn) ? dn.GetString() : null;
         string? dealerCity = record.TryGetProperty("city", out JsonElement dc) ? dc.GetString() : null;
         string? dealerState = record.TryGetProperty("state", out JsonElement ds) ? ds.GetString() : null;
+        string? condition = record.TryGetProperty("condition", out JsonElement cd) && cd.ValueKind == JsonValueKind.String ? cd.GetString() : null;
 
         if (string.IsNullOrWhiteSpace(vin))
         {
             result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, no VIN");
+            return;
+        }
+
+        if (string.Equals(condition, "new", StringComparison.OrdinalIgnoreCase))
+        {
+            result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, new car ({vin})");
             return;
         }
 

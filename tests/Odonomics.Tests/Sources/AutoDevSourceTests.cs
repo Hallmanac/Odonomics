@@ -12,6 +12,8 @@ public class AutoDevSourceTests
 {
     private static string FixturePath => Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "sources", "auto.dev", "honda-insight.json");
 
+    private static string NewAndUsedFixturePath => Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "sources", "auto.dev", "honda-insight-new-and-used.json");
+
     [Fact]
     public async Task RunAsync_NoApiKey_ReportsCouldNotRun()
     {
@@ -28,7 +30,7 @@ public class AutoDevSourceTests
     {
         ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
         {
             [url] = await File.ReadAllTextAsync(FixturePath),
@@ -47,6 +49,66 @@ public class AutoDevSourceTests
         ListingCandidate candidate = Assert.Single(result.Candidates, c => c.Vin == "19XZE4F52ME000999");
         Assert.Equal("Holler Driver's Mart Sanford", candidate.DealerName);
         Assert.Equal("Sanford, FL", candidate.DealerLocation);
+    }
+
+    [Fact]
+    public async Task RunAsync_BuildsAUsedOnlyListingsUrl()
+    {
+        // Uri.ToString() shows the escaped space in the last value as a space. condition is repeated rather than comma-joined (the endpoint matches nothing for a
+        // comma-joined value) and includes certified pre-owned, which is a used car.
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        var handler = new RecordingHttpMessageHandler("""{ "records": [] }""");
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Equal(
+            ["https://auto.dev/api/listings?apikey=test-key&zip=32114&radius=50&make=Honda&model=Insight&year_min=2019&mileage_max=100000&condition=used&condition=certified pre-owned"],
+            handler.RequestedUrls);
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordMarkedNew_IsRejectedNamingTheVinWhileTheUsedOneIsKept()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        var handler = new RecordingHttpMessageHandler(await File.ReadAllTextAsync(NewAndUsedFixturePath));
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("19XZE4F52ME000999", candidate.Vin);
+        string rejection = Assert.Single(result.Rejections);
+        Assert.Contains("candidate rejected, new car", rejection);
+        Assert.Contains("19XZE4F95ME001552", rejection);
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordWithNoConditionField_IsKept()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        const string body = """
+            {
+              "records": [
+                {
+                  "vin": "19XZE4F52ME000999",
+                  "vdpUrl": "https://auto.dev/listing/1",
+                  "year": 2021,
+                  "make": "Honda",
+                  "model": "Insight",
+                  "trim": "EX",
+                  "priceUnformatted": 19393,
+                  "mileageUnformatted": 69599
+                }
+              ]
+            }
+            """;
+        var source = new AutoDevSource("test-key", new HttpClient(new RecordingHttpMessageHandler(body)));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Single(result.Candidates);
+        Assert.Empty(result.Rejections);
     }
 
     [Fact]
@@ -77,7 +139,7 @@ public class AutoDevSourceTests
         // "still active" check and the diff's "gone" check.
         ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         const string body = """
             {
               "records": [
@@ -113,7 +175,7 @@ public class AutoDevSourceTests
         // insurance figures.
         ListingQuery query = new("Toyota", "Camry Hybrid", YearMin: 2018, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         const string body = """
             {
               "records": [
@@ -147,7 +209,7 @@ public class AutoDevSourceTests
         // "Hybrid" anywhere in its text is still the hybrid this query is after.
         ListingQuery query = new("Toyota", "Camry Hybrid", YearMin: 2018, "32114", 50, MaxMileage: 100000, HybridOnlyFromModelYear: 2025);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         const string body = """
             {
               "records": [
@@ -180,7 +242,7 @@ public class AutoDevSourceTests
         // must reject it while keeping the ones that do fit.
         ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 50000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
         {
             [url] = await File.ReadAllTextAsync(FixturePath),
