@@ -201,4 +201,20 @@ public class LedgerTouchTests
         Assert.Equal([Url], carvana);
         Assert.Empty(autotrader);
     }
+
+    [Fact]
+    public async Task KnownPostingCountsAsync_CountsPostingsBySourceAndModel()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await SeededAsync(db);
+        await service.UpsertAsync(Candidate(vin: "JTDKN3DU5A0000001", url: "https://www.carvana.com/vehicle/2"), second, CancellationToken.None);
+        await service.UpsertAsync(Candidate(vin: "JTDKN3DU5A0000002", url: "https://www.cars.com/vehicledetail/aaa/", source: "cars.com"), second, CancellationToken.None);
+
+        Dictionary<(string Source, string Model), int> counts = await service.KnownPostingCountsAsync(CancellationToken.None);
+
+        Assert.Equal(2, counts[("carvana", "Prius")]);
+        Assert.Equal(1, counts[("cars.com", "Prius")]);
+        Assert.False(counts.ContainsKey(("autotrader", "Prius")));
+    }
 }

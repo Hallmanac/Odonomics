@@ -17,6 +17,8 @@ namespace Odonomics.Walk;
 /// it) is handed to <c>touchKnownAsync</c> with its card's asking price and never enters the pool, so it
 /// spends none of the pool; paging goes on past pages made only of known links, and stops when the pool of
 /// new links is full, the stated count is reached, or a page shows nothing not seen before.
+/// A pool size of <see cref="WalkPairSearches.UnboundedPool"/> is the uncapped walk: the pool never fills,
+/// so paging ends only by the stated count, a page that adds nothing, an exhausted search, or a failed page.
 /// </summary>
 public static class WalkSearchPages
 {

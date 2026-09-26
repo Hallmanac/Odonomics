@@ -119,6 +119,17 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     public async Task<HashSet<string>> KnownUrlsAsync(string source, CancellationToken cancellationToken) =>
         [.. await db.Postings.Where(p => p.Source == source).Select(p => p.Url).ToListAsync(cancellationToken)];
 
+    /// <summary>How many postings the ledger holds for each source and model, keyed by the source name
+    /// and the model as the vehicle row stores it (the bare model, without its make), so the start of a
+    /// walk can say how much of each pair the ledger already covers.</summary>
+    public async Task<Dictionary<(string Source, string Model), int>> KnownPostingCountsAsync(CancellationToken cancellationToken) =>
+        (await db.Vehicles
+            .SelectMany(v => v.Postings, (v, p) => new { p.Source, v.Model })
+            .GroupBy(r => r)
+            .Select(g => new { g.Key.Source, g.Key.Model, Count = g.Count() })
+            .ToListAsync(cancellationToken))
+        .ToDictionary(r => (r.Source, r.Model), r => r.Count);
+
     /// <summary>Records that the run saw the postings at <paramref name="source"/> and each URL of
     /// <paramref name="cardPricesByUrl"/> on a search page, without opening their detail pages, in one
     /// save so either every touch lands or none does. Each touch stamps the posting's LastSeen with the

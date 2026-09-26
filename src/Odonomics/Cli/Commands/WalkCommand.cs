@@ -17,11 +17,13 @@ namespace Odonomics.Cli.Commands;
 /// hand, never launches one itself. With no site argument it walks cars.com, then carvana, then autotrader; a
 /// site argument narrows it to that one site. With no --model it walks every model in the
 /// scenario's allowed list, in order, on whichever site(s) it's covering; --model narrows it to
-/// that one model exactly, on whichever site(s) it's covering. --max caps matching detail pages
-/// visited per site-and-model pair, not per run or raw page visits: a page rejected for not
-/// matching the model, or one whose VIN this pair already saved through a different link, doesn't
-/// spend the cap, so the walk can open more candidate links than --max to fill it. --max defaults
-/// to 30 (<see cref="WalkPacing.DefaultMaxDetailPages"/>). A link the ledger already holds is not
+/// that one model exactly, on whichever site(s) it's covering. The scenario's facets are the only
+/// filter by default: with no --max the walk visits every car a pair's searches return. --max is an
+/// opt-in limit on matching detail pages visited per site-and-model pair, not per run or raw page
+/// visits: a page rejected for not matching the model, or one whose VIN this pair already saved
+/// through a different link, doesn't spend the cap, so the walk can open more candidate links than
+/// --max to fill it. Before each pair's first detail page the walk prints how many it is about to
+/// visit (see <see cref="WalkVisitPlan"/>). A link the ledger already holds is not
 /// opened at all: it is kept current from its search card (see <see cref="KnownCardTouches"/>), so a
 /// repeat walk visits only new cars, and --revisit forces a detail visit for every link as before.
 /// See the brief for the full pacing spec; this command implements it as literally as an automated
@@ -30,10 +32,9 @@ namespace Odonomics.Cli.Commands;
 /// </summary>
 public static class WalkCommand
 {
-    public static Option<int> CreateMaxOption() => new("--max")
+    public static Option<int?> CreateMaxOption() => new("--max")
     {
-        Description = "maximum number of matching detail pages to visit per site-and-model pair; a page rejected for not matching the model doesn't count against it, so the walk may open more candidate links than this to reach it",
-        DefaultValueFactory = _ => WalkPacing.DefaultMaxDetailPages,
+        Description = "limit the matching detail pages visited per site-and-model pair; without it the walk visits every car a pair's searches return that the ledger does not already hold. A page rejected for not matching the model doesn't count against the limit, so the walk may open more candidate links than this to reach it",
     };
 
     public static Option<bool> CreateRevisitOption() => new("--revisit")
@@ -41,7 +42,7 @@ public static class WalkCommand
         Description = "open a detail page for every link, including the ones the ledger already holds; without it those are kept current from their search cards and only new cars are visited",
     };
 
-    public static async Task<int> RunAsync(string scenarioPath, string? siteName, string? modelOverride, int maxDetailPages, bool revisit, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string scenarioPath, string? siteName, string? modelOverride, int? maxDetailPages, bool revisit, CancellationToken cancellationToken)
     {
         List<WalkSite> sites;
         if (siteName is null)
@@ -98,6 +99,18 @@ public static class WalkCommand
         string dataDirectory = DataDirectory.Resolve();
         var pacing = new WalkPacing(Random.Shared);
         var upsertService = new LedgerUpsertService(db);
+
+        Dictionary<(string Source, string Model), int> knownCounts = await upsertService.KnownPostingCountsAsync(cancellationToken);
+        foreach (string line in WalkVisitPlan.RunStartLines(
+            [.. sites.SelectMany(site => models.Select(makeModel => new WalkVisitPlan.PairKnown(
+                site.Name,
+                makeModel,
+                knownCounts.GetValueOrDefault((site.Name, MakeModel.Split(makeModel).Model)))))],
+            maxDetailPages,
+            revisit))
+        {
+            AnsiConsole.MarkupLineInterpolated($"{line}");
+        }
 
         using IPlaywright playwright = await Playwright.CreateAsync();
         await using IBrowser browser = await playwright.Chromium.ConnectOverCDPAsync($"http://localhost:{ChromeLaunchLine.DebugPort}");
@@ -168,7 +181,7 @@ public static class WalkCommand
         RunEntity currentRun,
         string dataDirectory,
         WalkPacing pacing,
-        int maxDetailPages,
+        int? maxDetailPages,
         bool revisit,
         CancellationToken cancellationToken)
     {
@@ -218,7 +231,10 @@ public static class WalkCommand
                 (pageNumber, ex) => AnsiConsole.MarkupLineInterpolated($"[yellow]{searchLabel}, page {pageNumber} failed to load, so paging stops there ({ex.Message})[/]"),
                 pageNumber => AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: the search ran out of exact matches, so paging stops there"),
                 ct);
-            AnsiConsole.MarkupLineInterpolated($"found {links.Count} new detail link(s) to consider (cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)), {knownTouches.Count} known from cards so far");
+            string capText = linkPoolSize == WalkPairSearches.UnboundedPool
+                ? "no cap"
+                : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
+            AnsiConsole.MarkupLineInterpolated($"found {links.Count} new detail link(s) to consider ({capText}), {knownTouches.Count} known from cards so far");
             return links;
         }
 
@@ -346,7 +362,8 @@ public static class WalkCommand
             CollectLinksAsync,
             VisitLinkAsync,
             ct => Task.Delay(pacing.RandomDetailGap(), ct),
-            cancellationToken);
+            cancellationToken,
+            (pages, startingWith) => AnsiConsole.MarkupLineInterpolated($"{WalkVisitPlan.PairLine(site.Name, make, model, pages, startingWith)}"));
 
         await knownTouches.CommitAsync(cancellationToken);
 
