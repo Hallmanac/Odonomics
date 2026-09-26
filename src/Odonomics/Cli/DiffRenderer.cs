@@ -3,13 +3,14 @@ using Spectre.Console;
 
 namespace Odonomics.Cli;
 
-/// <summary>Renders a search/walk diff as four narrow tables (new, moved, price-dropped, gone, the last with a reason per row),
+/// <summary>Renders a search/walk diff as five narrow tables (new, also listed, moved, price-dropped, gone, the last with a reason per row),
 /// each column-limited to still read at 80 columns.</summary>
 public static class DiffRenderer
 {
     public static void Render(SearchDiff diff)
     {
         RenderNew(diff.New);
+        RenderAlsoListed(diff.AlsoListed);
         RenderMoved(diff.Moved);
         RenderPriceDrops(diff.PriceDrops);
         RenderGone(diff.Gone);
@@ -28,6 +29,23 @@ public static class DiffRenderer
         foreach (NewPostingEntry entry in entries)
         {
             table.AddRow(Format.Cell(entry.Vin), entry.Year.ToString(), Format.Cell($"{entry.Make} {entry.Model}"), Format.Money(entry.Price), Format.Cell(entry.Source));
+        }
+
+        AnsiConsole.Write(table);
+    }
+
+    private static void RenderAlsoListed(IReadOnlyList<AlsoListedEntry> entries)
+    {
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        AnsiConsole.MarkupLine($"[bold]Also listed at ({entries.Count})[/]");
+        Table table = NarrowTable("VIN", "Year", "Model", "Price", "Sources");
+        foreach (AlsoListedEntry entry in entries)
+        {
+            table.AddRow(Format.Cell(entry.Vin), entry.Year.ToString(), Format.Cell($"{entry.Make} {entry.Model}"), Format.Money(entry.Price), Format.Cell(string.Join(", ", entry.Sources)));
         }
 
         AnsiConsole.Write(table);
