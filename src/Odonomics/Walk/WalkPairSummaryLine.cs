@@ -13,7 +13,8 @@ namespace Odonomics.Walk;
 /// per-pair line itself never wraps mid-parenthetical: when it would exceed the console width the
 /// whole breakdown moves to an indented continuation line instead. A pair that stopped short of the
 /// site's results (an explicit --max ended it) ends its line with ", capped", so a reader knows the
-/// tally is not the whole site.
+/// tally is not the whole site, and one whose later result page failed to load ends its line with
+/// ", page N failed", since the pages after it were never read.
 /// </summary>
 public static class WalkPairSummaryLine
 {
@@ -43,9 +44,10 @@ public static class WalkPairSummaryLine
         int saved,
         DroppedBreakdown dropped,
         int width = int.MaxValue,
-        bool capped = false)
+        bool capped = false,
+        int? failedPage = null)
     {
-        string cappedSuffix = capped ? ", capped" : "";
+        string cappedSuffix = (capped ? ", capped" : "") + (failedPage is int page ? $", page {page} failed" : "");
         string prefix = $"{site} / {make} {model}: {pages} pages, {known} known from cards, {saved} saved, {dropped.Total} dropped";
         string cell = DroppedCell(dropped);
         if (cell.Length == 0)

@@ -36,8 +36,9 @@ public static class WalkSearchPages
     /// (open it, scroll, dwell, record it) before returning its anchors and text, so the pacing between
     /// pages is the pacing between any two page loads. When a page after the first throws (other than
     /// because <paramref name="cancellationToken"/> was cancelled), <paramref name="onLaterPageFailed"/>
-    /// is told its number and the exception and the pool built so far is returned; a failure on the
-    /// first page still propagates, since without it the search has nothing. When a page says the search
+    /// is told its number and the exception and the pool built so far is returned; the pages after it were
+    /// never read, so the caller records the pair's coverage as partial (see <see cref="Ledger.RunSources.UnreadKey"/>).
+    /// A failure on the first page still propagates, since without it the search has nothing. When a page says the search
     /// ran out of exact matches, <paramref name="onSearchExhausted"/> is told its number. When the
     /// collection stops with the site's results not all read because <paramref name="poolSize"/> was
     /// reached, <paramref name="onCapped"/> is told once. <paramref name="revisit"/> says the pool holds

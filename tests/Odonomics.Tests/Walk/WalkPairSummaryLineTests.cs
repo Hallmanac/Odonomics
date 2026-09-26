@@ -235,6 +235,23 @@ public class WalkPairSummaryLineTests
     }
 
     [Fact]
+    public void Format_APairWhoseLaterPageFailed_EndsWithWhichPageFailedAndNeverSaysCapped()
+    {
+        string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 40, known: 0, saved: 40, new DroppedBreakdown(0, 0, 0, 0), failedPage: 3);
+
+        Assert.Equal("carvana / Toyota Camry Hybrid: 40 pages, 0 known from cards, 40 saved, 0 dropped, page 3 failed", line);
+        Assert.DoesNotContain("capped", line);
+    }
+
+    [Fact]
+    public void Format_APairWhoseLaterPageFailedAndWhoseLineWraps_KeepsThePageWithTheBreakdown()
+    {
+        string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 32, known: 0, saved: 30, new DroppedBreakdown(0, 0, 2, 0), width: 60, failedPage: 3);
+
+        Assert.Equal("carvana / Toyota Camry Hybrid: 32 pages, 0 known from cards, 30 saved, 2 dropped\n    (wrong model), page 3 failed", line);
+    }
+
+    [Fact]
     public void Format_APairThatWasNotCapped_NeverSaysCapped()
     {
         string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 30, known: 0, saved: 30, new DroppedBreakdown(0, 0, 0, 0));

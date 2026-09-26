@@ -6,15 +6,18 @@ namespace Odonomics.Walk;
 /// links it kept current from their search cards without visiting them. <see cref="Capped"/> is true when
 /// an explicit --max ended the pair before the site ran out of results (the link pool filled while more pages
 /// remained, a search was never opened, or with --revisit the cap left collected links unvisited), so the
-/// pair's coverage is partial.</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false);
+/// pair's coverage is partial. <see cref="FailedPage"/> is the number of the first result page after the
+/// first that failed to load (null when none did), which ended that search's paging with the pages after
+/// it unread, so the pair's coverage is partial for that reason too.</summary>
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
 /// is false when the pair's own walk threw (a page that never loaded, a site that errored); the
 /// walk moves on to the next pair rather than aborting the whole run. <see cref="KnownFromCards"/> is
 /// how many links the ledger already held that the pair touched from their cards. <see cref="Capped"/> is
-/// true when the pair stopped short of the site's results (see <see cref="WalkPairOutcome.Capped"/>).</summary>
-public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false);
+/// true when the pair stopped short of the site's results (see <see cref="WalkPairOutcome.Capped"/>), and
+/// <see cref="FailedPage"/> is the result page that failed to load, if one did.</summary>
+public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null);
 
 /// <summary>
 /// Walks every (site, model) pair in order, stamping the run's coverage token the moment each
@@ -26,7 +29,8 @@ public sealed record WalkPairSummary(string Site, string Model, int DetailPagesV
 /// cancellation stops the walk entirely and propagates to the caller, leaving whatever pairs
 /// already completed stamped in the database. A pair that stopped short of the site's results
 /// (<see cref="WalkPairOutcome.Capped"/>) gets a partial-coverage token beside its own (see
-/// <see cref="RunSources.PartialKey"/>), stamped and rolled back with it.
+/// <see cref="RunSources.PartialKey"/>), stamped and rolled back with it, and so does a pair whose later
+/// result page failed to load (<see cref="WalkPairOutcome.FailedPage"/>, see <see cref="RunSources.UnreadKey"/>).
 /// </summary>
 public static class WalkCoverage
 {
@@ -70,6 +74,11 @@ public static class WalkCoverage
                         coveredTokens.Add(RunSources.PartialKey(coverageKey));
                     }
 
+                    if (outcome.FailedPage is not null)
+                    {
+                        coveredTokens.Add(RunSources.UnreadKey(coverageKey));
+                    }
+
                     currentRun.Sources = RunSources.Join(coveredTokens);
                     try
                     {
@@ -82,7 +91,7 @@ public static class WalkCoverage
                         throw;
                     }
 
-                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped));
+                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

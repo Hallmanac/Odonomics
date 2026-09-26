@@ -196,6 +196,10 @@ public static class WalkCommand
         // the pool was full (see WalkSearchPages); the pair's coverage is then recorded as partial.
         bool linkCollectionCapped = false;
 
+        // The first result page after the first that failed to load, in any of the pair's searches; the
+        // pages after it were never read, so the pair's coverage is recorded as partial for that reason.
+        int? failedResultPage = null;
+
         async Task<SearchPageContent> LoadSearchPageAsync(string pageUrl, string searchLabel, int searchIndex, int pageNumber, CancellationToken ct)
         {
             // A pair with several searches always names the page too, so the line says which search page it is.
@@ -228,7 +232,11 @@ public static class WalkCommand
                 linkPoolSize,
                 knownTouches.TryTouchAsync,
                 (pageUrl, pageNumber, pageCt) => LoadSearchPageAsync(pageUrl, searchLabel, searchIndex, pageNumber, pageCt),
-                (pageNumber, ex) => AnsiConsole.MarkupLineInterpolated($"[yellow]{searchLabel}, page {pageNumber} failed to load, so paging stops there ({ex.Message})[/]"),
+                (pageNumber, ex) =>
+                {
+                    failedResultPage ??= pageNumber;
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]{searchLabel}, page {pageNumber} failed to load, so paging stops there ({ex.Message})[/]");
+                },
                 pageNumber => AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: the search ran out of exact matches, so paging stops there"),
                 () => linkCollectionCapped = true,
                 ct,
@@ -374,9 +382,9 @@ public static class WalkCommand
         await knownTouches.CommitAsync(cancellationToken);
 
         bool capped = linkCollectionCapped || tally.Capped;
-        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped)}");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage)}");
 
-        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped);
+        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
@@ -441,6 +449,7 @@ public static class WalkCommand
     private static string StatusCell(WalkPairSummary summary) => summary switch
     {
         { Completed: false } => "[yellow]failed[/]",
+        { FailedPage: not null } => "unread",
         { Capped: true } => "capped",
         _ => "ok",
     };
