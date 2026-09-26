@@ -284,7 +284,7 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     }
 
     /// <summary>The dealer a sighting whose source named none (<see cref="ListingCandidate.DealerNameIsFallback"/>,
-    /// carvana's "Carvana") links its posting to, or null to leave the posting's link as it is. The
+    /// carvana's "Carvana", carmax's "CarMax") links its posting to, or null to leave the posting's link as it is. The
     /// VIN history the ledger already stores may name the hub the car sits in for this posting's
     /// window (see <see cref="CarvanaDealers.HubNameFromHistory"/>): a posting with no dealer, or one
     /// on a "Carvana" row, moves to that hub. Otherwise a posting with no dealer gets the fallback
@@ -293,10 +293,18 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     /// never use.</summary>
     private async ValueTask<DealerEntity?> ResolveFallbackDealerAsync(ListingCandidate candidate, PostingEntity? posting, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        bool mayMove = posting?.Dealer is null || CarvanaDealers.IsChain(posting.Dealer);
+        // The hub lookup and the move off a "Carvana" row are Carvana's: another site's fallback (carmax's
+        // "CarMax") must not be linked to a Carvana hub a VIN's earlier stay happened to have.
+        bool carvanaFallback = CarvanaDealers.IsChainOrHubName(candidate.DealerName);
+        bool mayMove = posting?.Dealer is null || (carvanaFallback && CarvanaDealers.IsChain(posting.Dealer));
         if (!mayMove)
         {
             return null;
+        }
+
+        if (!carvanaFallback)
+        {
+            return await FindOrCreateDealerAsync(candidate.DealerName, candidate.DealerLocation, cancellationToken);
         }
 
         string? historyJson = await db.VinRecords
