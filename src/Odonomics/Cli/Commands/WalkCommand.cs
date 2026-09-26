@@ -235,7 +235,8 @@ public static class WalkCommand
                 (pageNumber, ex) => AnsiConsole.MarkupLineInterpolated($"[yellow]{searchLabel}, page {pageNumber} failed to load, so paging stops there ({ex.Message})[/]"),
                 pageNumber => AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: the search ran out of exact matches, so paging stops there"),
                 () => linkCollectionCapped = true,
-                ct);
+                ct,
+                revisit);
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -371,7 +372,8 @@ public static class WalkCommand
             VisitLinkAsync,
             ct => Task.Delay(pacing.RandomDetailGap(), ct),
             cancellationToken,
-            (pages, startingWith) => AnsiConsole.MarkupLineInterpolated($"{WalkVisitPlan.PairLine(site.Name, make, model, pages, startingWith)}"));
+            (pages, startingWith) => AnsiConsole.MarkupLineInterpolated($"{WalkVisitPlan.PairLine(site.Name, make, model, pages, startingWith)}"),
+            revisit);
 
         await knownTouches.CommitAsync(cancellationToken);
 

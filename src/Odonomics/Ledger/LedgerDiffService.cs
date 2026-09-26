@@ -218,13 +218,17 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         HashSet<string> partialTokens = RunSources.PartialCoverage(currentRun);
         List<RunEntity> allRuns = await db.Runs.ToListAsync(cancellationToken);
         List<RunEntity> priorRuns = [.. allRuns.Where(r => r.Id != currentRun.Id && r.StartedAt < currentRun.StartedAt)];
-        Dictionary<string, DateTimeOffset> previousCoverageBySource = RunSources.LatestCoverageBySource(priorRuns);
 
         var gone = new List<GonePostingEntry>();
         var goneVins = new HashSet<string>();
         foreach (string token in tokens)
         {
-            if (!previousCoverageBySource.TryGetValue(token, out DateTimeOffset previousCoverage))
+            // A posting this run did not touch is a gone candidate when the last run to cover its pair
+            // saw it. A run that covered the pair only partially never looked for the postings it did not
+            // reach, so those still carry the LastSeen of the run before it: the search reaches back
+            // through partial runs to the newest one that covered the pair in full.
+            List<DateTimeOffset> comparableCoverage = ComparableCoverage(token, priorRuns);
+            if (comparableCoverage.Count == 0)
             {
                 continue; // this run is the first to ever cover this source/model; nothing to compare against
             }
@@ -233,7 +237,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             List<PostingEntity> stillMarkedFromPreviousCoverage = await db.Postings
                 .Include(p => p.Vehicle)
                 .Include(p => p.PriceObservations)
-                .Where(p => p.Source == source && p.Vehicle!.Model == model && p.LastSeen == previousCoverage)
+                .Where(p => p.Source == source && p.Vehicle!.Model == model && comparableCoverage.Contains(p.LastSeen))
                 .OrderBy(p => p.Id)
                 .ToListAsync(cancellationToken);
 
@@ -246,7 +250,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                 }
 
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
-                RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == previousCoverage);
+                RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == posting.LastSeen);
                 gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(vehicle, lastSeenRun, currentRun, scenario, partialTokens.Contains(token))));
             }
         }
@@ -255,6 +259,24 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             new AlsoListedEntry(g.Vehicle.Vin, g.Vehicle.Year, g.Vehicle.Make, g.Vehicle.Model, g.Sources, g.Price))];
 
         return new SearchDiff(newEntries, alsoListed, moved, priceDrops, gone);
+    }
+
+    /// <summary>The StartedAt of every prior run whose untouched postings of <paramref name="token"/>'s pair
+    /// are candidates to be gone: the latest run that covered the pair, then, for as long as the run just
+    /// taken covered it only partially, the one before it, ending with the first that covered it in full.</summary>
+    private static List<DateTimeOffset> ComparableCoverage(string token, List<RunEntity> priorRuns)
+    {
+        List<DateTimeOffset> comparable = [];
+        foreach (RunEntity run in priorRuns.Where(r => RunSources.Split(r).Contains(token)).OrderByDescending(r => r.StartedAt))
+        {
+            comparable.Add(run.StartedAt);
+            if (!RunSources.PartialCoverage(run).Contains(token))
+            {
+                break;
+            }
+        }
+
+        return comparable;
     }
 
     private static string GoneReason(VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario, bool pairCoveredPartially)

@@ -246,7 +246,7 @@ public partial class WalkPairSearchesTests
 
         Assert.Equal([20], run.PoolSizes);
         Assert.Equal([0], run.SearchIndexes);
-        Assert.Equal(expected with { Capped = true }, tally);
+        Assert.Equal(expected, tally);
         Assert.Equal(bare.Visits, run.Visits);
         Assert.Equal(bare.Gaps, run.Gaps);
     }
@@ -383,7 +383,20 @@ public partial class WalkPairSearchesTests
     }
 
     [Fact]
-    public async Task RunAsync_ACapThatLeavesCollectedLinksUnvisited_MarksTheTallyCapped()
+    public async Task RunAsync_ACapThatLeavesCollectedLinksUnvisited_MarksTheTallyCappedWhenEveryLinkIsVisitedAgain()
+    {
+        var run = new Run();
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: 5,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None, revisit: true);
+
+        Assert.Equal(5, tally.Visited);
+        Assert.True(tally.Capped);
+    }
+
+    [Fact]
+    public async Task RunAsync_ACapThatLeavesCollectedLinksUnvisited_IsNotCappedWhenTheLedgersKnownLinksAreTouchedFromTheirCards()
     {
         var run = new Run();
 
@@ -392,6 +405,20 @@ public partial class WalkPairSearchesTests
             run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None);
 
         Assert.Equal(5, tally.Visited);
+        Assert.False(tally.Capped);
+    }
+
+    [Fact]
+    public async Task RunAsync_ACapSpentBeforeASecondSearchIsOpened_IsCappedWhetherOrNotLinksAreVisitedAgain()
+    {
+        var run = new Run();
+        run.LinksOffered["hyb"] = 5;
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/hybrid", "https://x/base"], maxDetailPages: 1,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None);
+
+        Assert.Equal(["https://x/hybrid"], run.OpenedSearches);
         Assert.True(tally.Capped);
     }
 

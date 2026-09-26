@@ -100,7 +100,8 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
 /// actually visited, how many were upserted, and how many were dropped for each reason. Visited
 /// always equals Upserted plus Dropped.Total, so the pair and run summaries can report "pages,
 /// saved, dropped" without the arithmetic ever looking contradictory. <see cref="Capped"/> is true
-/// when the per-pair cap ended the pair's walk with candidate links or searches still unvisited.</summary>
+/// when the per-pair cap ended the pair's walk with a search never opened or, when every link is visited
+/// again, with candidate links still unvisited.</summary>
 public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown Dropped, bool Capped = false)
 {
     /// <summary>How many of the visited pages spent a slot of the per-pair cap: every visit except

@@ -19,9 +19,12 @@ namespace Odonomics.Walk;
 /// new links is full, the stated count is reached, or a page shows nothing not seen before.
 /// A pool size of <see cref="WalkPairSearches.UnboundedPool"/> is the uncapped walk: the pool never fills,
 /// so paging ends only by the stated count, a page that adds nothing, an exhausted search, or a failed page.
-/// A bounded pool can instead end the collection with results still unread: it fills, or a page holds a new
-/// link the full pool has no room for. That is reported through <c>onCapped</c>, since the postings the
-/// collection never reached must not later be read as cars that left the market.
+/// A bounded pool can instead end the collection with results still unread: it fills while the site has more
+/// pages to read, or (only when every link is visited again, <c>revisit</c>, so the pool holds links the ledger
+/// already knows) a page holds a link the full pool has no room for. That is reported through <c>onCapped</c>,
+/// since the postings the collection never reached must not later be read as cars that left the market. Without
+/// <c>revisit</c> a link the pool has no room for is one the ledger does not hold, so every known posting on a
+/// page that was read has already been touched from its card and the overflow says nothing about a car that sold.
 /// </summary>
 public static class WalkSearchPages
 {
@@ -37,7 +40,8 @@ public static class WalkSearchPages
     /// first page still propagates, since without it the search has nothing. When a page says the search
     /// ran out of exact matches, <paramref name="onSearchExhausted"/> is told its number. When the
     /// collection stops with the site's results not all read because <paramref name="poolSize"/> was
-    /// reached, <paramref name="onCapped"/> is told once.</summary>
+    /// reached, <paramref name="onCapped"/> is told once. <paramref name="revisit"/> says the pool holds
+    /// links the ledger already knows, so a link left out for want of room is a posting the walk did not touch.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -47,7 +51,8 @@ public static class WalkSearchPages
         Action<int, Exception> onLaterPageFailed,
         Action<int> onSearchExhausted,
         Action onCapped,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool revisit = false)
     {
         Func<string, int, string>? pageUrlFor = site.PagedSearchUrl;
         List<string> pool = [];
@@ -108,7 +113,7 @@ public static class WalkSearchPages
                 {
                     pool.Add(card.Href);
                 }
-                else
+                else if (revisit)
                 {
                     leftBehindForWantOfPoolRoom = true;
                 }
