@@ -1,3 +1,4 @@
+using Odonomics.Cli.Commands;
 using Odonomics.Domain;
 using Odonomics.Ledger;
 
@@ -254,6 +255,54 @@ public class VehiclePricingTests
 
         Assert.Equal(1494m, price?.IncludedFees);
         Assert.Equal(17000m, price?.Total);
+    }
+
+    [Theory]
+    [InlineData(Fulfillment.Delivery)]
+    [InlineData(Fulfillment.Pickup)]
+    public void LowestCurrentPurchasePrice_AllInPostingThatNamesShipping_ShowsTheFeeAndNeverAddsItUnderEitherFulfillment(Fulfillment fulfillment)
+    {
+        // cargurus: "Price includes $699 shipping", so the $27,697 asking price already holds the $699.
+        VehicleEntity vehicle = Vehicle(Posting("cargurus", 27697m, shippingFee: 699m, feePosture: FeePostures.AllIn));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, fulfillment);
+
+        Assert.Equal(27697m, price?.Total);
+        Assert.Equal(699m, price?.ShippingFee);
+        Assert.True(price?.ShippingIncluded);
+        Assert.Null(price?.AppliedFee);
+        Assert.False(price?.PickupFeeAssumed);
+    }
+
+    [Fact]
+    public void ForScoring_AllInPostingThatNamesShipping_ScoresAtTheAskingPriceAlone()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("cargurus", 27697m, shippingFee: 699m, feePosture: FeePostures.AllIn));
+
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.True(forScoring.ShippingIncluded);
+        Assert.Equal(699m, forScoring.ShippingFee);
+        Assert.Equal(27697m, forScoring.PurchasePrice?.Total);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_AllInPostingWithNoShippingFee_IsNotMarkedAsIncludingShipping()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 17000m, feePosture: FeePostures.AllIn));
+
+        Assert.False(VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery)?.ShippingIncluded);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_NeverReadPostingWithAShippingFee_StillAddsIt()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("carmax", 24998m, shippingFee: 149m));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(25147m, price?.Total);
+        Assert.False(price?.ShippingIncluded);
     }
 
     [Fact]

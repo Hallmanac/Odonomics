@@ -66,6 +66,7 @@ public static class RankCommand
             Mileage = vehicle.Mileage,
             LowestCurrentPrice = purchasePrice?.Asking,
             ShippingFee = purchasePrice?.ShippingFee,
+            ShippingIncluded = purchasePrice?.ShippingIncluded ?? false,
             PickupFee = purchasePrice?.PickupFee,
             PickupLocation = purchasePrice?.PickupLocation,
             Fulfillment = fulfillment,

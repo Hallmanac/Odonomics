@@ -25,7 +25,7 @@ public static class VehiclePricing
     /// the desk, is compared honestly with one that has neither. Under delivery the fee is the shipping
     /// fee; under pickup it is the pickup fee, or the shipping fee when no pickup fee was read (see
     /// <see cref="PurchasePrice"/>). A posting with a null fee costs its asking price, and so does one
-    /// whose posture is all-in (its price already holds its fees), unknown (the page did not say), or
+    /// whose posture is all-in (its price already holds its fees, and any shipping fee it shows), unknown (the page did not say), or
     /// never read. When two postings cost the same to take home, the one with the lower asking price is
     /// reported.</summary>
     public static PurchasePrice? LowestCurrentPurchasePrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment) =>
@@ -55,12 +55,14 @@ public static class VehiclePricing
     /// <summary>The posting's purchase price at <paramref name="asking"/>. Itemized fees count only when
     /// the posture is itemized: an all-in page's asking price already holds its fees, and adding an
     /// itemized total the page also printed would count them twice. That total is still carried, for
-    /// display, as the fees an all-in price includes.</summary>
+    /// display, as the fees an all-in price includes. The same goes for a shipping fee on an all-in posting:
+    /// the only card that says so is one that says "Price includes $462 shipping", so the fee is carried for
+    /// display and never added (see <see cref="PurchasePrice.ShippingIncluded"/>).</summary>
     private static PurchasePrice PurchasePriceOf(PostingEntity posting, decimal asking, Fulfillment fulfillment) =>
         posting.FeePosture switch
         {
             FeePostures.Itemized => new(asking, posting.ShippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, posting.ItemizedFeesTotal, posting.FeePosture),
-            FeePostures.AllIn => new(asking, posting.ShippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture, posting.ItemizedFeesTotal),
+            FeePostures.AllIn => new(asking, posting.ShippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture, posting.ItemizedFeesTotal, ShippingIncluded: posting.ShippingFee is not null),
             _ => new(asking, posting.ShippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture),
         };
 
