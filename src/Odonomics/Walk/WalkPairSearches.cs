@@ -26,14 +26,26 @@ public static class WalkPairSearches
     /// then follows a paged site until its own stop rules end it, and reads every link a page has.</summary>
     public const int UnboundedPool = int.MaxValue;
 
-    /// <summary>The recorder file name for the search page at <paramref name="searchIndex"/>:
-    /// "search.txt" for the first, so a one-search pair writes exactly what it always did, then
-    /// "search-2.txt", "search-3.txt" and so on.</summary>
-    public static string SearchFileName(int searchIndex) => searchIndex == 0 ? "search.txt" : $"search-{searchIndex + 1}.txt";
+    /// <summary>The recorder file name for result page <paramref name="pageNumber"/> (1-based) of the
+    /// search at <paramref name="searchIndex"/> (0-based) in a pair of <paramref name="searchCount"/>
+    /// searches. A pair with one search names its pages "search.txt", "search-2.txt", "search-3.txt"
+    /// and so on, exactly as it always has. A pair with several searches names every page
+    /// "search-S-page-P.txt" (S the 1-based search, P the page), so search 1 page 2 and search 2
+    /// page 1 can never collide however many pages each search runs to.</summary>
+    public static string SearchFileName(int searchIndex, int pageNumber, int searchCount) =>
+        PageFileName("search", "txt", searchIndex, pageNumber, searchCount);
 
-    /// <summary>The recorder file name for the detail links, with their card text, of the search page at
-    /// <paramref name="searchIndex"/>: "cards.json" beside "search.txt", then "cards-2.json" and so on.</summary>
-    public static string CardsFileName(int searchIndex) => searchIndex == 0 ? "cards.json" : $"cards-{searchIndex + 1}.json";
+    /// <summary>The recorder file name for the detail links, with their card text, of the same result
+    /// page: it follows <see cref="SearchFileName"/>, so "cards.json" sits beside "search.txt",
+    /// "cards-2.json" beside "search-2.txt", and "cards-S-page-P.json" beside "search-S-page-P.txt".</summary>
+    public static string CardsFileName(int searchIndex, int pageNumber, int searchCount) =>
+        PageFileName("cards", "json", searchIndex, pageNumber, searchCount);
+
+    private static string PageFileName(string stem, string extension, int searchIndex, int pageNumber, int searchCount) => searchCount > 1
+        ? $"{stem}-{searchIndex + 1}-page-{pageNumber}.{extension}"
+        : pageNumber == 1
+            ? $"{stem}.{extension}"
+            : $"{stem}-{pageNumber}.{extension}";
 
     /// <summary>Walks each of <paramref name="searchUrls"/> in turn. <paramref name="collectLinksAsync"/>
     /// opens one search page (given its URL and index) and returns the candidate detail links to

@@ -88,10 +88,25 @@ public partial class WalkPairSearchesTests
     }
 
     [Fact]
-    public void SearchFileName_FirstSearchKeepsTheOriginalName()
+    public void SearchFileName_OneSearchKeepsTheNamesItAlwaysHad()
     {
-        Assert.Equal("search.txt", WalkPairSearches.SearchFileName(0));
-        Assert.Equal("search-2.txt", WalkPairSearches.SearchFileName(1));
+        Assert.Equal("search.txt", WalkPairSearches.SearchFileName(0, 1, 1));
+        Assert.Equal("search-2.txt", WalkPairSearches.SearchFileName(0, 2, 1));
+        Assert.Equal("search-3.txt", WalkPairSearches.SearchFileName(0, 3, 1));
+    }
+
+    [Fact]
+    public void SearchFileName_TwoPagedSearchesNeverCollide()
+    {
+        string[] names =
+        [
+            .. Enumerable.Range(0, 2).SelectMany(search => Enumerable.Range(1, 3).Select(page => WalkPairSearches.SearchFileName(search, page, 2))),
+        ];
+
+        Assert.Equal("search-1-page-1.txt", names[0]);
+        Assert.Equal("search-1-page-2.txt", names[1]);
+        Assert.Equal("search-2-page-1.txt", names[3]);
+        Assert.Equal(names.Length, names.Distinct().Count());
     }
 
     [Fact]

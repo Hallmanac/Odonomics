@@ -220,11 +220,12 @@ public class SearchPageLinksTests
     }
 
     [Fact]
-    public void CardsFileName_IsCardsJsonForTheFirstSearchPageThenNumberedLikeSearchTxt()
+    public void CardsFileName_SitsBesideTheSearchFileOfTheSamePage()
     {
-        Assert.Equal("cards.json", WalkPairSearches.CardsFileName(0));
-        Assert.Equal("cards-2.json", WalkPairSearches.CardsFileName(1));
-        Assert.Equal("search.txt", WalkPairSearches.SearchFileName(0));
+        Assert.Equal("cards.json", WalkPairSearches.CardsFileName(0, 1, 1));
+        Assert.Equal("cards-2.json", WalkPairSearches.CardsFileName(0, 2, 1));
+        Assert.Equal("cards-2-page-3.json", WalkPairSearches.CardsFileName(1, 3, 2));
+        Assert.Equal("search-2-page-3.txt", WalkPairSearches.SearchFileName(1, 3, 2));
     }
 
     [Fact]
