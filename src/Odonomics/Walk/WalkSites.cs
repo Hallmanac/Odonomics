@@ -39,7 +39,12 @@ namespace Odonomics.Walk;
 /// fee. <paramref name="ExhaustedSearchPattern"/> is for a paged site whose later pages, once the
 /// search's real matches run out, are padded with similar vehicles (carvana's "No exact matches"):
 /// a page whose text matches it contributes no links and ends paging (see
-/// <see cref="WalkSearchPages"/>).</summary>
+/// <see cref="WalkSearchPages"/>). <paramref name="CardPriceReader"/> reads a result card's asking price
+/// off the card's own text, so a listing the ledger already knows can be kept current from the search
+/// page alone (see <see cref="ReadCardPrice"/>); null for a site whose card shape has not been confirmed
+/// from a recorded page, whose known listings are then seen again without a price. <paramref name="CardContainerSelector"/>
+/// is a CSS selector for the element that is one result card, for a site where the nearest ancestor holding
+/// a dollar amount (the default, see <see cref="SearchPageLinks"/>) is not the card.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -52,7 +57,9 @@ public sealed record WalkSite(
     Regex? PrivateSellerPagePattern = null,
     Regex? ResultCardLinkPattern = null,
     Func<string, decimal?>? ShippingFeeReader = null,
-    Regex? ExhaustedSearchPattern = null)
+    Regex? ExhaustedSearchPattern = null,
+    Func<string, decimal?>? CardPriceReader = null,
+    string? CardContainerSelector = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -71,7 +78,13 @@ public sealed record WalkSite(
     /// that pattern matches are drawn on, and the cap is spent on real results rather than an ad (if
     /// no link matches the pattern, the page is taken in page order as before). A page that states no
     /// count is taken as it comes.</summary>
-    public IReadOnlyList<string> CollectDetailLinks(IReadOnlyList<PageLink> links, int poolSize, string? searchPageText = null)
+    public IReadOnlyList<string> CollectDetailLinks(IReadOnlyList<PageLink> links, int poolSize, string? searchPageText = null) =>
+        [.. CollectDetailCards(links, poolSize, searchPageText).Select(l => l.Href)];
+
+    /// <summary>The same links <see cref="CollectDetailLinks"/> returns, each with its result card's
+    /// text: when a listing is linked more than once (a card's photo and its title), the first link is
+    /// kept, carrying the first card text any of its links has.</summary>
+    public IReadOnlyList<PageLink> CollectDetailCards(IReadOnlyList<PageLink> links, int poolSize, string? searchPageText = null)
     {
         int? statedCount = MatchCountIn(searchPageText);
         if (statedCount is int matchCount)
@@ -95,9 +108,9 @@ public sealed record WalkSite(
         return
         [
             .. detailLinks
-                .DistinctBy(l => WalkSites.CanonicalDetailUrl(l.Href))
-                .Where(l => !skipped.Contains(WalkSites.CanonicalDetailUrl(l.Href)))
-                .Select(l => l.Href)
+                .GroupBy(l => WalkSites.CanonicalDetailUrl(l.Href))
+                .Where(g => !skipped.Contains(g.Key))
+                .Select(g => g.First() with { CardText = g.Select(l => l.CardText).FirstOrDefault(t => t.Length > 0) ?? "" })
                 .Take(poolSize)
         ];
     }
@@ -123,6 +136,11 @@ public sealed record WalkSite(
     /// <summary>The shipping fee a detail page shows on top of its asking price, or null when this
     /// site prints none or the page carries none.</summary>
     public decimal? ReadShippingFee(string pageText) => ShippingFeeReader?.Invoke(pageText);
+
+    /// <summary>The asking price a result card shows, read off <paramref name="cardText"/> by this
+    /// site's <see cref="CardPriceReader"/>, or null when the site has none or the card shows no price
+    /// it can read.</summary>
+    public decimal? ReadCardPrice(string cardText) => CardPriceReader?.Invoke(cardText);
 
     /// <summary>The dealer name to store for a page whose extraction returned
     /// <paramref name="extractedDealerName"/>: that name (trimmed) when the page gave one, such as
@@ -159,9 +177,10 @@ public sealed record WalkSite(
         || DealerNormalizer.Normalize(extractedDealerName) == DealerNormalizer.Normalize(FallbackDealerName);
 }
 
-/// <summary>One anchor read off a search page: its resolved href and its visible text, which on a
-/// cars.com card link is the card's title ("Used 2024 Toyota Corolla LE").</summary>
-public readonly record struct PageLink(string Href, string Text);
+/// <summary>One anchor read off a search page: its resolved href, its visible text, which on a
+/// cars.com card link is the card's title ("Used 2024 Toyota Corolla LE"), and the text of the result
+/// card the anchor sits in (empty when the pull found none, see <see cref="SearchPageLinks"/>).</summary>
+public readonly record struct PageLink(string Href, string Text, string CardText = "");
 
 /// <summary>One loaded search page: its anchors, and its visible text for a site that states its
 /// match count there (see <see cref="WalkSite.MatchCountPattern"/>).</summary>
@@ -277,7 +296,10 @@ public static class WalkSites
         },
         new Regex("/vehicledetail/", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2,
-        SkippedCardTitlePattern: new Regex(@"^\s*New\s", RegexOptions.IgnoreCase));
+        SkippedCardTitlePattern: new Regex(@"^\s*New\s", RegexOptions.IgnoreCase),
+        // A cars.com card reads its asking price first, then a price-drop amount when it has one, then
+        // mileage, then the "Used <year> ..." title, so the first dollar amount is the price.
+        CardPriceReader: CardPrices.FirstDollarAmount);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
@@ -307,7 +329,10 @@ public static class WalkSites
         // (other models), so the count bounds the links and that phrase ends the paging.
         MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+cars?\b"),
         ShippingFeeReader: CarvanaShipping.Read,
-        ExhaustedSearchPattern: new Regex("No exact matches", RegexOptions.IgnoreCase));
+        ExhaustedSearchPattern: new Regex("No exact matches", RegexOptions.IgnoreCase),
+        // A carvana card names its asking price after "Current price:", and a marked-down one then
+        // prints "Original price: was $..." as well, so only the amount after "Current price:" counts.
+        CardPriceReader: CardPrices.CarvanaCurrentPrice);
 
     /// <summary>What a private seller's listing is stored as: one dealer row for every private seller,
     /// with no location, so no individual's name or city enters the ledger and
@@ -329,7 +354,11 @@ public static class WalkSites
     /// marks <c>clickType=listing</c>, not the sponsored top card (<c>clickType=alpha</c>), which ignores the
     /// search facets. A detail link is
     /// /cars-for-sale/vehicle/&lt;digits&gt;, sometimes followed by a query string and a fragment such as
-    /// #purchaseConfidence, both of which <see cref="CanonicalDetailUrl"/> strips.</summary>
+    /// #purchaseConfidence, both of which <see cref="CanonicalDetailUrl"/> strips. It has no
+    /// <see cref="WalkSite.CardPriceReader"/> yet: the recorded search page shows a card's price as bare
+    /// digits ("26,093", no dollar sign) and no recorded page carries a card's own markup, so its card
+    /// shape is not confirmed, and a known autotrader listing is seen again from its card without a
+    /// price until it is.</summary>
     public static readonly WalkSite Autotrader = new(
         "autotrader",
         query =>
