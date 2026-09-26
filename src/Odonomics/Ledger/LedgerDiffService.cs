@@ -82,17 +82,20 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
 
         // A brand-new posting row for a vehicle the ledger already knew about might be the same
         // listing back under a changed URL; the only way to tell is to find whatever stale posting
-        // (untouched this run) shared that vehicle's VIN and source before this run. Fetched once
-        // up front, for every such candidate at once, rather than one query per posting.
+        // (untouched this run) shared that vehicle's VIN and source before this run. Whether the
+        // VIN was already on that source at all is a wider question, since a posting from an
+        // earlier run that this run touched again is not stale but still means the source is not
+        // new to the car. Both are answered from the VIN's postings, fetched once up front, for
+        // every such candidate at once, rather than one query per posting.
         List<string> vinsNeedingStaleLookup = [.. touchedThisRun
             .Where(p => p.FirstSeen == currentRun.StartedAt && p.Vehicle!.FirstSeen != currentRun.StartedAt)
             .Select(p => p.VehicleVin)
             .Distinct()];
-        Dictionary<string, List<PostingEntity>> stalePostingsByVin = vinsNeedingStaleLookup.Count == 0
+        Dictionary<string, List<PostingEntity>> knownPostingsByVin = vinsNeedingStaleLookup.Count == 0
             ? []
             : (await db.Postings
                 .Include(p => p.PriceObservations)
-                .Where(p => vinsNeedingStaleLookup.Contains(p.VehicleVin) && p.LastSeen != currentRun.StartedAt)
+                .Where(p => vinsNeedingStaleLookup.Contains(p.VehicleVin) && p.FirstSeen != currentRun.StartedAt)
                 .ToListAsync(cancellationToken))
                 .GroupBy(p => p.VehicleVin)
                 .ToDictionary(g => g.Key, g => g.ToList());
@@ -119,11 +122,23 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
 
             if (posting.FirstSeen == currentRun.StartedAt)
             {
-                PostingEntity? stale = stalePostingsByVin.TryGetValue(vehicle.Vin, out List<PostingEntity>? candidates)
-                    ? candidates.Where(c => c.Source == posting.Source).OrderByDescending(c => c.LastSeen).FirstOrDefault()
-                    : null;
+                List<PostingEntity> knownOnSource = knownPostingsByVin.TryGetValue(vehicle.Vin, out List<PostingEntity>? candidates)
+                    ? [.. candidates.Where(c => c.Source == posting.Source)]
+                    : [];
+                PostingEntity? stale = knownOnSource
+                    .Where(c => c.LastSeen != currentRun.StartedAt)
+                    .OrderByDescending(c => c.LastSeen)
+                    .FirstOrDefault();
                 if (stale is null)
                 {
+                    if (knownOnSource.Count > 0)
+                    {
+                        // The car was already on this source through a posting an earlier run
+                        // created and this run touched again, so this row is a second listing on a
+                        // source the car was already known on: nothing new about where it is listed.
+                        continue;
+                    }
+
                     // First time this already-known VIN has ever been seen on this source: not a
                     // move (nothing on this source to have moved from), and not "New" either, since
                     // the vehicle itself was already on the ledger. It is collected per VIN so that a
