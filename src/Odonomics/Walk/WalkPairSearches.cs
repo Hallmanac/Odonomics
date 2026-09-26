@@ -6,7 +6,9 @@ namespace Odonomics.Walk;
 /// exactly like a single <see cref="WalkDetailWalk.RunAsync"/> over that page's links; for a model
 /// that needs more (cars.com's hybrid facet and base-model facet for a hybrid-only-from-year model)
 /// the per-pair cap is split across the searches and each search's own links are walked in turn,
-/// so the pair still never spends more than the cap in total.
+/// so the pair still never spends more than the cap in total. With no cap at all (the walk's default)
+/// there is nothing to split: every search's whole link pool is collected and every link not already
+/// known is visited.
 /// </summary>
 public static class WalkPairSearches
 {
@@ -15,6 +17,10 @@ public static class WalkPairSearches
     /// page goes to the first, which is the hybrid-facet search on cars.com).</summary>
     public static IReadOnlyList<int> SplitCap(int maxDetailPages, int searchCount) =>
         [.. Enumerable.Range(0, searchCount).Select(i => (maxDetailPages / searchCount) + (i < maxDetailPages % searchCount ? 1 : 0))];
+
+    /// <summary>The link pool size that means "no bound": <see cref="WalkSearchPages.CollectLinksAsync"/>
+    /// then follows a paged site until its own stop rules end it, and reads every link a page has.</summary>
+    public const int UnboundedPool = int.MaxValue;
 
     /// <summary>The recorder file name for the search page at <paramref name="searchIndex"/>:
     /// "search.txt" for the first, so a one-search pair writes exactly what it always did, then
@@ -28,7 +34,8 @@ public static class WalkPairSearches
     /// <summary>Walks each of <paramref name="searchUrls"/> in turn. <paramref name="collectLinksAsync"/>
     /// opens one search page (given its URL and index) and returns the candidate detail links to
     /// consider from it, at most the pool size it is handed: the search's cap share times the
-    /// site's over-fetch multiplier. <paramref name="visitLinkAsync"/> is given a running index
+    /// site's over-fetch multiplier, or <see cref="UnboundedPool"/> when <paramref name="maxDetailPages"/>
+    /// is null. <paramref name="visitLinkAsync"/> is given a running index
     /// across the whole pair rather than one per search, so the detail files a pair records never
     /// collide.
     ///
@@ -42,26 +49,41 @@ public static class WalkPairSearches
     ///
     /// <para><paramref name="gapBeforeNextLinkAsync"/> runs between links inside a search and also
     /// wherever the walk moves from one search's last visit to the next page it loads, so a pair's
-    /// pacing has no machine-speed step between searches.</para></summary>
+    /// pacing has no machine-speed step between searches.</para>
+    ///
+    /// <para>With a null <paramref name="maxDetailPages"/> the walk is uncapped: every search is
+    /// collected before the first visit (a gap between searches keeps their page loads paced), a link
+    /// two searches both carry is kept once, and the whole list is then visited in search order.
+    /// <paramref name="announceVisits"/>, when given, is told once, before the pair's first detail
+    /// visit, how many detail pages the pair is about to visit and whether the count is only what the
+    /// first search's own walk starts with (a capped pair with searches still to run, whose later
+    /// searches are not known yet). An uncapped pair's count is always the whole pair's.</para></summary>
     public static async Task<DetailWalkTally> RunAsync(
         WalkSite site,
         IReadOnlyList<string> searchUrls,
-        int maxDetailPages,
+        int? maxDetailPages,
         Func<string, int, int, CancellationToken, Task<IReadOnlyList<string>>> collectLinksAsync,
         Func<string, int, CancellationToken, Task<DetailPageOutcome>> visitLinkAsync,
         Func<CancellationToken, Task> gapBeforeNextLinkAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<int, bool>? announceVisits = null)
     {
+        if (maxDetailPages is not int cap)
+        {
+            return await RunUncappedAsync(searchUrls, collectLinksAsync, visitLinkAsync, gapBeforeNextLinkAsync, announceVisits, cancellationToken);
+        }
+
         var total = new DetailWalkTally(0, 0, new DroppedBreakdown(0, 0, 0, 0));
-        int remaining = maxDetailPages;
+        int remaining = cap;
+        bool announced = false;
         List<IReadOnlyList<string>> unvisitedLinks = [];
 
-        async Task<DetailWalkTally> WalkAsync(IReadOnlyList<string> links, int cap)
+        async Task<DetailWalkTally> WalkAsync(IReadOnlyList<string> links, int linkCap)
         {
             int visitedBefore = total.Visited;
             return await WalkDetailWalk.RunAsync(
                 links,
-                cap,
+                linkCap,
                 (link, i, ct) => visitLinkAsync(link, visitedBefore + i, ct),
                 gapBeforeNextLinkAsync,
                 cancellationToken);
@@ -80,10 +102,21 @@ public static class WalkPairSearches
                 search,
                 share * site.DetailLinkOverfetchMultiplier,
                 cancellationToken);
+            if (!announced && candidateLinks.Count > 0)
+            {
+                announced = true;
+                announceVisits?.Invoke(Math.Min(share, candidateLinks.Count), search < searchUrls.Count - 1);
+            }
+
             DetailWalkTally tally = await WalkAsync(candidateLinks, share);
             total = total.Plus(tally);
             remaining -= tally.SpentOnCap;
             unvisitedLinks.Add([.. candidateLinks.Skip(tally.Visited)]);
+        }
+
+        if (!announced)
+        {
+            announceVisits?.Invoke(0, false);
         }
 
         foreach (IReadOnlyList<string> links in unvisitedLinks)
@@ -105,5 +138,35 @@ public static class WalkPairSearches
         }
 
         return total;
+    }
+
+    private static async Task<DetailWalkTally> RunUncappedAsync(
+        IReadOnlyList<string> searchUrls,
+        Func<string, int, int, CancellationToken, Task<IReadOnlyList<string>>> collectLinksAsync,
+        Func<string, int, CancellationToken, Task<DetailPageOutcome>> visitLinkAsync,
+        Func<CancellationToken, Task> gapBeforeNextLinkAsync,
+        Action<int, bool>? announceVisits,
+        CancellationToken cancellationToken)
+    {
+        List<string> links = [];
+        HashSet<string> canonicalUrls = [];
+        for (int search = 0; search < searchUrls.Count; search++)
+        {
+            if (search > 0)
+            {
+                await gapBeforeNextLinkAsync(cancellationToken);
+            }
+
+            foreach (string link in await collectLinksAsync(searchUrls[search], search, UnboundedPool, cancellationToken))
+            {
+                if (canonicalUrls.Add(WalkSites.CanonicalDetailUrl(link)))
+                {
+                    links.Add(link);
+                }
+            }
+        }
+
+        announceVisits?.Invoke(links.Count, false);
+        return await WalkDetailWalk.RunAsync(links, UnboundedPool, visitLinkAsync, gapBeforeNextLinkAsync, cancellationToken);
     }
 }

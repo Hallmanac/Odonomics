@@ -32,7 +32,7 @@ walkCommand.SetAction(async (parseResult, cancellationToken) =>
     string? site = parseResult.GetValue(walkSiteArgument);
     string scenarioPath = parseResult.GetValue(scenarioOption)!;
     string? model = parseResult.GetValue(walkModelOption);
-    int max = parseResult.GetValue(walkMaxOption);
+    int? max = parseResult.GetValue(walkMaxOption);
     bool revisit = parseResult.GetValue(walkRevisitOption);
     return await WalkCommand.RunAsync(scenarioPath, site, model, max, revisit, cancellationToken);
 });

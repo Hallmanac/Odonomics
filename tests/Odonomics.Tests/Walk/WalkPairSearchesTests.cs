@@ -37,6 +37,7 @@ public partial class WalkPairSearchesTests
         public List<(string Link, int Index)> Visits { get; } = [];
         public int Gaps { get; private set; }
         public List<string> Events { get; } = [];
+        public List<(int Pages, bool StartingWith)> Announcements { get; } = [];
 
         /// <summary>How many candidate links a search page offers, by facet prefix; a search not
         /// listed offers as many as it is asked for.</summary>
@@ -59,6 +60,12 @@ public partial class WalkPairSearchesTests
             Visits.Add((link, index));
             Events.Add("visit");
             return Task.FromResult(DetailPageOutcome.Upserted);
+        }
+
+        public void Announce(int pages, bool startingWith)
+        {
+            Announcements.Add((pages, startingWith));
+            Events.Add($"announce {pages}");
         }
 
         public Task GapAsync(CancellationToken _)
@@ -242,5 +249,136 @@ public partial class WalkPairSearchesTests
         Assert.Equal(expected, tally);
         Assert.Equal(bare.Visits, run.Visits);
         Assert.Equal(bare.Gaps, run.Gaps);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithNoCap_ReadsTheWholePoolAndVisitsEveryLinkOfTheRecordedPage()
+    {
+        var run = new Run();
+        int cards = WalkSites.CarsCom.CollectDetailLinks(RecordedSearchAnchors("base"), int.MaxValue).Count;
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: null,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None);
+
+        Assert.Equal([WalkPairSearches.UnboundedPool], run.PoolSizes);
+        Assert.Equal(19, cards);
+        Assert.Equal(cards, tally.Visited);
+        Assert.Equal(cards, tally.Upserted);
+        Assert.Equal(cards, run.Visits.Select(v => v.Link).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task RunAsync_WithACap_StillStopsAtItAndSizesThePoolFromIt()
+    {
+        var run = new Run();
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: 5,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None);
+
+        Assert.Equal([5 * WalkSites.CarsCom.DetailLinkOverfetchMultiplier], run.PoolSizes);
+        Assert.Equal(5, tally.Visited);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithNoCapAndTwoSearches_CollectsBothBeforeVisitingAndVisitsEveryLinkOnce()
+    {
+        var run = new Run
+        {
+            LinksOffered = { ["hyb"] = 12, ["base"] = 9 },
+        };
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/hybrid", "https://x/base"], maxDetailPages: null,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None, run.Announce);
+
+        Assert.Equal([WalkPairSearches.UnboundedPool, WalkPairSearches.UnboundedPool], run.PoolSizes);
+        Assert.Equal(21, tally.Visited);
+        Assert.Equal(12, run.Visits.Count(v => v.Link.Contains("/hyb-", StringComparison.Ordinal)));
+        Assert.Equal(9, run.Visits.Count(v => v.Link.Contains("/base-", StringComparison.Ordinal)));
+        Assert.Equal([(21, false)], run.Announcements);
+        Assert.Equal(["open", "gap", "open", "announce 21"], run.Events.Take(4));
+        Assert.Equal(Enumerable.Range(0, 21), run.Visits.Select(v => v.Index));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithNoCap_VisitsALinkTwoSearchesBothCarryOnce()
+    {
+        var run = new Run();
+        var carried = new List<string> { "https://www.cars.com/vehicledetail/shared/?sid=a" };
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/hybrid", "https://x/base"], maxDetailPages: null,
+            (_, _, _, _) => Task.FromResult<IReadOnlyList<string>>(carried),
+            run.VisitAsync, run.GapAsync, CancellationToken.None, run.Announce);
+
+        Assert.Equal(1, tally.Visited);
+        Assert.Equal([(1, false)], run.Announcements);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithNoCap_AnnouncesOnceBeforeTheFirstVisitWithThePairsWholeCount()
+    {
+        var run = new Run();
+
+        await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: null,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None, run.Announce);
+
+        int total = run.Visits.Count;
+        Assert.Equal(total, run.Announcements.Single().Pages);
+        Assert.Equal($"announce {total}", run.Events.First(e => e.StartsWith("announce", StringComparison.Ordinal)));
+        Assert.True(run.Events.IndexOf($"announce {total}") < run.Events.IndexOf("visit"));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithACap_AnnouncesTheCappedCountBeforeTheFirstVisit()
+    {
+        var run = new Run();
+
+        await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: 7,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None, run.Announce);
+
+        Assert.Equal([(7, false)], run.Announcements);
+        Assert.True(run.Events.IndexOf("announce 7") < run.Events.IndexOf("visit"));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithACapAndMoreSearchesToRun_SaysTheCountIsOnlyWhatTheFirstSearchStartsWith()
+    {
+        var run = new Run();
+
+        await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/hybrid", "https://x/base"], maxDetailPages: 10,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None, run.Announce);
+
+        Assert.Equal([(5, true)], run.Announcements);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithACapAndAnEmptyFirstSearch_AnnouncesFromTheFirstSearchThatHasLinks()
+    {
+        var run = new Run { LinksOffered = { ["hyb"] = 0 } };
+
+        await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/hybrid", "https://x/base"], maxDetailPages: 10,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None, run.Announce);
+
+        Assert.Equal([(10, false)], run.Announcements);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithNothingToVisit_AnnouncesZero()
+    {
+        var run = new Run { LinksOffered = { ["base"] = 0 } };
+
+        await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: 10,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None, run.Announce);
+
+        Assert.Equal([(0, false)], run.Announcements);
+        Assert.Empty(run.Visits);
     }
 }

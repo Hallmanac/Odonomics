@@ -13,7 +13,6 @@ public sealed class WalkPacing(Random random)
     public TimeSpan DetailGapMax { get; init; } = TimeSpan.FromSeconds(45);
     public TimeSpan PairGapMin { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan PairGapMax { get; init; } = TimeSpan.FromSeconds(45);
-    public const int DefaultMaxDetailPages = 30;
 
     public TimeSpan RandomScrollPause() => RandomBetween(ScrollPauseMin, ScrollPauseMax);
 
