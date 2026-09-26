@@ -225,7 +225,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         List<RunEntity> priorRuns = [.. allRuns.Where(r => r.Id != currentRun.Id && r.StartedAt < currentRun.StartedAt)];
 
         var gone = new List<GonePostingEntry>();
-        var goneVins = new HashSet<string>();
+        var goneIndexByVin = new Dictionary<string, int>();
         foreach (string token in tokens)
         {
             // A posting this run did not touch is a gone candidate when the last run to cover its pair
@@ -249,14 +249,33 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             foreach (PostingEntity posting in stillMarkedFromPreviousCoverage)
             {
                 VehicleEntity vehicle = posting.Vehicle ?? throw new InvalidOperationException($"posting {posting.Id} has no vehicle");
-                if (vinsSightedThisRun.Contains(vehicle.Vin) || !goneVins.Add(vehicle.Vin))
+                if (vinsSightedThisRun.Contains(vehicle.Vin))
+                {
+                    continue;
+                }
+
+                // One entry per VIN, but a sale the site itself confirmed this run outranks whichever
+                // posting of the VIN the diff happened to reach first: a car cross-listed elsewhere would
+                // otherwise be reported under a weaker reason just because its other source's token sorts first.
+                bool soldThisRun = posting.SoldSeenAt == currentRun.StartedAt;
+                bool alreadyGone = goneIndexByVin.TryGetValue(vehicle.Vin, out int goneIndex);
+                if (alreadyGone && (!soldThisRun || gone[goneIndex].Reason == GoneReasons.Sold))
                 {
                     continue;
                 }
 
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
                 RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == posting.LastSeen);
-                gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(posting, vehicle, lastSeenRun, currentRun, scenario, cappedTokens.Contains(token), unreadTokens.Contains(token))));
+                var entry = new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(posting, vehicle, lastSeenRun, currentRun, scenario, cappedTokens.Contains(token), unreadTokens.Contains(token)));
+                if (alreadyGone)
+                {
+                    gone[goneIndex] = entry;
+                }
+                else
+                {
+                    goneIndexByVin[vehicle.Vin] = gone.Count;
+                    gone.Add(entry);
+                }
             }
         }
 
