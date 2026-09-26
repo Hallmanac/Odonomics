@@ -517,6 +517,24 @@ public class KnownCardTouchesTests
     }
 
     [Fact]
+    public async Task ARepeatWalk_ACardWhoseFeeStatementIsUnknownLeavesTheStoredPostureAlone()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        PostingEntity seeded = await db.Postings.SingleAsync();
+        seeded.FeePosture = FeePostures.AllIn;
+        await db.SaveChangesAsync(CancellationToken.None);
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        await touches.TryTouchAsync(CardUrl(1), 18000m, NoBadges, CancellationToken.None);
+        touches.RememberCardFeeStatement(CardUrl(1), new FeeStatement(FeePostures.Unknown, null));
+        await touches.CommitAsync(CancellationToken.None);
+
+        Assert.Equal(FeePostures.AllIn, (await db.Postings.AsNoTracking().SingleAsync()).FeePosture);
+    }
+
+    [Fact]
     public async Task ARepeatWalk_ANewLinksCardFeeStatementIsNotWrittenToTheLedger()
     {
         using var testDb = new LedgerTestDatabase();

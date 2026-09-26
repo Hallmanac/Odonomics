@@ -97,10 +97,11 @@ public sealed class KnownCardTouches
     /// <summary>Remembers what the card of a link that <see cref="TryTouchAsync"/> reported as known said about the fees
     /// behind its price, for <see cref="CommitAsync"/> to store as the posting's fee posture, replacing the last sighting's
     /// since a dealer can add or drop a fee. A null <paramref name="statement"/> (the site's cards say nothing about
-    /// fees) remembers nothing. The first statement seen for a link this run is the one kept.</summary>
+    /// fees) remembers nothing, and neither does an unknown one (this card says nothing), so a card that omits its fee
+    /// line never erases a stored posture. The first statement seen for a link this run is the one kept.</summary>
     public void RememberCardFeeStatement(string canonicalUrl, FeeStatement? statement)
     {
-        if (statement is not null && _knownUrls.Contains(canonicalUrl))
+        if (statement is { Posture: not FeePostures.Unknown } && _knownUrls.Contains(canonicalUrl))
         {
             _pendingPosturesByUrl.TryAdd(canonicalUrl, (statement.Posture, statement.ItemizedTotal));
         }

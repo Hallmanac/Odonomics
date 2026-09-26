@@ -32,13 +32,15 @@ public static class CardPrices
     /// so a card with no "Current price:" reads as no price.</summary>
     public static decimal? CarvanaCurrentPrice(string cardText) => Read(CarvanaCurrentPriceLine.Match(cardText));
 
-    /// <summary>The first line of a CarGurus card that is a dollar amount and nothing else. The card goes on to print
-    /// "Price includes fees" and a monthly estimate; a price-drop amount comes before the price and starts with a minus
-    /// sign, so neither is read. The price is the delivered one, with any shipping the card names already in it.</summary>
-    public static decimal? CarGurusPrice(string cardText) => Read(CarGurusPriceLine.Match(cardText));
+    /// <summary>The last line of a CarGurus card that is a dollar amount and nothing else. A price-drop card prints the old
+    /// price and then the current one as two such lines, after a "-$N" drop amount that is not read; the card goes on to
+    /// print "Price includes fees" and a monthly estimate, which are not dollar-only lines either. The price is the
+    /// delivered one, with any shipping the card names already in it.</summary>
+    public static decimal? CarGurusPrice(string cardText) =>
+        Read(CarGurusPriceLine.Matches(cardText).LastOrDefault());
 
-    private static decimal? Read(Match match) =>
-        match.Success
+    private static decimal? Read(Match? match) =>
+        match is { Success: true }
             ? decimal.Parse(match.Groups["amount"].Value, AmountStyles, CultureInfo.InvariantCulture)
             : null;
 }
