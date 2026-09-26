@@ -222,7 +222,7 @@ public class MarketcheckSourceTests
         int yearMax = DateTime.UtcNow.Year + 1;
         string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
                      $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}&car_type=used";
         string body = $$"""
             { "listings": [ { "vin": "19XZE4F52ME000999", "vdp_url": "https://marketcheck.com/listing/1", "price": {{price}}, "miles": 69599, "build": { "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX" } } ] }
             """;
@@ -242,7 +242,7 @@ public class MarketcheckSourceTests
         int yearMax = DateTime.UtcNow.Year + 1;
         string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
                      $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}&car_type=used";
         const string body = """
             { "listings": [ { "vin": "19XZE4F52ME000999", "vdp_url": "https://marketcheck.com/listing/1", "miles": 69599, "build": { "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX" } } ] }
             """;

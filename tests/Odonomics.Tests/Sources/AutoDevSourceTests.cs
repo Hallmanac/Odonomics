@@ -263,7 +263,7 @@ public class AutoDevSourceTests
         // 2026-09-26); a zero is not an asking price, and letting it through ranked the car first.
         ListingQuery query = new("Toyota", "Corolla Hybrid", YearMin: 2018, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
         {
             [url] = await File.ReadAllTextAsync(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "sources", "auto.dev", "corolla-hybrid-zero-price.json")),
@@ -287,7 +287,7 @@ public class AutoDevSourceTests
     {
         ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         string body = $$"""
             { "records": [ { "vin": "19XZE4F52ME000999", "vdpUrl": "https://auto.dev/listing/1", "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX", "priceUnformatted": {{price}}, "mileageUnformatted": 69599 } ] }
             """;
@@ -304,7 +304,7 @@ public class AutoDevSourceTests
     {
         ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         string body = $$"""
             { "records": [ { "vin": "19XZE4F52ME000999", "vdpUrl": "https://auto.dev/listing/1", "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX", "priceUnformatted": {{PlaceholderPrice.Floor}}, "mileageUnformatted": 69599 } ] }
             """;
@@ -321,7 +321,7 @@ public class AutoDevSourceTests
     {
         ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
         const string body = """
             { "records": [ { "vin": "19XZE4F52ME000999", "vdpUrl": "https://auto.dev/listing/1", "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX", "mileageUnformatted": 69599 } ] }
             """;
