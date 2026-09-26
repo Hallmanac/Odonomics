@@ -58,6 +58,13 @@ public sealed class PostingEntity
     /// <summary>Where the car would be picked up, for <see cref="PickupFee"/>; null when unknown.</summary>
     public string? PickupLocation { get; set; }
 
+    /// <summary>The StartedAt of the run whose detail visit found this posting's page saying the car
+    /// has sold (see <see cref="LedgerUpsertService.MarkSoldAsync"/>), or null when no run has. A
+    /// sold page never touches <see cref="LastSeen"/>, so the diff finds the posting gone, and a
+    /// value equal to the current run's StartedAt is what tells it the car sold rather than merely
+    /// dropped off the search.</summary>
+    public DateTimeOffset? SoldSeenAt { get; set; }
+
     public VehicleEntity? Vehicle { get; set; }
     public DealerEntity? Dealer { get; set; }
     public List<PriceObservationEntity> PriceObservations { get; set; } = [];
