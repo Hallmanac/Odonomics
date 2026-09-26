@@ -15,7 +15,8 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
 
     public bool MatchesMileage(int? mileage) => mileage is null || mileage <= MaxMileage;
 
-    private bool IsHybridVariant => Model.Contains("Hybrid", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Whether this query asks for a hybrid variant of its base model ("Corolla Hybrid").</summary>
+    public bool IsHybridVariant => Model.Contains("Hybrid", StringComparison.OrdinalIgnoreCase);
 
     private string BaseModelName => IsHybridVariant
         ? Model[..Model.IndexOf(" Hybrid", StringComparison.OrdinalIgnoreCase)]
@@ -64,11 +65,54 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
     /// base model plus trim (model "Corolla", trim "LE") when the page's own title line still reads
     /// "&lt;year&gt; &lt;make&gt; &lt;base model&gt; Hybrid": the extraction model sometimes drops the
     /// variant word even though the title prints it, and the page is a real Corolla Hybrid all the
-    /// same. Only the title line counts, so a gas page that merely mentions a hybrid elsewhere (a
+    /// same. A page also counts when its own spec block carries a fuel spec line that says hybrid
+    /// ("Hybrid: Gas/Electric" on Autotrader), which is how a page titled "Certified 2026 Toyota
+    /// Corolla SE FWD" says it is a Corolla Hybrid. Only the title line and a spec line above any
+    /// similar-vehicles heading count, so a gas page that merely mentions a hybrid elsewhere (a
     /// similar-vehicles card, a review question) is still rejected. The API sources never call
     /// this; they have no page text.</summary>
     public bool MatchesWalkedPage(string? make, string? model, string? trim, int? year, string pageText) =>
-        MatchesExtractedVehicle(make, model, trim, year) || TitleNamesHybrid(make, model, trim, year, pageText);
+        MatchesExtractedVehicle(make, model, trim, year)
+        || TitleNamesHybrid(make, model, trim, year, pageText)
+        || SpecLineNamesHybrid(make, model, trim, pageText);
+
+    private bool SpecLineNamesHybrid(string? make, string? model, string? trim, string pageText)
+    {
+        if (!IsHybridVariant || !MatchesMakeAndBaseModel(make, model, trim))
+        {
+            return false;
+        }
+
+        foreach (string line in pageText.Split('\n', StringSplitOptions.TrimEntries))
+        {
+            if (RelatedVehiclesHeading.IsMatch(line))
+            {
+                return false;
+            }
+
+            if (HybridSpecLine.IsMatch(line))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>A fuel spec line that says the car is a hybrid, at the start of a line:
+    /// "Hybrid: Gas/Electric" (Autotrader), "Fuel Type: Hybrid", "Fuel: Hybrid", or
+    /// "Engine: ... Hybrid". "Plug-in Hybrid" or "Mild Hybrid" values do not match, since the
+    /// word after the colon has to be Hybrid itself.</summary>
+    private static readonly Regex HybridSpecLine = new(
+        @"^(?:Hybrid:\s*Gas/Electric|Fuel(?:\s+Type)?:\s*Hybrid|Engine:.*\bHybrid)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>The heading that opens a page's similar-vehicles or recommended-cars block, at the
+    /// start of a line so the "View similar vehicles" button near the top of an Autotrader page
+    /// does not count. Everything from here down is padding from other listings.</summary>
+    private static readonly Regex RelatedVehiclesHeading = new(
+        @"^(?:Check out\s+)?(?:Similar|Recommended)\s+(?:Vehicles|Cars|Styles)\b|^You may also like\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private bool TitleNamesHybrid(string? make, string? model, string? trim, int? year, string pageText)
     {
