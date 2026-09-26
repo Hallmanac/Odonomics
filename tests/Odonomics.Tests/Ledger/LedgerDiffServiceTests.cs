@@ -480,13 +480,14 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
-    public async Task ComputeAsync_KnownVinFirstSeenOnANewSource_IsReportedNewNotDropped()
+    public async Task ComputeAsync_KnownVinFirstSeenOnANewSource_IsReportedAlsoListedNotNew()
     {
         // A VIN already known through one source (auto.dev) turning up for the first time on a
         // different source (cars.com) is not "moved" (nothing on cars.com to have moved from), but
         // it is a genuinely new sighting: the operator's routine is search (auto.dev/marketcheck)
         // then walk (cars.com/carvana), so this is the walk's most common real result and has to
-        // show up somewhere. It's reported under "New" even though the vehicle row itself isn't.
+        // show up somewhere. It's reported under "Also listed", not "New", since the vehicle row
+        // itself isn't new.
         using var testDb = new LedgerTestDatabase();
         using OdonomicsDbContext db = testDb.CreateContext();
         var upsert = new LedgerUpsertService(db);
@@ -505,22 +506,26 @@ public class LedgerDiffServiceTests
 
         SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
-        NewPostingEntry entry = Assert.Single(diff.New);
+        Assert.Empty(diff.New);
+        AlsoListedEntry entry = Assert.Single(diff.AlsoListed);
         Assert.Equal("1HGCM82633A004352", entry.Vin);
-        Assert.Equal("cars.com", entry.Source);
-        Assert.Equal("https://cars.com/a", entry.Url);
+        Assert.Equal(["cars.com"], entry.Sources);
+        Assert.Equal(2020, entry.Year);
+        Assert.Equal("Toyota", entry.Make);
+        Assert.Equal("Prius", entry.Model);
+        Assert.Equal(18000m, entry.Price);
         Assert.Empty(diff.Moved);
         Assert.Empty(diff.Gone);
         Assert.Empty(diff.PriceDrops);
     }
 
     [Fact]
-    public async Task ComputeAsync_KnownVinFirstSeenOnTwoNewSourcesInTheSameRun_BothAreReportedNew()
+    public async Task ComputeAsync_KnownVinFirstSeenOnTwoNewSourcesInTheSameRun_IsOneAlsoListedRowNamingBoth()
     {
         // A bare `odo walk` covers cars.com and carvana together in one RunEntity. If a VIN the
         // ledger already knows (from an earlier search) is dealer-cross-listed and this walk is the
         // first to spot it on either site, both sightings are genuinely new information about where
-        // the car is listed and both must be reported, not just whichever posting sorts first.
+        // the car is listed, so the one row for that VIN names both sources.
         using var testDb = new LedgerTestDatabase();
         using OdonomicsDbContext db = testDb.CreateContext();
         var upsert = new LedgerUpsertService(db);
@@ -540,9 +545,9 @@ public class LedgerDiffServiceTests
 
         SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
 
-        Assert.Equal(2, diff.New.Count);
-        Assert.Contains(diff.New, e => e.Source == "cars.com" && e.Url == "https://cars.com/a");
-        Assert.Contains(diff.New, e => e.Source == "carvana.com" && e.Url == "https://carvana.com/a");
+        Assert.Empty(diff.New);
+        AlsoListedEntry entry = Assert.Single(diff.AlsoListed);
+        Assert.Equal(["cars.com", "carvana.com"], entry.Sources);
         Assert.Empty(diff.Moved);
         Assert.Empty(diff.Gone);
         Assert.Empty(diff.PriceDrops);
@@ -566,6 +571,60 @@ public class LedgerDiffServiceTests
 
         NewPostingEntry added = Assert.Single(diff.New);
         Assert.Equal("1HGCM82633A004352", added.Vin);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_NewVinReturnedByTwoSourcesInOneRun_IsOneNewRowNamingTheFirstSourceSeen()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "auto.dev:Prius,marketcheck:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://autodev.com/a", "auto.dev"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18500m, "https://marketcheck.com/a", "marketcheck"), run1, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run1, DaughterScenario, CancellationToken.None);
+
+        NewPostingEntry added = Assert.Single(diff.New);
+        Assert.Equal("auto.dev", added.Source);
+        Assert.Equal(18000m, added.Price);
+        Assert.Empty(diff.AlsoListed);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_KnownVinGainingTwoSourcesInOneRun_IsOneAlsoListedRowAndNoNewRow()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "cars.com:Prius,auto.dev:Prius,marketcheck:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://cars.com/a", "cars.com"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17900m, "https://autodev.com/a", "auto.dev"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 17900m, "https://marketcheck.com/a", "marketcheck"), run2, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        Assert.Empty(diff.New);
+        AlsoListedEntry entry = Assert.Single(diff.AlsoListed);
+        Assert.Equal("1HGCM82633A004352", entry.Vin);
+        Assert.Equal(["auto.dev", "marketcheck"], entry.Sources);
+        Assert.Equal(17900m, entry.Price);
+        Assert.Empty(diff.Moved);
+        Assert.Empty(diff.PriceDrops);
+        Assert.Empty(diff.Gone);
     }
 
     [Fact]
