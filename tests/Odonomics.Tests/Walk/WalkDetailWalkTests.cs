@@ -109,10 +109,12 @@ public class WalkDetailWalkTests
     [Fact]
     public async Task RunAsync_EveryOutcomeKind_TalliesEachIntoItsOwnDroppedReason()
     {
-        List<string> links = Links(8);
+        List<string> links = Links(10);
         DetailPageOutcome[] outcomes =
         [
             DetailPageOutcome.NewCar,
+            DetailPageOutcome.Sold,
+            DetailPageOutcome.NoPriceListed,
             DetailPageOutcome.MissingFields,
             DetailPageOutcome.NoVin,
             DetailPageOutcome.NotMatching,
@@ -124,21 +126,48 @@ public class WalkDetailWalkTests
 
         DetailWalkTally tally = await WalkDetailWalk.RunAsync(
             links,
-            maxDetailPages: 8,
+            maxDetailPages: 10,
             (_, i, _) => Task.FromResult(outcomes[i]),
             _ => Task.CompletedTask,
             CancellationToken.None);
 
-        Assert.Equal(8, tally.Visited);
+        Assert.Equal(10, tally.Visited);
         Assert.Equal(1, tally.Upserted);
         Assert.Equal(1, tally.Dropped.NewCar);
+        Assert.Equal(1, tally.Dropped.Sold);
+        Assert.Equal(1, tally.Dropped.NoPriceListed);
         Assert.Equal(1, tally.Dropped.MissingFields);
         Assert.Equal(1, tally.Dropped.NoVin);
         Assert.Equal(1, tally.Dropped.NotMatching);
         Assert.Equal(1, tally.Dropped.Failed);
         Assert.Equal(1, tally.Dropped.ExtractionFailed);
         Assert.Equal(1, tally.Dropped.Repeat);
-        Assert.Equal(7, tally.Dropped.Total);
+        Assert.Equal(9, tally.Dropped.Total);
+        Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
+    }
+
+    [Fact]
+    public async Task RunAsync_SoldAndNoPricePages_NeverSpendTheCap()
+    {
+        List<string> links = Links(9);
+
+        DetailWalkTally tally = await WalkDetailWalk.RunAsync(
+            links,
+            maxDetailPages: 3,
+            (_, i, _) => Task.FromResult(i switch
+            {
+                < 3 => DetailPageOutcome.Sold,
+                < 6 => DetailPageOutcome.NoPriceListed,
+                _ => DetailPageOutcome.Upserted,
+            }),
+            _ => Task.CompletedTask,
+            CancellationToken.None);
+
+        Assert.Equal(9, tally.Visited);
+        Assert.Equal(3, tally.Upserted);
+        Assert.Equal(3, tally.Dropped.Sold);
+        Assert.Equal(3, tally.Dropped.NoPriceListed);
+        Assert.Equal(3, tally.SpentOnCap);
         Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
     }
 

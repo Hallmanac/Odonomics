@@ -52,7 +52,13 @@ namespace Odonomics.Walk;
 /// delivery (carvana); null for a site that does not, whose postings store no pickup facts.
 /// <paramref name="LazyDetailBlockMarker"/> is a line of text a detail page prints only once the block the walk
 /// needs has rendered, for a site that renders it lazily, after a scroll (carvana's "Pickup and Delivery"): the
-/// walk keeps scrolling the page until the text carries it (see <see cref="DetailPageScroll"/>).</summary>
+/// walk keeps scrolling the page until the text carries it (see <see cref="DetailPageScroll"/>).
+/// <paramref name="SoldPagePattern"/> and <paramref name="NoPricePagePattern"/> are for a site whose detail page
+/// says in its own text that the car has sold (autotrader's "has already found a new home") or lists no price
+/// (autotrader's "Contact Dealer For Price"); a page either one matches is dropped before extraction as
+/// <see cref="DetailPageOutcome.Sold"/> or <see cref="DetailPageOutcome.NoPriceListed"/> (see
+/// <see cref="ReadsAsSold"/>). Null for a site whose wording has not been confirmed from a recorded page, whose
+/// such pages are then dropped for whatever the extraction makes of them.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -70,7 +76,9 @@ public sealed record WalkSite(
     string? CardContainerSelector = null,
     Func<string, IReadOnlyDictionary<string, string>>? CardBadgeReader = null,
     Func<string, PickupOption?>? PickupReader = null,
-    string? LazyDetailBlockMarker = null)
+    string? LazyDetailBlockMarker = null,
+    Regex? SoldPagePattern = null,
+    Regex? NoPricePagePattern = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -143,6 +151,15 @@ public sealed record WalkSite(
     /// matches (see <see cref="ExhaustedSearchPattern"/>), so whatever cards follow are padding.</summary>
     public bool SearchRanOutOfMatches(string? searchPageText) =>
         ExhaustedSearchPattern is not null && searchPageText is not null && ExhaustedSearchPattern.IsMatch(searchPageText);
+
+    /// <summary>Whether <paramref name="pageText"/> says the car has sold (see <see cref="SoldPagePattern"/>).
+    /// Checked ahead of <see cref="ReadsAsNoPrice"/>, since a sold page carries other cars' cards and
+    /// their prices or prompts.</summary>
+    public bool ReadsAsSold(string pageText) => SoldPagePattern is not null && SoldPagePattern.IsMatch(pageText);
+
+    /// <summary>Whether <paramref name="pageText"/> lists no price, only a prompt to contact the dealer
+    /// (see <see cref="NoPricePagePattern"/>).</summary>
+    public bool ReadsAsNoPrice(string pageText) => NoPricePagePattern is not null && NoPricePagePattern.IsMatch(pageText);
 
     /// <summary>The shipping fee a detail page shows on top of its asking price, or null when this
     /// site prints none or the page carries none.</summary>
@@ -408,6 +425,13 @@ public static class WalkSites
         MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+Match(?:es)?\b"),
         PrivateSellerPagePattern: new Regex(@"\(Private Seller\)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline),
         ResultCardLinkPattern: new Regex(@"[?&]clickType=listing(?:&|$)"),
+        // A sold car's page swaps its own listing for "It looks like this Toyota Corolla has already
+        // found a new home." above a set of similar cars, and a page with no asking price prints
+        // "Contact Dealer For Price" as a line of its own where the price would be (recorded in walk
+        // run 20260926-121057, corolla-hybrid/detail-21 and prius/detail-15). The price prompt has to be
+        // a whole line, so a longer sentence that merely contains it never reads as a page with none.
+        SoldPagePattern: new Regex(@"has already found a new home", RegexOptions.IgnoreCase),
+        NoPricePagePattern: new Regex(@"^\s*Contact Dealer For Price\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline),
         CardBadgeReader: CardBadges.Autotrader);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch

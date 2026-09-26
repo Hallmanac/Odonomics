@@ -42,8 +42,22 @@ public enum DetailPageOutcome
     /// before extraction, so no extraction call is spent on it either.</summary>
     NewCar,
 
+    /// <summary>The page says the car has sold (see <see cref="WalkSite.SoldPagePattern"/>). Like
+    /// <see cref="NewCar"/>, this never spends the per-pair cap and is decided on the page text
+    /// before extraction: the search page still linking a car that has gone, not the model's real
+    /// inventory, produced the visit. A sold page carries other cars' cards, so extraction would
+    /// read one of those and drop the page as <see cref="NoVin"/> or, worse, save the wrong car.</summary>
+    Sold,
+
+    /// <summary>The page lists no price at all, only a prompt to contact the dealer (see
+    /// <see cref="WalkSite.NoPricePagePattern"/>). Like <see cref="Sold"/>, this never spends the
+    /// per-pair cap and is decided on the page text before extraction. The car is still for sale, so
+    /// the ledger is left alone: a page with no price never creates or updates a price observation.</summary>
+    NoPriceListed,
+
     /// <summary>The page matched and had a VIN but was missing year, price, or mileage. Only a used
-    /// car's page lands here; a new-car page is <see cref="NewCar"/>.</summary>
+    /// car's page lands here; a new-car page is <see cref="NewCar"/>, a sold page is
+    /// <see cref="Sold"/>, and a page that shows no price at all is <see cref="NoPriceListed"/>.</summary>
     MissingFields,
 
     /// <summary>The page matched, had a VIN, and had every required field; it was upserted.</summary>
@@ -63,16 +77,19 @@ public static class WalkOutcomeWording
         DetailPageOutcome.ExtractionFailed => "extraction failed",
         DetailPageOutcome.Repeat => "repeat",
         DetailPageOutcome.NewCar => "new-car listing",
+        DetailPageOutcome.Sold => "listing sold",
+        DetailPageOutcome.NoPriceListed => "no price listed",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
 }
 
 /// <summary>How many candidate detail pages were dropped for each reason. Total, plus whatever
-/// was saved, always equals the number of pages visited: NotMatching, Repeat and NewCar are all
-/// included here even though none spends the per-pair cap, since the page was still visited.</summary>
-public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatching, int Failed, int ExtractionFailed = 0, int Repeat = 0, int NewCar = 0)
+/// was saved, always equals the number of pages visited: NotMatching, Repeat, NewCar, Sold and
+/// NoPriceListed are all included here even though none spends the per-pair cap, since the page was
+/// still visited.</summary>
+public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatching, int Failed, int ExtractionFailed = 0, int Repeat = 0, int NewCar = 0, int Sold = 0, int NoPriceListed = 0)
 {
-    public int Total => MissingFields + NoVin + NotMatching + Failed + ExtractionFailed + Repeat + NewCar;
+    public int Total => MissingFields + NoVin + NotMatching + Failed + ExtractionFailed + Repeat + NewCar + Sold + NoPriceListed;
 
     public DroppedBreakdown Plus(DroppedBreakdown other) => new(
         MissingFields + other.MissingFields,
@@ -81,7 +98,9 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
         Failed + other.Failed,
         ExtractionFailed + other.ExtractionFailed,
         Repeat + other.Repeat,
-        NewCar + other.NewCar);
+        NewCar + other.NewCar,
+        Sold + other.Sold,
+        NoPriceListed + other.NoPriceListed);
 
     public int this[DetailPageOutcome outcome] => outcome switch
     {
@@ -92,6 +111,8 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
         DetailPageOutcome.ExtractionFailed => ExtractionFailed,
         DetailPageOutcome.Repeat => Repeat,
         DetailPageOutcome.NewCar => NewCar,
+        DetailPageOutcome.Sold => Sold,
+        DetailPageOutcome.NoPriceListed => NoPriceListed,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
 }
@@ -105,8 +126,9 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
 public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown Dropped, bool Capped = false)
 {
     /// <summary>How many of the visited pages spent a slot of the per-pair cap: every visit except
-    /// the ones dropped as another model, a repeat VIN, or a new car.</summary>
-    public int SpentOnCap => Visited - Dropped.NotMatching - Dropped.Repeat - Dropped.NewCar;
+    /// the ones dropped as another model, a repeat VIN, a new car, a sold listing, or a page with no
+    /// price listed.</summary>
+    public int SpentOnCap => Visited - Dropped.NotMatching - Dropped.Repeat - Dropped.NewCar - Dropped.Sold - Dropped.NoPriceListed;
 
     public DetailWalkTally Plus(DetailWalkTally other) => new(Visited + other.Visited, Upserted + other.Upserted, Dropped.Plus(other.Dropped), Capped || other.Capped);
 }
@@ -114,8 +136,8 @@ public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown
 /// <summary>
 /// Walks a pool of candidate detail links for one (site, model) pair, stopping once
 /// <paramref name="maxDetailPages"/> of them have not been rejected for not matching the
-/// requested model, for repeating a VIN this pair already saved, or for being a new car, or the
-/// pool runs out, whichever comes first. A page dropped as some other model never spends a slot of the cap, so a search page
+/// requested model, for repeating a VIN this pair already saved, for being a new car, for being a
+/// sold listing, or for listing no price, or the pool runs out, whichever comes first. A page dropped as some other model never spends a slot of the cap, so a search page
 /// that returns other models mixed in with the one asked for still gets a real chance to fill the
 /// cap with actual candidates, up to
 /// however large a pool the caller handed in.
@@ -138,6 +160,8 @@ public static class WalkDetailWalk
         int droppedExtractionFailed = 0;
         int droppedRepeat = 0;
         int droppedNewCar = 0;
+        int droppedSold = 0;
+        int droppedNoPriceListed = 0;
         int spentOnCap = 0;
 
         for (int i = 0; i < candidateLinks.Count && spentOnCap < maxDetailPages; i++)
@@ -149,7 +173,7 @@ public static class WalkDetailWalk
 
             visited++;
             DetailPageOutcome outcome = await visitLinkAsync(candidateLinks[i], i, cancellationToken);
-            if (outcome is not (DetailPageOutcome.NotMatching or DetailPageOutcome.Repeat or DetailPageOutcome.NewCar))
+            if (outcome is not (DetailPageOutcome.NotMatching or DetailPageOutcome.Repeat or DetailPageOutcome.NewCar or DetailPageOutcome.Sold or DetailPageOutcome.NoPriceListed))
             {
                 spentOnCap++;
             }
@@ -180,10 +204,16 @@ public static class WalkDetailWalk
                 case DetailPageOutcome.NewCar:
                     droppedNewCar++;
                     break;
+                case DetailPageOutcome.Sold:
+                    droppedSold++;
+                    break;
+                case DetailPageOutcome.NoPriceListed:
+                    droppedNoPriceListed++;
+                    break;
             }
         }
 
-        var dropped = new DroppedBreakdown(droppedMissingFields, droppedNoVin, droppedNotMatching, droppedFailed, droppedExtractionFailed, droppedRepeat, droppedNewCar);
+        var dropped = new DroppedBreakdown(droppedMissingFields, droppedNoVin, droppedNotMatching, droppedFailed, droppedExtractionFailed, droppedRepeat, droppedNewCar, droppedSold, droppedNoPriceListed);
         return new DetailWalkTally(visited, upserted, dropped);
     }
 }
