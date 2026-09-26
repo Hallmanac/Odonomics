@@ -66,9 +66,9 @@ A repeat walk visits only new cars. Each detail page costs about a minute, and a
 
 Instead, the walk touches that posting from its card. It stamps the posting as seen in this run, once the pair's walk has finished, so a pair that fails or is interrupted leaves its known postings exactly as the last completed run left them. When the card's asking price can be read and differs from the latest one on the ledger, it records the new price. The diff then works exactly as it does after a full visit. A card showing a lower price than before is listed under "Price drops", and a posting no card shows any more is listed under "Gone", because it wasn't stamped.
 
-A touched link never enters the pool of detail visits and never spends any of `--max`. That means `--max`, when you give it, goes only to cars the ledger has never seen, and paging on Carvana goes on past pages made only of known cars until the pool of new links is full or the search runs out. What a card can't tell the walk stays as the last detail visit left it: the dealer, the Carvana shipping fee, and the vehicle's year, mileage, and trim. A card price under $1,000 is treated as a misread and not a price.
+A touched link never enters the pool of detail visits and never spends any of `--max`. That means `--max`, when you give it, goes only to cars the ledger has never seen, and paging on Carvana goes on past pages made only of known cars until the pool of new links is full or the search runs out. What a card can't tell the walk stays as the last detail visit left it: the dealer, the Carvana shipping fee and pickup option, the fee posture, and the vehicle's year, mileage, and trim. A card price under $1,000 is treated as a misread and not a price.
 
-`--revisit` turns all of this off and opens a detail page for every link, as the walk did before. Use it to refresh the dealer, shipping fee, or pickup option of cars the ledger already holds, or to check a site whose cards the walk can't read yet. A posting that was dropped on its detail visit (the wrong model, a new car) never reached the ledger, so it's opened again on every walk.
+`--revisit` turns all of this off and opens a detail page for every link, as the walk did before. Use it to refresh the dealer, shipping fee, pickup option, or fee posture of cars the ledger already holds, or to check a site whose cards the walk can't read yet. A posting that was dropped on its detail visit (the wrong model, a new car) never reached the ledger, so it's opened again on every walk.
 
 ### Badges
 
@@ -209,6 +209,20 @@ A detail link matches `/cars-for-sale/vehicle/<digits>`, and the walk stores it 
 A private seller's detail page marks the seller with a "(Private Seller)" line. The walk stores that posting with the dealer "Private seller" and no location, and not the person's name and city. Every other rule applies to it unchanged: the model check, the cap, the pacing, and the bot-challenge pause.
 
 Autotrader's card shape hasn't been confirmed from a recorded page (its cards show the price as bare digits, with no dollar sign), so it reads no card price yet. A known Autotrader listing is still kept listed from its card, but a change in its price is only seen once `--revisit` opens its detail page.
+
+### Fee statements
+
+Dealers on cars.com and Autotrader can add fees to the price they list, so each detail page from those two sites is read for what it says about them. The walk reads the page text with a fixed reader (`FeeStatements`), with no model in between, and stores the answer on the posting as its fee posture and itemized total. Carvana is not read, so its postings keep a null posture, which means "never read" and is different from `unknown`.
+
+The question the reader answers is whether the page says the price it shows already contains the dealer's fees. That matters because the price the walk stores is the page's headline price. On every page recorded on 2026-09-26 that lists its fees line by line, the headline price is the printed total with those fees already inside it, so adding the itemized lines a second time would count them twice. There are three answers:
+
+- **all-in** means the page says the fees are in the price. On cars.com that is "Seller has no extra fees" with "The price shown here is the all-in total", or a "Vehicle price breakdown" table that ends in an "All-in total price" row. On Autotrader that is "No Additional Dealer Fees", or a "Listing Price" block whose fee lines end in a "Total Price" followed by "Dealer Fees Included". A page that lists fee lines and also says they are included is all-in, and nothing is added to its price.
+- **itemized** means the page lists fee lines with amounts and never says they are included. The total is the sum of those lines, and it is added to the purchase price. On cars.com the lines are the rows of the breakdown table after the vehicle price. On Autotrader they are the "+ $amount" lines after the listing price. No recorded page has this shape yet, so the tests build it from a recorded page with the statement edited out.
+- **unknown** means neither. That covers cars.com pages with only the generic taxes and registration disclaimer, or with "Seller has not disclosed fees", and Autotrader pages whose listing price block says nothing about fees.
+
+Two guards keep the reader from borrowing a statement that isn't the page's own. On cars.com the all-in sentence is matched whole, because the undisclosed-fees notice tells the buyer to "confirm the all-in total price directly with the seller". On Autotrader only the page's own "Listing Price" block is read, because a search-style page that some detail links land on lists other cars, each with its own "Dealer Fees Included" badge, and has no block of its own, so it reads as unknown.
+
+The posture and the total are stored on the posting, and each sighting replaces the last one, the same as the shipping fee. A dealer whose page reads as unknown and who sells add-ons according to CarEdge raises the `add-ons-dealer` red flag, described in [research.md](research.md#red-flags). [cost-model.md](cost-model.md#what-a-purchase-price-means) covers how an itemized total counts.
 
 ## Recorded pages
 
