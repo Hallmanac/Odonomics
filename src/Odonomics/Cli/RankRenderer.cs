@@ -216,16 +216,32 @@ public static class RankRenderer
     private static string PaymentLine(CostBreakdown cost) =>
         $"    loan payment {Format.DuringLoanLines(cost)[0].Figure}  of during {Format.Band(cost.DuringLoanMonthly)}";
 
-    /// <summary>The `--detail` line that names the fee inside the price a row shows: the asking price,
-    /// the fee, the purchase price they add up to, which is the figure the row's costs are computed
-    /// from, and the fulfillment that chose the fee, so a reader can tell which one this run assumed.
-    /// Null when the vehicle's posting has no fee for that fulfillment, so a vehicle without one
-    /// prints exactly what it did before. A fee of zero is still named, since "free shipping" is a
+    /// <summary>The `--detail` line that names the fees inside the price a row shows: the asking price,
+    /// the fee for the fulfillment that was chosen, the itemized fees when the posting has them, and the
+    /// purchase price they add up to, which is the figure the row's costs are computed from, and, when a fee
+    /// was added, the fulfillment that chose it so a reader can tell which one this run assumed. Null when the
+    /// vehicle's posting has neither a fee for that fulfillment nor itemized fees, so a vehicle without
+    /// one prints exactly what it did before. A fee of zero is still named, since "free shipping" is a
     /// fact the page gave.</summary>
-    private static string? PurchasePriceLine(Score score) =>
-        score.Vehicle.PurchasePrice is { AppliedFee: decimal fee } purchasePrice
-            ? $"    price {Format.Money(purchasePrice.Asking)} asking + {Format.Money(fee)} {FeeName(purchasePrice)} = {Format.Money(purchasePrice.Total)} ({FulfillmentNote(purchasePrice)})"
-            : null;
+    private static string? PurchasePriceLine(Score score)
+    {
+        if (score.Vehicle.PurchasePrice is not PurchasePrice purchasePrice
+            || (purchasePrice.AppliedFee is null && purchasePrice.ItemizedFees is null))
+        {
+            return null;
+        }
+
+        string fee = purchasePrice.AppliedFee is decimal appliedFee
+            ? $" + {Format.Money(appliedFee)} {FeeName(purchasePrice)}"
+            : "";
+        string fees = purchasePrice.ItemizedFees is decimal itemizedFees
+            ? $" + {Format.Money(itemizedFees)} fees"
+            : "";
+        string fulfillment = purchasePrice.AppliedFee is null
+            ? ""
+            : $" ({FulfillmentNote(purchasePrice)})";
+        return $"    price {Format.Money(purchasePrice.Asking)} asking{fee}{fees} = {Format.Money(purchasePrice.Total)}{fulfillment}";
+    }
 
     private static string FeeName(PurchasePrice purchasePrice) =>
         purchasePrice is { Fulfillment: Fulfillment.Pickup, PickupFeeAssumed: false } ? "pickup" : "shipping";
@@ -239,7 +255,7 @@ public static class RankRenderer
     };
 
     /// <summary>The purchase price the vehicle's costs are computed from: its asking price plus any
-    /// shipping fee. A vehicle with no current asking price shows "-" rather than "$0", which would
+    /// shipping fee and itemized fees. A vehicle with no current asking price shows "-" rather than "$0", which would
     /// read as a real price of zero.</summary>
     private static string PriceText(Score score) =>
         score.Vehicle.PurchasePrice is PurchasePrice purchasePrice

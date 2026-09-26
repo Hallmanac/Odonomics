@@ -20,17 +20,20 @@ public static class VehiclePricing
 
     /// <summary>The cheapest way to take this vehicle home among its active postings (see
     /// <see cref="LowestCurrentPrice"/> for which those are): each posting's latest asking price
-    /// plus the fee for <paramref name="fulfillment"/>, so a far-away carvana car is compared honestly
-    /// with one that has no fee. Under delivery that is the shipping fee; under pickup it is the
-    /// pickup fee, or the shipping fee when no pickup fee was read (see <see cref="PurchasePrice"/>).
-    /// A posting with no fee costs its asking price. When two postings cost the same to take home,
-    /// the one with the lower asking price is reported.</summary>
+    /// plus the fee for <paramref name="fulfillment"/>, plus the fees it itemized on top of that price
+    /// when its fee posture is itemized, so a far-away carvana car, or a dealer whose fees are added at
+    /// the desk, is compared honestly with one that has neither. Under delivery the fee is the shipping
+    /// fee; under pickup it is the pickup fee, or the shipping fee when no pickup fee was read (see
+    /// <see cref="PurchasePrice"/>). A posting with a null fee costs its asking price, and so does one
+    /// whose posture is all-in (its price already holds its fees), unknown (the page did not say), or
+    /// never read. When two postings cost the same to take home, the one with the lower asking price is
+    /// reported.</summary>
     public static PurchasePrice? LowestCurrentPurchasePrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment) =>
         CheapestPosting(vehicle, latestCoverageBySource, fulfillment)?.Price;
 
     /// <summary>The active posting <see cref="LowestCurrentPurchasePrice"/> reports the price of, so a
-    /// display that sits beside that price (a site's own badge for the listing) speaks for the same
-    /// listing; null when no active posting has a price.</summary>
+    /// display that sits beside that price (a site's own badge for the listing, its dealer and fee
+    /// posture) speaks for the same listing; null when no active posting has a price.</summary>
     public static PostingEntity? LowestCurrentPurchasePosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment) =>
         CheapestPosting(vehicle, latestCoverageBySource, fulfillment)?.Posting;
 
@@ -41,13 +44,26 @@ public static class VehiclePricing
             .. ActivePostings(vehicle, latestCoverageBySource)
                 .Select(p => (Posting: p, Asking: LatestAskingPrice(p)))
                 .Where(p => p.Asking is not null)
-                .Select(p => (p.Posting, new PurchasePrice(p.Asking.GetValueOrDefault(), p.Posting.ShippingFee, p.Posting.PickupFee, p.Posting.PickupLocation, fulfillment))),
+                .Select(p => (p.Posting, PurchasePriceOf(p.Posting, p.Asking.GetValueOrDefault(), fulfillment))),
         ];
 
         return known.Length == 0
             ? null
             : known.OrderBy(p => p.Price.Total).ThenBy(p => p.Price.Asking).First();
     }
+
+    /// <summary>The posting's purchase price at <paramref name="asking"/>. Itemized fees count only when
+    /// the posture is itemized: an all-in page's asking price already holds its fees, and adding an
+    /// itemized total the page also printed would count them twice.</summary>
+    private static PurchasePrice PurchasePriceOf(PostingEntity posting, decimal asking, Fulfillment fulfillment) =>
+        new(
+            asking,
+            posting.ShippingFee,
+            posting.PickupFee,
+            posting.PickupLocation,
+            fulfillment,
+            posting.FeePosture == FeePostures.Itemized ? posting.ItemizedFeesTotal : null,
+            posting.FeePosture);
 
     private static IEnumerable<PostingEntity> ActivePostings(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
         vehicle.Postings.Where(p =>

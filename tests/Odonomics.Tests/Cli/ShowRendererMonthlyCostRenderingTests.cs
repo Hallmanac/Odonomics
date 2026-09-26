@@ -272,6 +272,37 @@ public class ShowRendererMonthlyCostRenderingTests
     }
 
     [Fact]
+    public void RenderMonthlyCost_ItemizedPosting_PrintsTheFeesUnderTheAskingPriceThenThePurchasePriceAndThePosture()
+    {
+        var purchasePrice = new PurchasePrice(16456m, null, ItemizedFees: 1494m, FeePosture: "itemized");
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] lines = Render(cost, purchasePrice: purchasePrice);
+
+        Assert.Equal(["Asking", "price", "$16,456"], Cells(lines[1]));
+        Assert.Equal(["Itemized", "fees", "$1,494"], Cells(lines[2]));
+        Assert.Equal(["Purchase", "price", "$17,950"], Cells(lines[3]));
+        Assert.Equal(["Fee", "posture", "itemized", "(fees", "are", "on", "top)"], Cells(lines[4]));
+        Assert.Equal(["Loan", "payment", "$324-$348"], Cells(lines[5]));
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    [Theory]
+    [InlineData("all-in", "(fees are in the price)")]
+    [InlineData("unknown", "(the page did not say)")]
+    public void RenderMonthlyCost_AllInOrUnknownPosting_PrintsAskingPriceAndPostureButNoPurchasePriceLine(string posture, string gloss)
+    {
+        var purchasePrice = new PurchasePrice(17950m, null, FeePosture: posture);
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] lines = Render(cost, purchasePrice: purchasePrice);
+
+        Assert.Equal(["Asking", "price", "$17,950"], Cells(lines[1]));
+        Assert.Equal(["Fee", "posture", posture, .. gloss.Split(' ')], Cells(lines[2]));
+        Assert.DoesNotContain(lines, line => line.Contains("Purchase price") || line.Contains("Itemized fees"));
+    }
+
+    [Fact]
     public void RenderMonthlyCost_VehicleWithNoShippingFee_PrintsNoPriceLines()
     {
         var purchasePrice = new PurchasePrice(17950m, ShippingFee: null);

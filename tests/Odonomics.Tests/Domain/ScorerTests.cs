@@ -208,6 +208,17 @@ public class ScorerTests
     }
 
     [Fact]
+    public void Score_VehicleWithItemizedFees_IsCostedAtTheAskingPricePlusTheFees()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring itemized = Vehicle("Toyota", "Prius", 2020, 40000, 16506m) with { ItemizedFees = 1494m, FeePosture = "itemized" };
+        VehicleForScoring flat = Vehicle("Toyota", "Prius", 2020, 40000, 18000m);
+
+        Assert.Equal(18000m, itemized.PurchasePrice?.Total);
+        Assert.Equal(Scorer.Score(flat, scenario).Cost, Scorer.Score(itemized, scenario).Cost);
+    }
+
+    [Fact]
     public void Score_VehicleWithNoShippingFee_IsCostedAtItsAskingPrice()
     {
         Scenario scenario = BuildScenario();
