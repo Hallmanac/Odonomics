@@ -13,7 +13,7 @@ A used car's asking price says very little about what it will cost you. The real
 ## Features
 
 - [Search two listing APIs](docs/commands.md#what-search-asks-for) for used cars that fit your scenario
-- [Walk cars.com, Carvana, and Autotrader](docs/walk.md) in your own browser
+- [Walk cars.com, Carvana, Autotrader, CarMax, and CarGurus](docs/walk.md) in your own browser
 - [Vet each VIN](docs/research.md) with safety ratings, listing history, and red flags
 - [Grade dealers](docs/dealers.md) with CarEdge
 - [Rank every car](docs/cost-model.md) by its monthly cost over ten years
