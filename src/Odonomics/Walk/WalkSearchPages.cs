@@ -19,6 +19,9 @@ namespace Odonomics.Walk;
 /// new links is full, the stated count is reached, or a page shows nothing not seen before.
 /// A pool size of <see cref="WalkPairSearches.UnboundedPool"/> is the uncapped walk: the pool never fills,
 /// so paging ends only by the stated count, a page that adds nothing, an exhausted search, or a failed page.
+/// A bounded pool can instead end the collection with results still unread: it fills, or a page holds a new
+/// link the full pool has no room for. That is reported through <c>onCapped</c>, since the postings the
+/// collection never reached must not later be read as cars that left the market.
 /// </summary>
 public static class WalkSearchPages
 {
@@ -32,7 +35,9 @@ public static class WalkSearchPages
     /// because <paramref name="cancellationToken"/> was cancelled), <paramref name="onLaterPageFailed"/>
     /// is told its number and the exception and the pool built so far is returned; a failure on the
     /// first page still propagates, since without it the search has nothing. When a page says the search
-    /// ran out of exact matches, <paramref name="onSearchExhausted"/> is told its number.</summary>
+    /// ran out of exact matches, <paramref name="onSearchExhausted"/> is told its number. When the
+    /// collection stops with the site's results not all read because <paramref name="poolSize"/> was
+    /// reached, <paramref name="onCapped"/> is told once.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -41,6 +46,7 @@ public static class WalkSearchPages
         Func<string, int, CancellationToken, Task<SearchPageContent>> loadPageAsync,
         Action<int, Exception> onLaterPageFailed,
         Action<int> onSearchExhausted,
+        Action onCapped,
         CancellationToken cancellationToken)
     {
         Func<string, int, string>? pageUrlFor = site.PagedSearchUrl;
@@ -48,6 +54,7 @@ public static class WalkSearchPages
         HashSet<string> canonicalUrls = [];
         int linkBound = int.MaxValue;
         int considered = 0;
+        bool leftBehindForWantOfPoolRoom = false;
 
         for (int pageNumber = 1; ; pageNumber++)
         {
@@ -92,16 +99,38 @@ public static class WalkSearchPages
 
                 considered++;
                 added++;
-                if (!await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), cancellationToken) && pool.Count < poolSize)
+                if (await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), cancellationToken))
+                {
+                    continue;
+                }
+
+                if (pool.Count < poolSize)
                 {
                     pool.Add(card.Href);
                 }
+                else
+                {
+                    leftBehindForWantOfPoolRoom = true;
+                }
             }
 
-            if (pageUrlFor is null || pool.Count >= poolSize || considered >= linkBound || added == 0)
+            // A page that adds nothing, or a stated count already reached, means the site's results are
+            // all read even when the pool happens to be full too; only a full pool with more to read is capped.
+            if (pageUrlFor is null || considered >= linkBound || added == 0)
             {
                 break;
             }
+
+            if (pool.Count >= poolSize)
+            {
+                leftBehindForWantOfPoolRoom = true;
+                break;
+            }
+        }
+
+        if (leftBehindForWantOfPoolRoom)
+        {
+            onCapped();
         }
 
         return pool;

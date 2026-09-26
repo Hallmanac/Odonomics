@@ -8,7 +8,9 @@ namespace Odonomics.Walk;
 /// the per-pair cap is split across the searches and each search's own links are walked in turn,
 /// so the pair still never spends more than the cap in total. With no cap at all (the walk's default)
 /// there is nothing to split: every search's whole link pool is collected and every link not already
-/// known is visited.
+/// known is visited. A capped pair whose cap ended the walk with links or searches never visited
+/// says so on its tally (<see cref="DetailWalkTally.Capped"/>), so the run can record that pair's
+/// coverage as partial.
 /// </summary>
 public static class WalkPairSearches
 {
@@ -89,8 +91,10 @@ public static class WalkPairSearches
                 cancellationToken);
         }
 
+        int searchesRun = 0;
         for (int search = 0; search < searchUrls.Count && remaining > 0; search++)
         {
+            searchesRun++;
             int share = SplitCap(remaining, searchUrls.Count - search)[0];
             if (total.Visited > 0)
             {
@@ -119,25 +123,28 @@ public static class WalkPairSearches
             announceVisits?.Invoke(0, false);
         }
 
+        bool capped = searchesRun < searchUrls.Count;
         foreach (IReadOnlyList<string> links in unvisitedLinks)
         {
-            if (remaining <= 0)
-            {
-                break;
-            }
-
             if (links.Count == 0)
             {
                 continue;
+            }
+
+            if (remaining <= 0)
+            {
+                capped = true;
+                break;
             }
 
             await gapBeforeNextLinkAsync(cancellationToken);
             DetailWalkTally tally = await WalkAsync(links, remaining);
             total = total.Plus(tally);
             remaining -= tally.SpentOnCap;
+            capped |= tally.Visited < links.Count;
         }
 
-        return total;
+        return total with { Capped = capped };
     }
 
     private static async Task<DetailWalkTally> RunUncappedAsync(

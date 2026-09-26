@@ -176,4 +176,61 @@ public class WalkCoverageTests
         // persisted.
         Assert.Equal("site-a:Prius", run.Sources);
     }
+
+    [Fact]
+    public async Task RunAsync_ACappedPair_StampsAPartialTokenBesideItsCoverageTokenAndSaysCappedInItsSummary()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<WalkPairSummary> summaries = await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight", "Toyota Prius"],
+            (_, model, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), Capped: model == "Honda Insight")),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Equal([true, false], summaries.Select(s => s.Capped));
+        Assert.Equal("site-a:Insight,capped:site-a:Insight,site-a:Prius", run.Sources);
+        Assert.Equal(["site-a:Insight", "site-a:Prius"], RunSources.Split(run));
+        Assert.Equal(["site-a:Insight"], RunSources.PartialCoverage(run));
+    }
+
+    [Fact]
+    public async Task RunAsync_PersistFailsForACappedPair_LeavesNeitherItsCoverageNorItsPartialToken()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        int saveCount = 0;
+
+        await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight", "Toyota Prius"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), Capped: true)),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct =>
+            {
+                saveCount++;
+                return saveCount == 1
+                    ? throw new InvalidOperationException("database is locked")
+                    : db.SaveChangesAsync(ct);
+            },
+            CancellationToken.None);
+
+        Assert.Equal("site-a:Prius,capped:site-a:Prius", run.Sources);
+    }
 }

@@ -142,4 +142,18 @@ public class WalkSummaryTableRenderingTests
 
         return console.Output.Replace("\r\n", "\n").Split('\n');
     }
+
+    [Fact]
+    public void BuildSummaryTable_ACappedPair_ShowsCappedInItsStatusColumn()
+    {
+        List<WalkPairSummary> summaries =
+        [
+            new("carvana", "Toyota Camry Hybrid", 30, 30, new DroppedBreakdown(0, 0, 0, 0), Completed: true, Capped: true),
+            new("carvana", "Toyota Prius", 5, 5, new DroppedBreakdown(0, 0, 0, 0), Completed: true),
+        ];
+        string[] lines = Render(summaries);
+
+        Assert.Contains("capped", Assert.Single(lines, l => l.Contains("Camry Hybrid")));
+        Assert.DoesNotContain("capped", Assert.Single(lines, l => l.Contains("Prius")));
+    }
 }
