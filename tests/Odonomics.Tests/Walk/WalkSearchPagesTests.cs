@@ -222,7 +222,7 @@ public class WalkSearchPagesTests
     [Fact]
     public async Task CarsCom_FollowsThreePagesAndStopsWhenAPageAddsNothingNew()
     {
-        const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla&page_size=100";
+        const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
         {
             [1] = CarsComCards("a", 100),
@@ -243,7 +243,7 @@ public class WalkSearchPagesTests
     [Fact]
     public async Task CarsCom_StopsPagingOnceThePoolIsFull()
     {
-        const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla&page_size=100";
+        const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
         {
             [1] = CarsComCards("a", 100),
