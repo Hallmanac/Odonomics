@@ -108,6 +108,58 @@ public class ExtractionGroundingTests
         Assert.Equal(24998m, grounded.Price);
     }
 
+    private static string WalkFixture(string name) =>
+        File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", name));
+
+    [Fact]
+    public void GroundInPageText_CarGurusDetailFixtureOfADealerWithAnApostrophe_KeepsTheVinMileageDealerAndCity()
+    {
+        string pageText = WalkFixture("cargurus-detail-insight-sanford.txt");
+        var extracted = new ExtractionResult("19XZE4F52ME000999", 2021, "Honda", "Insight", "EX FWD", 19394m, 69599, "Holler Driver's Mart Sanford", "Sanford, FL");
+
+        ExtractionResult grounded = GroundInPageText(extracted, pageText);
+
+        Assert.Equal(extracted, grounded);
+    }
+
+    [Fact]
+    public void GroundInPageText_CarGurusStoreTransferDetailFixture_KeepsTheVinMileageAndTheReceivingStore()
+    {
+        string pageText = WalkFixture("cargurus-detail-insight-carmax-orlando.txt");
+        var extracted = new ExtractionResult("19XZE4F97NE013476", 2022, "Honda", "Insight", "Touring FWD", 27697m, 19831, "CarMax Orlando", "Orlando, FL");
+
+        ExtractionResult grounded = GroundInPageText(extracted, pageText);
+
+        Assert.Equal(extracted, grounded);
+    }
+
+    [Fact]
+    public void GroundInPageText_CarGurusDeliveredCarDetailFixture_KeepsTheDealersOwnCity()
+    {
+        string pageText = WalkFixture("cargurus-detail-insight-delivery.txt");
+        var extracted = new ExtractionResult("19XZE4F52ME001988", 2021, "Honda", "Insight", null, 21241m, 47992, "Gunther Volkswagen Delray Beach", "Delray Beach, FL");
+
+        ExtractionResult grounded = GroundInPageText(extracted, pageText);
+
+        Assert.Equal(extracted, grounded);
+    }
+
+    [Fact]
+    public void GroundInPageText_CarGurusDetailFixtureWithFieldsItDoesNotPrint_DropsEachOfThem()
+    {
+        string pageText = WalkFixture("cargurus-detail-insight-sanford.txt");
+        var extracted = new ExtractionResult("19XZE4F52ME000998", 2021, "Honda", "Insight", "EX FWD", 19394m, 69000, "Holler Driver\u2019s Mart Sanford", "Winter Park, FL");
+
+        ExtractionResult grounded = GroundInPageText(extracted, pageText);
+
+        Assert.Null(grounded.Vin);
+        Assert.Null(grounded.Mileage);
+        Assert.Null(grounded.DealerName);
+        Assert.Null(grounded.DealerLocation);
+        Assert.Equal("Insight", grounded.Model);
+        Assert.Equal(19394m, grounded.Price);
+    }
+
     [Theory]
     [InlineData(38000, "38K miles", true)]
     [InlineData(38412, "38K miles", true)]

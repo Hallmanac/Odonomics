@@ -199,7 +199,7 @@ public class CarGurusWalkTests
     [Fact]
     public void AskingPriceOf_RecordedTransferCard_IsTheCardsDeliveredPriceNotTheDetailPagesLotPrice()
     {
-        // The card says $27,697 with $699 shipping in it; the car's detail page shows $26,998, the price at its lot.
+        // The card says $27,697 with $699 shipping in it; the detail page's transfer breakdown also prints $26,998, the dealer's price at its lot.
         string card = Assert.Single(Cards("cargurus-insight-search-cards.json"), c => ListingId(c.Href) == "459400072" && c.Href.Contains("sponsoredType=NONE")).CardText;
 
         Assert.Equal(27697m, WalkSites.CarGurus.AskingPriceOf(26998m, card));
@@ -345,6 +345,92 @@ public class CarGurusWalkTests
         Assert.Same(WalkSites.CarGurus, WalkSites.Find("CarGurus"));
         Assert.Equal("cargurus", WalkSites.CarGurus.Name);
         Assert.True(WalkSites.CarGurus.AskingPriceFromCard);
+    }
+
+    private static string[] Lines(string name) => Fixture(name).Split('\n');
+
+    private static string LineAfter(string[] lines, string label, int start = 0) =>
+        lines[Array.FindIndex(lines, start, l => l.Trim() == label) + 1].Trim();
+
+    [Theory]
+    [InlineData("cargurus-detail-insight-sanford.txt", "19XZE4F52ME000999")]
+    [InlineData("cargurus-detail-insight-carmax-orlando.txt", "19XZE4F97NE013476")]
+    public void DetailPage_RecordedText_PrintsTheVinOnTheLineAfterItsLabel(string fixture, string vin)
+    {
+        Assert.Equal(vin, LineAfter(Lines(fixture), "VIN:"));
+    }
+
+    [Theory]
+    [InlineData("cargurus-detail-insight-sanford.txt", "2021 Honda Insight", "Mileage: 69,599 · Sanford, FL (29 mi away)", "Sanford, FL (29 mi away)")]
+    [InlineData("cargurus-detail-insight-carmax-orlando.txt", "2022 Honda Insight", "Mileage: 19,831 · Orlando, FL (15 mi away)", "Price includes separate $699 transfer fee, which applies if shipped to destination Orlando, FL (15 mi)")]
+    public void DetailPage_RecordedText_PrintsTheYearModelAndMileageUnderItsTitle(string fixture, string title, string mileageLine, string belowTheTrimLine)
+    {
+        string[] lines = Lines(fixture);
+
+        int titleAt = Array.FindIndex(lines, l => l.Trim() == title);
+        Assert.InRange(titleAt, 0, 10);
+        Assert.Equal(mileageLine, lines[titleAt + 2].Trim());
+        Assert.Contains(belowTheTrimLine, lines.Select(l => l.Trim()));
+    }
+
+    [Fact]
+    public void DetailPage_RecordedSanfordText_NamesTheDealerWithItsApostropheInTheDealerBlock()
+    {
+        string[] lines = Lines("cargurus-detail-insight-sanford.txt");
+
+        int dealerAt = Array.FindIndex(lines, l => l.Trim() == "Dealer");
+        string[] block = [.. lines.Skip(dealerAt + 1).Take(8).Select(l => l.Trim())];
+
+        Assert.Contains("Holler Driver's Mart Sanford", block);
+        Assert.Contains("105 N Oregon St, Sanford, FL 32771", lines.Select(l => l.Trim()));
+    }
+
+    [Fact]
+    public void DetailPage_RecordedDeliveredCarText_PrintsTheBuyersCityUnderTheTitleAndTheDealersOwnCityInTheDealerBlockAddress()
+    {
+        string[] lines = Lines("cargurus-detail-insight-delivery.txt");
+
+        int titleAt = Array.FindIndex(lines, l => l.Trim() == "2021 Honda Insight");
+        Assert.Equal("Mileage: 47,992 · Price includes $462 delivery to Orlando, FL", lines[titleAt + 2].Trim());
+
+        int dealerAt = Array.FindIndex(lines, l => l.Trim() == "Dealer");
+        string[] block = [.. lines.Skip(dealerAt + 1).Take(8).Select(l => l.Trim())];
+        Assert.Contains("Gunther Volkswagen Delray Beach", block);
+        Assert.Contains("2401 N Federal Hwy, Delray Beach, FL 33483", block);
+        Assert.DoesNotContain(block, l => l.Contains("Orlando"));
+    }
+
+    [Fact]
+    public void DetailPage_RecordedStoreTransferText_NamesTheReceivingStoreInTheDealerBlockAndTheOriginStoreBeneathIt()
+    {
+        string[] lines = Lines("cargurus-detail-insight-carmax-orlando.txt");
+
+        int dealerAt = Array.FindIndex(lines, l => l.Trim() == "Dealer");
+
+        Assert.Equal("CarMax Orlando", lines[dealerAt + 1].Trim());
+        Assert.Equal("from CarMax North Houston in Houston, TX", lines[dealerAt + 3].Trim());
+    }
+
+    [Fact]
+    public void DetailPage_RecordedStoreTransferText_HeadlinesTheDeliveredPriceAndPrintsTheLotPriceOnlyInItsTransferBreakdown()
+    {
+        string[] lines = Lines("cargurus-detail-insight-carmax-orlando.txt");
+        string card = Assert.Single(Cards("cargurus-insight-search-cards.json"), c => ListingId(c.Href) == "459400072" && c.Href.Contains("sponsoredType=NONE")).CardText;
+
+        Assert.Equal("$27,697", lines[10].Trim());
+        Assert.Equal(WalkSites.CarGurus.ReadCardPrice(card), WalkSites.CarGurus.AskingPriceOf(26998m, card));
+        Assert.Equal("$26,998", LineAfter(lines, "Dealer's price (No haggle price - taxes and fees may apply)"));
+        Assert.Equal("$27,697", LineAfter(lines, "Total"));
+    }
+
+    [Fact]
+    public void FeeStatementOf_RecordedSanfordCardAndDetailPage_IsTheCardsAllInWhateverTheDealersDisclaimerSays()
+    {
+        string card = Assert.Single(Cards("cargurus-insight-search-cards.json"), c => ListingId(c.Href) == "458757260" && c.Href.Contains("sponsoredType=NONE")).CardText;
+        string detail = Fixture("cargurus-detail-insight-sanford.txt");
+
+        Assert.Contains("The advertised price excludes an $999.00 Dealer Document Processing Fee, and a $399.87 Electronic Filing Fee", detail);
+        Assert.Equal(FeePostures.AllIn, WalkSites.CarGurus.FeeStatementOf(card, detail)?.Posture);
     }
 
     [Fact]
