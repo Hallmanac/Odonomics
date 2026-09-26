@@ -72,9 +72,11 @@ public static class RankCommand
     private static string? DealerGradeSummary(VehicleEntity vehicle)
     {
         List<string> grades = [.. vehicle.Postings
-            .Where(p => p.Dealer?.Grade is not null)
-            .Select(p => p.Dealer!.Grade!)
+            .Select(p => p.Dealer?.Grade)
+            .OfType<string>()
             .Distinct()];
-        return grades.Count == 0 ? null : string.Join("/", grades);
+        return grades.Count == 0
+            ? null
+            : string.Join("/", grades);
     }
 }

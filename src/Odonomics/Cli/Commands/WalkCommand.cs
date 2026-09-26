@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.Web;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Odonomics.Domain;
 using Odonomics.Extraction;
