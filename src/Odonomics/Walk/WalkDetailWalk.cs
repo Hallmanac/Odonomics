@@ -99,14 +99,15 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
 /// <summary>Tally of one (site, model) pair's detail-page walk: how many candidate links were
 /// actually visited, how many were upserted, and how many were dropped for each reason. Visited
 /// always equals Upserted plus Dropped.Total, so the pair and run summaries can report "pages,
-/// saved, dropped" without the arithmetic ever looking contradictory.</summary>
-public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown Dropped)
+/// saved, dropped" without the arithmetic ever looking contradictory. <see cref="Capped"/> is true
+/// when the per-pair cap ended the pair's walk with candidate links or searches still unvisited.</summary>
+public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown Dropped, bool Capped = false)
 {
     /// <summary>How many of the visited pages spent a slot of the per-pair cap: every visit except
     /// the ones dropped as another model, a repeat VIN, or a new car.</summary>
     public int SpentOnCap => Visited - Dropped.NotMatching - Dropped.Repeat - Dropped.NewCar;
 
-    public DetailWalkTally Plus(DetailWalkTally other) => new(Visited + other.Visited, Upserted + other.Upserted, Dropped.Plus(other.Dropped));
+    public DetailWalkTally Plus(DetailWalkTally other) => new(Visited + other.Visited, Upserted + other.Upserted, Dropped.Plus(other.Dropped), Capped || other.Capped);
 }
 
 /// <summary>

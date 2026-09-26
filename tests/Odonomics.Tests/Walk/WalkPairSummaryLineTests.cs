@@ -209,4 +209,36 @@ public class WalkPairSummaryLineTests
 
         Assert.Equal("cars.com / Honda Insight: 7 pages, 0 known from cards, 7 saved, 0 dropped", line);
     }
+
+    [Fact]
+    public void Format_ACappedPairWithNothingDropped_EndsWithCapped()
+    {
+        string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 30, known: 0, saved: 30, new DroppedBreakdown(0, 0, 0, 0), capped: true);
+
+        Assert.Equal("carvana / Toyota Camry Hybrid: 30 pages, 0 known from cards, 30 saved, 0 dropped, capped", line);
+    }
+
+    [Fact]
+    public void Format_ACappedPairWithADroppedBreakdown_PutsCappedAfterTheBreakdown()
+    {
+        string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 32, known: 0, saved: 30, new DroppedBreakdown(0, 0, 2, 0), capped: true);
+
+        Assert.Equal("carvana / Toyota Camry Hybrid: 32 pages, 0 known from cards, 30 saved, 2 dropped (wrong model), capped", line);
+    }
+
+    [Fact]
+    public void Format_ACappedPairWhoseLineWraps_KeepsCappedWithTheBreakdown()
+    {
+        string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 32, known: 0, saved: 30, new DroppedBreakdown(0, 0, 2, 0), width: 60, capped: true);
+
+        Assert.Equal("carvana / Toyota Camry Hybrid: 32 pages, 0 known from cards, 30 saved, 2 dropped\n    (wrong model), capped", line);
+    }
+
+    [Fact]
+    public void Format_APairThatWasNotCapped_NeverSaysCapped()
+    {
+        string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 30, known: 0, saved: 30, new DroppedBreakdown(0, 0, 0, 0));
+
+        Assert.DoesNotContain("capped", line);
+    }
 }

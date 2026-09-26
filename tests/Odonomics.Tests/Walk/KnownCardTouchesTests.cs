@@ -79,6 +79,7 @@ public class KnownCardTouchesTests
             },
             (_, _) => { },
             _ => { },
+            () => { },
             CancellationToken.None);
         await touches.CommitAsync(CancellationToken.None);
         return pool;
@@ -219,6 +220,7 @@ public class KnownCardTouchesTests
             (_, _, _) => Task.FromResult(page),
             (_, _) => { },
             _ => { },
+            () => { },
             CancellationToken.None);
         await touches.CommitAsync(CancellationToken.None);
 
@@ -303,6 +305,7 @@ public class KnownCardTouchesTests
             (_, _, _) => Task.FromResult(page),
             (_, _) => { },
             _ => { },
+            () => { },
             CancellationToken.None);
         await touches.CommitAsync(CancellationToken.None);
 

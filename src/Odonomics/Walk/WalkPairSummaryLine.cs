@@ -11,7 +11,9 @@ namespace Odonomics.Walk;
 /// breakdown onto a continuation line under the same row rather than ever falling back to a bare
 /// count, since a bare count with no reason is exactly the gap this class exists to close. The
 /// per-pair line itself never wraps mid-parenthetical: when it would exceed the console width the
-/// whole breakdown moves to an indented continuation line instead.
+/// whole breakdown moves to an indented continuation line instead. A pair that stopped short of the
+/// site's results (an explicit --max ended it) ends its line with ", capped", so a reader knows the
+/// tally is not the whole site.
 /// </summary>
 public static class WalkPairSummaryLine
 {
@@ -40,16 +42,18 @@ public static class WalkPairSummaryLine
         int known,
         int saved,
         DroppedBreakdown dropped,
-        int width = int.MaxValue)
+        int width = int.MaxValue,
+        bool capped = false)
     {
+        string cappedSuffix = capped ? ", capped" : "";
         string prefix = $"{site} / {make} {model}: {pages} pages, {known} known from cards, {saved} saved, {dropped.Total} dropped";
         string cell = DroppedCell(dropped);
         if (cell.Length == 0)
         {
-            return prefix;
+            return prefix + cappedSuffix;
         }
 
-        string breakdown = $"({cell})";
+        string breakdown = $"({cell}){cappedSuffix}";
         return prefix.Length + 1 + breakdown.Length > width
             ? $"{prefix}\n{ContinuationIndent}{breakdown}"
             : $"{prefix} {breakdown}";

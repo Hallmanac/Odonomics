@@ -246,7 +246,7 @@ public partial class WalkPairSearchesTests
 
         Assert.Equal([20], run.PoolSizes);
         Assert.Equal([0], run.SearchIndexes);
-        Assert.Equal(expected, tally);
+        Assert.Equal(expected with { Capped = true }, tally);
         Assert.Equal(bare.Visits, run.Visits);
         Assert.Equal(bare.Gaps, run.Gaps);
     }
@@ -380,5 +380,59 @@ public partial class WalkPairSearchesTests
 
         Assert.Equal([(0, false)], run.Announcements);
         Assert.Empty(run.Visits);
+    }
+
+    [Fact]
+    public async Task RunAsync_ACapThatLeavesCollectedLinksUnvisited_MarksTheTallyCapped()
+    {
+        var run = new Run();
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: 5,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None);
+
+        Assert.Equal(5, tally.Visited);
+        Assert.True(tally.Capped);
+    }
+
+    [Fact]
+    public async Task RunAsync_ACapNeverReachedBecauseEverySearchRanOutOfLinks_IsNotCapped()
+    {
+        var run = new Run();
+        run.LinksOffered["hyb"] = 3;
+        run.LinksOffered["base"] = 4;
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/hybrid", "https://x/base"], maxDetailPages: 10,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None);
+
+        Assert.Equal(7, tally.Visited);
+        Assert.False(tally.Capped);
+    }
+
+    [Fact]
+    public async Task RunAsync_ACapSpentExactlyOnTheLastLink_IsNotCapped()
+    {
+        var run = new Run();
+        run.LinksOffered["base"] = 5;
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: 5,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None);
+
+        Assert.Equal(5, tally.Visited);
+        Assert.False(tally.Capped);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithNoCap_IsNeverCapped()
+    {
+        var run = new Run();
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarsCom, ["https://x/base"], maxDetailPages: null,
+            run.CollectAsync, run.VisitAsync, run.GapAsync, CancellationToken.None);
+
+        Assert.False(tally.Capped);
     }
 }
