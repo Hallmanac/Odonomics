@@ -12,6 +12,8 @@ When the page names no hub, the walk still looks in the Marketcheck VIN history 
 
 A later sighting that names no hub moves a posting only off the bare "Carvana" row (or a legacy located one), and only onto a hub the history names. It never replaces a link to any other dealer, so a posting stored under a hub the page named stays under it. A posting walked later for a VIN whose history the ledger didn't yet hold stays on the bare row until the next Carvana walk moves it, so the two can briefly disagree until then.
 
+A CarMax detail page names the store the car is at, so the walk stores the dealer as that store, "CarMax Orlando" for example, located at its city (see [walk.md](walk.md#carmax)). Each store is its own dealer row and is graded by its own name and location. A page that names no store keeps the bare "CarMax" with no location, and a posting stored that way moves to its store when its detail page is next read.
+
 ## Rows that are never looked up
 
 The bare "Carvana" row is never looked up. CarEdge lists Carvana as a card per hub ("Carvana Orlando" and so on), so a search for the bare name returns hub cards, and taking one would grade the chain by an arbitrary hub. The run stamps the row checked with a recorded reason and no grade, and `odo show` prints it as "Carvana (ungraded)". Every hub row is graded by its hub name like any other dealer. The parser backs that up, because a search for the bare name "Carvana" only accepts a card named exactly "Carvana", never a hub's card that merely contains it, whatever location the dealer row has.
