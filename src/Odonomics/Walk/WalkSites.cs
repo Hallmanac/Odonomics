@@ -26,16 +26,20 @@ namespace Odonomics.Walk;
 /// and for one whose results run to more pages it turns a search URL and a 1-based page number into
 /// that page's URL (see <see cref="WalkSearchPages"/>). <paramref name="MatchCountPattern"/> is for a site whose search page states
 /// how many listings match ("13 Matches") and keeps filling the page with cards for other models and
-/// years after them (autotrader): its first group is that count, and
-/// <see cref="CollectDetailLinks"/> trusts the count over the cards. <paramref name="ResultCardLinkPattern"/>
-/// says which of a counted page's links are its result cards (autotrader's <c>clickType=listing</c>), since
+/// years after them (autotrader), or states one ("16 cars") and may show a few more results than it counts
+/// (carvana): its first group is that count, and <see cref="CollectDetailLinks"/> trusts the count over the
+/// cards. A paged site's first page count also bounds the links all its pages contribute together.
+/// <paramref name="ResultCardLinkPattern"/> says which of a counted page's links are its result cards (autotrader's <c>clickType=listing</c>), since
 /// the count does not include the sponsored card that sits first in page order. <paramref name="PrivateSellerPagePattern"/>
 /// is for a site whose detail page marks a private seller in its own text (autotrader's
 /// "Sample S (Private Seller)" line): a page it matches is stored with
 /// <see cref="WalkSites.PrivateSellerDealerName"/> and no location, whatever name the extraction
 /// read off it. <paramref name="ShippingFeeReader"/> reads the one-time shipping fee off a detail page's
 /// text for a site that prints one (carvana); null for a site that does not, whose postings store no
-/// fee.</summary>
+/// fee. <paramref name="ExhaustedSearchPattern"/> is for a paged site whose later pages, once the
+/// search's real matches run out, are padded with similar vehicles (carvana's "No exact matches"):
+/// a page whose text matches it contributes no links and ends paging (see
+/// <see cref="WalkSearchPages"/>).</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -47,7 +51,8 @@ public sealed record WalkSite(
     Regex? MatchCountPattern = null,
     Regex? PrivateSellerPagePattern = null,
     Regex? ResultCardLinkPattern = null,
-    Func<string, decimal?>? ShippingFeeReader = null)
+    Func<string, decimal?>? ShippingFeeReader = null,
+    Regex? ExhaustedSearchPattern = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -97,7 +102,10 @@ public sealed record WalkSite(
         ];
     }
 
-    private int? MatchCountIn(string? searchPageText)
+    /// <summary>The number of listings <paramref name="searchPageText"/> states this search matches
+    /// (see <see cref="MatchCountPattern"/>), or null when this site has no pattern or the text states
+    /// no count.</summary>
+    public int? MatchCountIn(string? searchPageText)
     {
         Match match = MatchCountPattern is null || searchPageText is null
             ? Match.Empty
@@ -106,6 +114,11 @@ public sealed record WalkSite(
             ? count
             : null;
     }
+
+    /// <summary>Whether <paramref name="searchPageText"/> says this search has run out of exact
+    /// matches (see <see cref="ExhaustedSearchPattern"/>), so whatever cards follow are padding.</summary>
+    public bool SearchRanOutOfMatches(string? searchPageText) =>
+        ExhaustedSearchPattern is not null && searchPageText is not null && ExhaustedSearchPattern.IsMatch(searchPageText);
 
     /// <summary>The shipping fee a detail page shows on top of its asking price, or null when this
     /// site prints none or the page carries none.</summary>
@@ -289,7 +302,12 @@ public static class WalkSites
         FallbackDealerName: CarvanaDealerName,
         // Carvana renders about 21 cards a page and pages with a plain page=N on the same filters URL.
         PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}",
-        ShippingFeeReader: CarvanaShipping.Read);
+        // A search page states "16 cars" and may show a few more results than that; once the exact
+        // matches run out the site says "No exact matches" and pads the page with similar vehicles
+        // (other models), so the count bounds the links and that phrase ends the paging.
+        MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+cars?\b"),
+        ShippingFeeReader: CarvanaShipping.Read,
+        ExhaustedSearchPattern: new Regex("No exact matches", RegexOptions.IgnoreCase));
 
     /// <summary>What a private seller's listing is stored as: one dealer row for every private seller,
     /// with no location, so no individual's name or city enters the ledger and

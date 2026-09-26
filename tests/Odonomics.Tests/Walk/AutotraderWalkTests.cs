@@ -204,8 +204,8 @@ public class AutotraderWalkTests
     [Fact]
     public void CollectDetailLinks_SitesWithNoMatchCountPattern_IgnoreTheSearchPageText()
     {
-        IReadOnlyList<string> links = WalkSites.Carvana.CollectDetailLinks(
-            [new PageLink("https://www.carvana.com/vehicle/123", "")],
+        IReadOnlyList<string> links = WalkSites.CarsCom.CollectDetailLinks(
+            [new PageLink("https://www.cars.com/vehicledetail/123/", "")],
             poolSize: 10,
             "0 Matches");
 
