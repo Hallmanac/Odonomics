@@ -23,6 +23,7 @@ public static class GoneReasons
     public const string OverMileage = "over mileage";
     public const string SearchMoved = "search moved";
     public const string NotOnSearchPage = "not on search page";
+    public const string BeyondTheCap = "beyond the cap";
 }
 
 public sealed record SearchDiff(
@@ -56,9 +57,12 @@ public sealed record SearchDiff(
 /// keeps a run that only covered one model from marking every other model on that same source as
 /// checked too. Every "gone" entry carries a reason, checked in order: the vehicle's year is below
 /// the scenario's minimum for its model, its mileage is over the scenario's maximum, the run that
-/// last saw it searched a different zip or radius than this one, or otherwise it simply is not on
-/// the search page any more. The first three are cars the search no longer asks for; only the last
-/// is a car that has likely left the market. "Search moved" compares the zip and radius each run
+/// last saw it searched a different zip or radius than this one, this run covered its pair only
+/// partially (an explicit --max stopped the link collection before the site ran out of results, see
+/// <see cref="RunSources.PartialKey"/>) so the walk never reached it, or otherwise it simply is not
+/// on the search page any more. The first three are cars the search no longer asks for and "beyond
+/// the cap" is a car this run did not look for; only the last is a car that has likely left the
+/// market. "Search moved" compares the zip and radius each run
 /// recorded (see <see cref="RunEntity.Zip"/>), so a run recorded before the ledger kept them never
 /// yields it.
 /// </summary>
@@ -211,6 +215,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         var vinsSightedThisRun = new HashSet<string>(touchedThisRun.Select(p => p.VehicleVin));
 
         string[] tokens = RunSources.Split(currentRun);
+        HashSet<string> partialTokens = RunSources.PartialCoverage(currentRun);
         List<RunEntity> allRuns = await db.Runs.ToListAsync(cancellationToken);
         List<RunEntity> priorRuns = [.. allRuns.Where(r => r.Id != currentRun.Id && r.StartedAt < currentRun.StartedAt)];
         Dictionary<string, DateTimeOffset> previousCoverageBySource = RunSources.LatestCoverageBySource(priorRuns);
@@ -242,7 +247,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
 
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
                 RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == previousCoverage);
-                gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(vehicle, lastSeenRun, currentRun, scenario)));
+                gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(vehicle, lastSeenRun, currentRun, scenario, partialTokens.Contains(token))));
             }
         }
 
@@ -252,7 +257,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         return new SearchDiff(newEntries, alsoListed, moved, priceDrops, gone);
     }
 
-    private static string GoneReason(VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario)
+    private static string GoneReason(VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario, bool pairCoveredPartially)
     {
         if (vehicle.Year < scenario.Filters.MinYearFor($"{vehicle.Make} {vehicle.Model}"))
         {
@@ -264,8 +269,13 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             return GoneReasons.OverMileage;
         }
 
-        return SearchAreaChanged(lastSeenRun, currentRun)
-            ? GoneReasons.SearchMoved
+        if (SearchAreaChanged(lastSeenRun, currentRun))
+        {
+            return GoneReasons.SearchMoved;
+        }
+
+        return pairCoveredPartially
+            ? GoneReasons.BeyondTheCap
             : GoneReasons.NotOnSearchPage;
     }
 
