@@ -17,11 +17,11 @@
     },
     "model": {
       "type": ["string", "null"],
-      "description": "Vehicle model, e.g. Insight, Corolla Hybrid, Camry Hybrid, Prius."
+      "description": "The full model name as the page's own title prints it, keeping a variant word such as Hybrid, Prime, or Plug-in as part of the model and never moving it into trim, e.g. Insight, Corolla Hybrid, Camry Hybrid, Prius, Prius Prime."
     },
     "trim": {
       "type": ["string", "null"],
-      "description": "Trim level if stated, else null."
+      "description": "The trim grade alone, e.g. LE, SE, XLE, Limited, without the model or a variant word such as Hybrid ('Toyota Corolla Hybrid / LE Sedan 4D' is model 'Corolla Hybrid', trim 'LE'). Null if no trim is stated."
     },
     "price": {
       "type": ["number", "null"],
