@@ -42,6 +42,25 @@ public class RunSourcesTests
     }
 
     [Fact]
+    public void Split_LeavesOutThePartialCoverageMarkers()
+    {
+        RunEntity run = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "carvana:Prius,capped:carvana:Prius,cars.com:Prius");
+
+        Assert.Equal(["carvana:Prius", "cars.com:Prius"], RunSources.Split(run));
+        Assert.Equal(["carvana:Prius"], RunSources.PartialCoverage(run));
+    }
+
+    [Fact]
+    public void LatestCoverageBySource_APartialMarker_IsNotACoverageEntryOfItsOwn()
+    {
+        RunEntity run = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), $"carvana:Prius,{RunSources.PartialKey("carvana:Prius")}");
+
+        Dictionary<string, DateTimeOffset> latest = RunSources.LatestCoverageBySource([run]);
+
+        Assert.Equal(["carvana:Prius"], latest.Keys);
+    }
+
+    [Fact]
     public void Key_RoundTripsThroughSplitKey()
     {
         string token = RunSources.Key("cars.com", "Insight");
