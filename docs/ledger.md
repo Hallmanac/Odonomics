@@ -1,6 +1,6 @@
 # The ledger
 
-The ledger is a plain SQLite file named `odonomics.db`, and it lives in the data directory described in [setup.md](setup.md#the-data-directory). odo applies any pending schema changes whenever it opens the file, so you never run a migration by hand. Nothing in it is ever deleted.
+The ledger is a plain SQLite file named `odonomics.db`, and it lives in the data directory described in [setup.md](setup.md#the-data-directory). odo applies any pending schema changes whenever it opens the file, so you never run a migration by hand. No search, walk, or other run ever deletes anything from it. The only rows that are ever removed are duplicates that a one-time data migration folds into the row that survives, such as two postings for one car whose URLs differed only by a session id, or a Carvana dealer that was saved once per pickup city.
 
 ## The tables
 
