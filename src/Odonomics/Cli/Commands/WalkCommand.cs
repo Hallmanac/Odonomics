@@ -270,6 +270,20 @@ public static class WalkCommand
                     ct);
                 await recorder.WriteAsync($"detail-{i + 1}.txt", bodyText, ct);
 
+                if (site.ReadsAsSold(bodyText))
+                {
+                    int marked = await upsertService.MarkSoldAsync(site.Name, WalkSites.CanonicalDetailUrl(detailUrl), currentRun, ct);
+                    string ledgerNote = marked > 0 ? ", marked sold in the ledger" : "";
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.Sold)}{ledgerNote}[/]");
+                    return DetailPageOutcome.Sold;
+                }
+
+                if (site.ReadsAsNoPrice(bodyText))
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NoPriceListed)}[/]");
+                    return DetailPageOutcome.NoPriceListed;
+                }
+
                 if (site.SkippedCardTitlePattern is not null && NewCarPage.Reads(bodyText))
                 {
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NewCar)}[/]");

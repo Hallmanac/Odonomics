@@ -8,7 +8,9 @@ namespace Odonomics.Tests.Walk;
 /// seller handling over pages recorded over CDP from Brian's Edge on 2026-09-25 (zip 32833, 50 miles,
 /// 2019 and newer, under 100,000 miles). The search fixtures are the page's body text plus every
 /// detail-link anchor on it as one JSON [href, text] pair per line; the private-seller detail page is
-/// a recording with the seller's name replaced by "Sample S".</summary>
+/// a recording with the seller's name replaced by "Sample S". The sold and no-price detail pages are
+/// the top of two pages recorded in walk run 20260926-121057 (a Corolla Hybrid page saying the car
+/// "has already found a new home", and a Prius page that reads "Contact Dealer For Price").</summary>
 public class AutotraderWalkTests
 {
     private static ListingQuery Query(string make, string model, int yearMin = 2019, int? hybridOnlyFromModelYear = null) =>
@@ -273,5 +275,54 @@ public class AutotraderWalkTests
     public void Find_Autotrader_ReturnsIt()
     {
         Assert.Same(WalkSites.Autotrader, WalkSites.Find("Autotrader"));
+    }
+
+    [Fact]
+    public void ReadsAsSold_RecordedSoldPage_IsSoldAndListsAPrice()
+    {
+        string page = Fixture("autotrader-detail-sold.txt");
+
+        Assert.True(WalkSites.Autotrader.ReadsAsSold(page));
+        Assert.False(WalkSites.Autotrader.ReadsAsNoPrice(page));
+    }
+
+    [Fact]
+    public void ReadsAsNoPrice_RecordedNoPricePage_IsNoPriceAndNotSold()
+    {
+        string page = Fixture("autotrader-detail-no-price.txt");
+
+        Assert.True(WalkSites.Autotrader.ReadsAsNoPrice(page));
+        Assert.False(WalkSites.Autotrader.ReadsAsSold(page));
+    }
+
+    [Theory]
+    [InlineData("autotrader-detail-dealer.txt")]
+    [InlineData("autotrader-detail-private-seller.txt")]
+    [InlineData("autotrader-detail-corolla-hybrid-spec-1.txt")]
+    [InlineData("autotrader-detail-corolla-hybrid-spec-5.txt")]
+    [InlineData("autotrader-detail-corolla-hybrid-spec-17.txt")]
+    public void ReadsAsSoldOrNoPrice_RecordedPagesWithAPrice_AreNeither(string fixture)
+    {
+        string page = Fixture(fixture);
+
+        Assert.False(WalkSites.Autotrader.ReadsAsSold(page));
+        Assert.False(WalkSites.Autotrader.ReadsAsNoPrice(page));
+    }
+
+    [Fact]
+    public void ReadsAsNoPrice_PromptInsideALongerSentence_IsNotNoPrice()
+    {
+        Assert.False(WalkSites.Autotrader.ReadsAsNoPrice("Used 2021 Toyota Prius\n$21,000\nPlease Contact Dealer For Price details.\n"));
+    }
+
+    [Fact]
+    public void ReadsAsSoldOrNoPrice_SiteWithNoPatterns_IsNeitherWhateverThePageSays()
+    {
+        const string page = "It looks like this Toyota Corolla has already found a new home.\nContact Dealer For Price\n";
+
+        Assert.False(WalkSites.CarsCom.ReadsAsSold(page));
+        Assert.False(WalkSites.CarsCom.ReadsAsNoPrice(page));
+        Assert.False(WalkSites.Carvana.ReadsAsSold(page));
+        Assert.False(WalkSites.Carvana.ReadsAsNoPrice(page));
     }
 }

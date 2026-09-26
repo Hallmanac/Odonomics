@@ -106,6 +106,44 @@ public class WalkPairSummaryLineTests
     }
 
     [Fact]
+    public void DroppedCell_SoldAndNoPriceReasons_AreWordedForWhatHappened()
+    {
+        Assert.Equal("listing sold", WalkPairSummaryLine.DroppedCell(new DroppedBreakdown(0, 0, 0, 0, Sold: 2)));
+        Assert.Equal("no price listed", WalkPairSummaryLine.DroppedCell(new DroppedBreakdown(0, 0, 0, 0, NoPriceListed: 1)));
+        Assert.Equal("listing sold", WalkOutcomeWording.DroppedReason(DetailPageOutcome.Sold));
+        Assert.Equal("no price listed", WalkOutcomeWording.DroppedReason(DetailPageOutcome.NoPriceListed));
+    }
+
+    [Fact]
+    public void Format_SoldAndNoPriceAlongsideTheOtherReasons_NamesEachWithItsOwnCountAndSumsToPages()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 1, NotMatching: 3, Failed: 0, NewCar: 1, Sold: 4, NoPriceListed: 2);
+        int saved = 5;
+
+        string line = WalkPairSummaryLine.Format("autotrader", "Toyota", "Prius", pages: saved + dropped.Total, known: 0, saved, dropped);
+
+        Assert.Equal(
+            "autotrader / Toyota Prius: 18 pages, 0 known from cards, 5 saved, 13 dropped (3 wrong model, 1 new-car listing, 4 listing sold, 2 no price listed, 2 missing fields, 1 no VIN)",
+            line);
+    }
+
+    [Fact]
+    public void TableCell_SoldAndNoPrice_NameEachReasonInTheEndOfRunTable()
+    {
+        Assert.Equal("5 (3 listing sold, 2 no price listed)", WalkPairSummaryLine.TableCell(new DroppedBreakdown(0, 0, 0, 0, Sold: 3, NoPriceListed: 2)));
+    }
+
+    [Fact]
+    public void Plus_SoldAndNoPrice_AddAcrossPairs()
+    {
+        DroppedBreakdown total = new DroppedBreakdown(0, 0, 0, 0, Sold: 1, NoPriceListed: 2).Plus(new DroppedBreakdown(0, 0, 0, 0, Sold: 3, NoPriceListed: 4));
+
+        Assert.Equal(4, total.Sold);
+        Assert.Equal(6, total.NoPriceListed);
+        Assert.Equal(10, total.Total);
+    }
+
+    [Fact]
     public void TableCell_OnlyNewCars_NamesTheReasonWithoutARedundantCount()
     {
         Assert.Equal("11 (new-car listing)", WalkPairSummaryLine.TableCell(new DroppedBreakdown(0, 0, 0, 0, NewCar: 11)));
