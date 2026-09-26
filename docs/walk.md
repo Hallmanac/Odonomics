@@ -126,7 +126,7 @@ cars.com's used search still mixes in new-car cards ("New 2027 Toyota Corolla Hy
 
 ### cars.com
 
-cars.com's model facet lowercases the model name and collapses every run of non-alphanumeric characters to a single underscore, after the make and a hyphen. "Toyota Corolla Hybrid" becomes `models[]=toyota-corolla_hybrid`, and "Honda CR-V Hybrid" becomes `models[]=honda-cr_v_hybrid`. That way the search URL isolates the hybrid model directly. The scenario's minimum model year and maximum mileage go in as the plain `year_min` and `mileage_max` query parameters. cars.com isn't paged, so each search is one page.
+cars.com's model facet lowercases the model name and collapses every run of non-alphanumeric characters to a single underscore, after the make and a hyphen. "Toyota Corolla Hybrid" becomes `models[]=toyota-corolla_hybrid`, and "Honda CR-V Hybrid" becomes `models[]=honda-cr_v_hybrid`. That way the search URL isolates the hybrid model directly. The scenario's minimum model year and maximum mileage go in as the plain `year_min` and `mileage_max` query parameters. Every cars.com search URL also carries `page_size=100`, the largest value of the site's own per-page selector (20, 50, 100), because its used search would otherwise stop at its default page size (walk run 5 saved only 30 Camry Hybrids from the first pages of its two searches). If the live site ignores that parameter, the `page=N` paging alone still covers every result at the default page size.
 
 A model the scenario marks hybrid-only from some year on is searched twice. A base model that went hybrid-only is filed under its own base-model bucket for the years after the cutover, rather than the separate hybrid one, while the years before it stay under the hybrid bucket. So the walk issues one search for the hybrid facet (`models[]=toyota-camry_hybrid`) from the scenario's minimum year. It then issues a second for the base-model facet (`models[]=toyota-camry`) from the hybrid-only year itself, or the scenario's minimum year if that's later, and it visits them in that order.
 
@@ -138,17 +138,19 @@ With `--max`, each search starts with an even share of the cap, and the odd page
 
 The console labels each search page ("search 2 of 2") with its model facet.
 
+cars.com is paged like Carvana (see below), so a pair with more matches than one result page holds is not truncated at its first page. Each of the two searches of a Camry pair pages on its own facets. With `--max`, the per-pair cap is unchanged and the two searches still share it exactly as described above. Of the two extra stop rules Carvana uses, cars.com uses neither yet: its recorded search text states no match count and no "No exact matches" marker is known for it, so its paging ends when the pool is full (only with `--max`) or a page adds no new link.
+
 The card price on a cars.com card is the first dollar amount on it, because its price comes before a price-drop amount, the mileage, and the "Used 2023 ..." title.
 
 ### Carvana
 
 Carvana has no separate hybrid model at all. It filters its base-model search by fuel type instead, and its `cvnaid` query parameter carries a base64url-encoded JSON filter naming the base model plus `"fuelTypes":["Hybrid"]`. The minimum model year and maximum mileage go inside that same JSON as `"year":{"min":N}` (singular, since a `"years"` key is silently ignored) and `"mileage":{"max":N}`. The URL carries the zip and no radius. Because the fuel-type filter matches those listings' actual fuel type regardless of the model name, Carvana never needs a second search.
 
-Carvana is paged. It renders about 21 cards per result page but reports far more cars for the same filters (a hundred for one Prius search). So after collecting a search page's links, the walk requests the same URL with `page=2`, `page=3`, and so on. It keeps going for as long as the candidate pool is below its size (unbounded without `--max`, twice the cap with it) and the last page showed at least one link that hadn't appeared on an earlier page, which counts a car the ledger already holds.
+Carvana is paged, and so is cars.com. Carvana renders about 21 cards per result page but reports far more cars for the same filters (a hundred for one Prius search). So after collecting a search page's links, the walk requests the same URL with `page=2`, `page=3`, and so on. It keeps going for as long as the candidate pool is below its size (unbounded without `--max`, twice the cap with it) and the last page showed at least one link that hadn't appeared on an earlier page, which counts a car the ledger already holds.
 
 Two more rules keep the paging to cars the facets asked for. The first page states how many cars match ("16 cars"), and that count bounds the links the pages contribute in total, taken in page order, even when a page shows a few more results than it states. And a result page that says "No exact matches" contributes no links and ends the paging, because everything after that notice is similar vehicles (other models, or other years and mileages) that the search never asked for. The console says the search ran out of exact matches on that page.
 
-Each page gets the same scroll and dwell as the first, is recorded as its own search text, and is announced on the console ("search page, page 2"). Only the first page is required. If a later page fails to load, the walk prints a warning, stops paging, and goes on with the links it already has rather than failing the pair.
+Each page gets the same scroll and dwell as the first, is recorded as its own search text (see [Recorded pages](#recorded-pages)), and is announced on the console ("search page, page 2", or "search 2 of 2, toyota-camry facet, page 1" for a cars.com pair with two searches). Only the first page is required. If a later page fails to load, the walk prints a warning, stops paging, and goes on with the links it already has rather than failing the pair.
 
 A Carvana card's price is the amount after "Current price:".
 
@@ -176,9 +178,9 @@ Autotrader's card shape hasn't been confirmed from a recorded page (its cards sh
 
 The walk records every page's text under the data directory, in `walks/<site>/<run start in UTC, as yyyyMMdd-HHmmss>/<model>/`, where the model is written in lowercase with hyphens, such as `camry-hybrid`. That keeps each model's pages from colliding with another model's on the same site in one run.
 
-The recorder writes one search text per search page it loads. `search.txt` is the first, and the next ones are `search-2.txt`, `search-3.txt`, and so on, whether they're a pair's second search or a later Carvana result page. The detail pages are numbered straight through the pair (`detail-1.txt` and on), so nothing collides.
+The recorder writes one search text per result page it loads. A pair with one search names its pages `search.txt`, `search-2.txt`, `search-3.txt`, and so on. A pair with two searches names each page by search and page (`search-1-page-1.txt`, `search-1-page-2.txt`, `search-2-page-1.txt`, and so on), so the second search's first page can never overwrite the first search's second page. The detail pages are numbered straight through the pair (`detail-1.txt` and on), so nothing collides there either.
 
-Beside each search text the recorder also writes a cards file, `cards.json` for the first and `cards-2.json` for the second, and so on. It's a list of that search page's detail links, each with its own text and the text of the result card it sits in, so you can cut a fixture from a real page later. The search text itself doesn't change.
+Beside each search text the recorder also writes a cards file named the same way (`cards.json`, `cards-2.json`, `cards-1-page-2.json`, and so on, following each search name above). It's a list of that search page's detail links, each with its own text and the text of the result card it sits in, so you can cut a fixture from a real page later. The search text itself doesn't change.
 
 ## Extraction
 
