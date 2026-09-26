@@ -30,7 +30,7 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
                 string model = Uri.EscapeDataString(query.Model);
                 string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
                              $"?api_key={apiKey}&zip={query.Zip}&radius={query.RadiusMiles}" +
-                             $"&make={query.Make}&model={model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+                             $"&make={query.Make}&model={model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}&car_type=used";
 
                 HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
                 string body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -76,6 +76,7 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
         string? apiModel = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("model", out JsonElement md) ? md.GetString() : null;
         string? trim = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("trim", out JsonElement tr) ? tr.GetString() : null;
         string make = apiMake ?? query.Make;
+        string? inventoryType = listing.TryGetProperty("inventory_type", out JsonElement it) && it.ValueKind == JsonValueKind.String ? it.GetString() : null;
         JsonElement dealerObj = listing.TryGetProperty("dealer", out JsonElement de) ? de : default;
         string? dealerName = dealerObj.ValueKind == JsonValueKind.Object && dealerObj.TryGetProperty("name", out JsonElement dn) ? dn.GetString() : null;
         string? dealerCity = dealerObj.ValueKind == JsonValueKind.Object && dealerObj.TryGetProperty("city", out JsonElement dc) ? dc.GetString() : null;
@@ -84,6 +85,12 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
         if (string.IsNullOrWhiteSpace(vin))
         {
             result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, no VIN");
+            return;
+        }
+
+        if (string.Equals(inventoryType, "new", StringComparison.OrdinalIgnoreCase))
+        {
+            result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, new car ({vin})");
             return;
         }
 
