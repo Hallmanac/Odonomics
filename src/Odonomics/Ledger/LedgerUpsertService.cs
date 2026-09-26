@@ -185,6 +185,26 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>Sets the fee posture and the sum of the fee lines on the postings of <paramref name="source"/> at each URL
+    /// of <paramref name="posturesByUrl"/>, in one save so either every posting's posture lands or none does. This is how a
+    /// known posting touched from its search card (see <see cref="TouchAsync"/>) gets what the card said about the
+    /// fees behind its price without a detail visit, replacing the last sighting's the way an upsert does. A URL that
+    /// matches no posting writes nothing.</summary>
+    public async Task SetCardFeePosturesByUrlAsync(string source, IReadOnlyDictionary<string, (string Posture, decimal? ItemizedTotal)> posturesByUrl, CancellationToken cancellationToken)
+    {
+        string[] urls = [.. posturesByUrl.Keys];
+        List<PostingEntity> postings = await db.Postings
+            .Where(p => p.Source == source && urls.Contains(p.Url))
+            .ToListAsync(cancellationToken);
+
+        foreach (PostingEntity posting in postings)
+        {
+            (posting.FeePosture, posting.ItemizedFeesTotal) = posturesByUrl[posting.Url];
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     private void ApplyAttributes(int postingId, List<PostingAttributeEntity> existing, IReadOnlyDictionary<string, string> attributes, RunEntity run)
     {
         foreach ((string rawName, string rawValue) in attributes)
