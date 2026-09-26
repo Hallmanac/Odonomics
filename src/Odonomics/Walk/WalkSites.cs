@@ -46,7 +46,13 @@ namespace Odonomics.Walk;
 /// is a CSS selector for the element that is one result card, for a site where the nearest ancestor holding
 /// a dollar amount (the default, see <see cref="SearchPageLinks"/>) is not the card. <paramref name="CardBadgeReader"/>
 /// reads the site's own badges off a card's text as display-only posting attributes (see
-/// <see cref="ReadCardBadges"/>); null for a site whose card shape has not been confirmed.</summary>
+/// <see cref="ReadCardBadges"/>); null for a site whose card shape has not been confirmed.
+/// <paramref name="PickupReader"/>
+/// reads the pickup option (where, and at what fee) off a detail page's text for a site that offers one beside
+/// delivery (carvana); null for a site that does not, whose postings store no pickup facts.
+/// <paramref name="LazyDetailBlockMarker"/> is a line of text a detail page prints only once the block the walk
+/// needs has rendered, for a site that renders it lazily, after a scroll (carvana's "Pickup and Delivery"): the
+/// walk keeps scrolling the page until the text carries it (see <see cref="DetailPageScroll"/>).</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -62,7 +68,9 @@ public sealed record WalkSite(
     Regex? ExhaustedSearchPattern = null,
     Func<string, decimal?>? CardPriceReader = null,
     string? CardContainerSelector = null,
-    Func<string, IReadOnlyDictionary<string, string>>? CardBadgeReader = null)
+    Func<string, IReadOnlyDictionary<string, string>>? CardBadgeReader = null,
+    Func<string, PickupOption?>? PickupReader = null,
+    string? LazyDetailBlockMarker = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -139,6 +147,10 @@ public sealed record WalkSite(
     /// <summary>The shipping fee a detail page shows on top of its asking price, or null when this
     /// site prints none or the page carries none.</summary>
     public decimal? ReadShippingFee(string pageText) => ShippingFeeReader?.Invoke(pageText);
+
+    /// <summary>The pickup option a detail page offers, or null when this site offers none or the
+    /// page's block did not render.</summary>
+    public PickupOption? ReadPickup(string pageText) => PickupReader?.Invoke(pageText);
 
     /// <summary>The asking price a result card shows, read off <paramref name="cardText"/> by this
     /// site's <see cref="CardPriceReader"/>, or null when the site has none or the card shows no price
@@ -352,7 +364,11 @@ public static class WalkSites
         // A carvana card names its asking price after "Current price:", and a marked-down one then
         // prints "Original price: was $..." as well, so only the amount after "Current price:" counts.
         CardPriceReader: CardPrices.CarvanaCurrentPrice,
-        CardBadgeReader: CardBadges.Carvana);
+        CardBadgeReader: CardBadges.Carvana,
+        // The delivery block also carries the pickup option, and renders only after the page has been
+        // scrolled about a third of the way down.
+        PickupReader: CarvanaPickup.Read,
+        LazyDetailBlockMarker: CarvanaPickup.BlockHeading);
 
     /// <summary>What a private seller's listing is stored as: one dealer row for every private seller,
     /// with no location, so no individual's name or city enters the ledger and

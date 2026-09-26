@@ -30,4 +30,11 @@ public sealed record ListingCandidate
     /// them as the posting's attributes (see <see cref="PostingAttributeEntity"/>); empty when the
     /// source showed none.</summary>
     public IReadOnlyDictionary<string, string> Attributes { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>What it costs to pick the car up instead of having it delivered, and where, when the
+    /// source's page offers that (only carvana does). Both are null when it shows no pickup option,
+    /// and the fee is 0 when the option prints none.</summary>
+    public decimal? PickupFee { get; init; }
+
+    public string? PickupLocation { get; init; }
 }

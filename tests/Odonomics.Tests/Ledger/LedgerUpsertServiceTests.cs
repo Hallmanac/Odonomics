@@ -14,7 +14,9 @@ public class LedgerUpsertServiceTests
         string source = "auto.dev",
         string? dealerName = null,
         string? dealerLocation = null,
-        decimal? shippingFee = null) => new()
+        decimal? shippingFee = null,
+        decimal? pickupFee = null,
+        string? pickupLocation = null) => new()
     {
         Vin = vin,
         Source = source,
@@ -28,6 +30,8 @@ public class LedgerUpsertServiceTests
         DealerName = dealerName,
         DealerLocation = dealerLocation,
         ShippingFee = shippingFee,
+        PickupFee = pickupFee,
+        PickupLocation = pickupLocation,
     };
 
     private static RunEntity Run(DateTimeOffset startedAt, string command = "search") => new()
@@ -468,5 +472,46 @@ public class LedgerUpsertServiceTests
         await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "carvana"), run2, CancellationToken.None);
 
         Assert.Null(db.Postings.Single().ShippingFee);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_FirstSightingWithAPickupOption_StoresItBesideTheShippingFee()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk carvana");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 17990m, source: "carvana", shippingFee: 990m, pickupFee: 0m, pickupLocation: "Orlando, FL"), run, CancellationToken.None);
+
+        PostingEntity posting = db.Postings.Single();
+        Assert.Equal(990m, posting.ShippingFee);
+        Assert.Equal(0m, posting.PickupFee);
+        Assert.Equal("Orlando, FL", posting.PickupLocation);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_SeenAgainWithABlockThatDidNotRender_ReplacesThePickupOptionWithNullAndKeepsTheShippingFee()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "walk carvana");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 17990m, source: "carvana", shippingFee: 990m, pickupFee: 0m, pickupLocation: "Orlando, FL"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "walk carvana");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 17990m, source: "carvana", shippingFee: 990m), run2, CancellationToken.None);
+
+        PostingEntity posting = db.Postings.Single();
+        Assert.Equal(990m, posting.ShippingFee);
+        Assert.Null(posting.PickupFee);
+        Assert.Null(posting.PickupLocation);
     }
 }

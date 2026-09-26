@@ -261,10 +261,13 @@ public static class WalkCommand
                 detailPage = await BackgroundTabs.OpenAsync(browserCdp, context);
                 await detailPage.GotoAsync(detailUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
                 await CdpConnection.HandleChallengeIfPresentAsync(detailPage, ct);
-                await detailPage.EvaluateAsync("() => window.scrollBy(0, window.innerHeight)");
-                await Task.Delay(pacing.RandomScrollPause(), ct);
-
-                string bodyText = await detailPage.EvaluateAsync<string>("() => document.body.innerText");
+                string bodyText = await DetailPageScroll.ReadAsync(
+                    () => detailPage.EvaluateAsync("() => window.scrollBy(0, window.innerHeight)"),
+                    () => detailPage.EvaluateAsync<string>("() => document.body.innerText"),
+                    pacing.RandomScrollPause,
+                    site.LazyDetailBlockMarker,
+                    pacing.ScrollSteps - 1,
+                    ct);
                 await recorder.WriteAsync($"detail-{i + 1}.txt", bodyText, ct);
 
                 if (site.SkippedCardTitlePattern is not null && NewCarPage.Reads(bodyText))
@@ -313,6 +316,7 @@ public static class WalkCommand
                     return DetailPageOutcome.MissingFields;
                 }
 
+                PickupOption? pickup = site.ReadPickup(bodyText);
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
                 string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
                 var candidate = new ListingCandidate
@@ -343,6 +347,8 @@ public static class WalkCommand
                     DealerNameIsFallback = dealer.IsFallback,
                     ShippingFee = site.ReadShippingFee(bodyText),
                     Attributes = knownTouches.BadgesOfNewLink(canonicalUrl),
+                    PickupFee = pickup?.Fee,
+                    PickupLocation = pickup?.Location,
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);
