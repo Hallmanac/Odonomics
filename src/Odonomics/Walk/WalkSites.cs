@@ -77,7 +77,10 @@ namespace Odonomics.Walk;
 /// result card says about the fees behind its price (cargurus, see <see cref="FeeStatements.ReadCarGurusCard"/>), for a site whose card says
 /// it and whose detail page does not agree with it; when it is set, the card's statement is the one a posting is stored with.
 /// <paramref name="AskingPriceFromCard"/> says the card's price is the one to store, for a site whose card shows what the buyer pays
-/// delivered (cargurus, whose detail page shows the car's price at its lot, shipping not in it).</summary>
+/// delivered (cargurus, whose detail page shows the car's price at its lot, shipping not in it).
+/// <paramref name="DetailDealerReader"/> reads the dealer a detail page names, ahead of the extraction, for a site whose
+/// dealer is one of many stores under a single name that the extraction does not reliably tell from the site itself
+/// (carmax, see <see cref="CarMaxStores"/>); null for a site whose dealer the extraction reads.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -105,7 +108,8 @@ public sealed record WalkSite(
     Regex? SponsoredLinkPattern = null,
     Func<string, string?>? PagingTokenReader = null,
     Func<string, FeeStatement>? CardFeeStatementReader = null,
-    bool AskingPriceFromCard = false)
+    bool AskingPriceFromCard = false,
+    Func<string, ResolvedDealer?>? DetailDealerReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -269,13 +273,25 @@ public sealed record WalkSite(
     /// as a private seller's (see <see cref="PrivateSellerPagePattern"/>, checked against
     /// <paramref name="pageText"/>) is stored with <see cref="WalkSites.PrivateSellerDealerName"/> and
     /// no location instead: the extraction would read a person's name and city off it, and a person is
-    /// not a dealer row. That name is a fact the page states, not a fallback, so it is not flagged as one.</summary>
-    public ResolvedDealer ResolveDealer(string? extractedDealerName, string? extractedDealerLocation, string? pageText = null) =>
-        ReadsAsPrivateSeller(pageText)
-            ? new ResolvedDealer(WalkSites.PrivateSellerDealerName, null, IsFallback: false)
-            : FallbackDealerName is not null && NamesNoDealerBeyondTheSite(extractedDealerName)
-                ? new ResolvedDealer(FallbackDealerName, null, IsFallback: true)
-                : new ResolvedDealer(ResolveDealerName(extractedDealerName), extractedDealerLocation, IsFallback: false);
+    /// not a dealer row. That name is a fact the page states, not a fallback, so it is not flagged as one.
+    /// A store the site's <see cref="DetailDealerReader"/> finds in <paramref name="pageText"/> is the dealer, whatever
+    /// extraction returned, and is not a fallback either.</summary>
+    public ResolvedDealer ResolveDealer(string? extractedDealerName, string? extractedDealerLocation, string? pageText = null)
+    {
+        if (ReadsAsPrivateSeller(pageText))
+        {
+            return new ResolvedDealer(WalkSites.PrivateSellerDealerName, null, IsFallback: false);
+        }
+
+        if (pageText is not null && DetailDealerReader?.Invoke(pageText) is { } pageDealer)
+        {
+            return pageDealer;
+        }
+
+        return FallbackDealerName is not null && NamesNoDealerBeyondTheSite(extractedDealerName)
+            ? new ResolvedDealer(FallbackDealerName, null, IsFallback: true)
+            : new ResolvedDealer(ResolveDealerName(extractedDealerName), extractedDealerLocation, IsFallback: false);
+    }
 
     private bool ReadsAsPrivateSeller(string? pageText) =>
         PrivateSellerPagePattern is not null && pageText is not null && PrivateSellerPagePattern.IsMatch(pageText);
@@ -550,6 +566,7 @@ public static class WalkSites
         MatchCountPattern: new Regex(@"(?<!Show\s)(?<![\d,])(\d[\d,]*)\s+match(?:es)?\b", RegexOptions.IgnoreCase),
         CardFeeReader: CarMaxCards.ReadFee,
         DetailHtmlVinReader: CarMaxVin.Read,
+        DetailDealerReader: CarMaxStores.Read,
         LoadMoreControlPattern: new Regex(@"^\s*Show\s+\d+\s+match(?:es)?\s*$", RegexOptions.IgnoreCase));
 
     /// <summary>CarGurus: a marketplace of dealers' cars, searched by the ids CarGurus gives the make and model (see
