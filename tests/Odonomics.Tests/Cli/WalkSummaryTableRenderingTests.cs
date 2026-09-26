@@ -156,4 +156,18 @@ public class WalkSummaryTableRenderingTests
         Assert.Contains("capped", Assert.Single(lines, l => l.Contains("Camry Hybrid")));
         Assert.DoesNotContain("capped", Assert.Single(lines, l => l.Contains("Prius")));
     }
+
+    [Fact]
+    public void BuildSummaryTable_APairWhoseLaterPageFailed_ShowsUnreadInItsStatusColumn()
+    {
+        List<WalkPairSummary> summaries =
+        [
+            new("carvana", "Toyota Camry Hybrid", 30, 30, new DroppedBreakdown(0, 0, 0, 0), Completed: true, FailedPage: 3),
+            new("carvana", "Toyota Prius", 5, 5, new DroppedBreakdown(0, 0, 0, 0), Completed: true),
+        ];
+        string[] lines = Render(summaries);
+
+        Assert.Contains("unread", Assert.Single(lines, l => l.Contains("Camry Hybrid")));
+        Assert.DoesNotContain("unread", Assert.Single(lines, l => l.Contains("Prius")));
+    }
 }

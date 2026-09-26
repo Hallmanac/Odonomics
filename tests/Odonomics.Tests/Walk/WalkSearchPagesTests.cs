@@ -391,6 +391,35 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
+    public async Task Carvana_AThirdPageThatFails_ReportsPageThreeKeepsTwoPagesOfLinksAndDoesNotReportACap()
+    {
+        var pages = new Dictionary<int, List<PageLink>>
+        {
+            [1] = CarvanaCards("a", 21),
+            [2] = CarvanaCards("b", 21),
+        };
+        List<int> failedPages = [];
+        int capped = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.Carvana,
+            CarvanaSearch,
+            WalkPairSearches.UnboundedPool,
+            NoneKnown,
+            (_, pageNumber, _) => pageNumber < 3
+                ? Task.FromResult(new SearchPageContent(pages[pageNumber]))
+                : throw new TimeoutException("page 3 timed out"),
+            (pageNumber, _) => failedPages.Add(pageNumber),
+            _ => { },
+            () => capped++,
+            CancellationToken.None);
+
+        Assert.Equal(42, pool.Count);
+        Assert.Equal([3], failedPages);
+        Assert.Equal(0, capped);
+    }
+
+    [Fact]
     public async Task Carvana_AFailingFirstPageStillFailsTheSearch()
     {
         await Assert.ThrowsAsync<TimeoutException>(() => WalkSearchPages.CollectLinksAsync(
