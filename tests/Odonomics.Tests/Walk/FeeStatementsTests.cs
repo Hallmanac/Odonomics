@@ -90,53 +90,57 @@ public class FeeStatementsTests
     }
 
     [Fact]
-    public void ForAskingPrice_AllInPageWhoseStoredPriceIsTheListingPrice_IsItemizedBecauseTheFeesAreNotInIt()
+    public void ReconciledWith_AllInPageWhoseExtractedPriceIsTheListingPrice_StoresTheTotalAndStaysAllIn()
     {
         FeeStatement statement = FeeStatements.ReadAutotrader(Fixture("autotrader-detail-fees-included.txt"));
 
-        FeeStatement corrected = statement.ForAskingPrice(25664m);
+        (FeeStatement corrected, decimal askingPrice) = statement.ReconciledWith(25664m);
 
-        Assert.Equal(FeePostures.Itemized, corrected.Posture);
-        Assert.Equal(598m + 1298m + 189m, corrected.ItemizedTotal);
+        Assert.Equal(statement, corrected);
+        Assert.Equal(FeePostures.AllIn, corrected.Posture);
+        Assert.Equal(27749m, askingPrice);
     }
 
     [Fact]
-    public void ForAskingPrice_AllInPageWhoseStoredPriceIsTheTotal_StaysAllIn()
+    public void ReconciledWith_AllInPageWhoseExtractedPriceIsTheTotal_ChangesNothing()
     {
         FeeStatement statement = FeeStatements.ReadAutotrader(Fixture("autotrader-detail-fees-included.txt"));
 
-        Assert.Equal(statement, statement.ForAskingPrice(27749m));
+        Assert.Equal((statement, 27749m), statement.ReconciledWith(27749m));
     }
 
     [Fact]
-    public void ForAskingPrice_ItemizedPageWhoseStoredPriceIsTheTotal_IsAllInSoTheFeesAreNotCountedTwice()
+    public void ReconciledWith_ItemizedPageWhoseExtractedPriceIsTheTotal_IsAllInSoTheFeesAreNotCountedTwice()
     {
         string page = WithoutLines(Fixture("autotrader-detail-fees-included.txt"), "Dealer Fees Included");
         FeeStatement statement = FeeStatements.ReadAutotrader(page);
         Assert.Equal(FeePostures.Itemized, statement.Posture);
 
-        FeeStatement corrected = statement.ForAskingPrice(27749m);
+        (FeeStatement corrected, decimal askingPrice) = statement.ReconciledWith(27749m);
 
         Assert.Equal(FeePostures.AllIn, corrected.Posture);
         Assert.Equal(598m + 1298m + 189m, corrected.ItemizedTotal);
-        Assert.Equal(FeePostures.Itemized, statement.ForAskingPrice(25664m).Posture);
+        Assert.Equal(27749m, askingPrice);
+        Assert.Equal((statement, 25664m), statement.ReconciledWith(25664m));
     }
 
     [Fact]
-    public void ForAskingPrice_StoredPriceMatchingNeitherFigure_OrNoStoredPrice_LeavesTheReadingAlone()
+    public void ReconciledWith_ExtractedPriceMatchingNeitherFigure_LeavesTheReadingAndThePriceAlone()
     {
         FeeStatement statement = FeeStatements.ReadAutotrader(Fixture("autotrader-detail-fees-included.txt"));
 
-        Assert.Equal(statement, statement.ForAskingPrice(26000m));
-        Assert.Equal(statement, statement.ForAskingPrice(null));
+        Assert.Equal((statement, 26000m), statement.ReconciledWith(26000m));
     }
 
     [Fact]
-    public void ForAskingPrice_CarsComBreakdownWhoseStoredPriceIsTheVehiclePrice_IsItemized()
+    public void ReconciledWith_CarsComBreakdownWhoseExtractedPriceIsTheVehiclePrice_StoresTheAllInTotalSoACardTouchCannotDoubleCountTheFees()
     {
         FeeStatement statement = FeeStatements.ReadCarsCom(Fixture("carscom-detail-price-breakdown.txt"));
 
-        Assert.Equal(FeePostures.Itemized, statement.ForAskingPrice(statement.ListingPrice).Posture);
+        (FeeStatement corrected, decimal askingPrice) = statement.ReconciledWith(statement.ListingPrice!.Value);
+
+        Assert.Equal(FeePostures.AllIn, corrected.Posture);
+        Assert.Equal(statement.TotalPrice, askingPrice);
     }
 
     [Fact]

@@ -333,7 +333,13 @@ public static class WalkCommand
                 PickupOption? pickup = site.ReadPickup(bodyText);
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
                 string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
-                FeeStatement? feeStatement = site.ReadFeeStatement(bodyText)?.ForAskingPrice(outcome.Result.Price);
+                FeeStatement? feeStatement = null;
+                decimal askingPrice = outcome.Result.Price.Value;
+                if (site.ReadFeeStatement(bodyText) is FeeStatement readStatement)
+                {
+                    (feeStatement, askingPrice) = readStatement.ReconciledWith(askingPrice);
+                }
+
                 var candidate = new ListingCandidate
                 {
                     Vin = outcome.Result.Vin,
@@ -355,7 +361,7 @@ public static class WalkCommand
                     // "Insight EX").
                     Model = model,
                     Trim = outcome.Result.Trim,
-                    Price = outcome.Result.Price.Value,
+                    Price = askingPrice,
                     Mileage = outcome.Result.Mileage.Value,
                     DealerName = dealer.Name,
                     DealerLocation = dealer.Location,
