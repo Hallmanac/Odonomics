@@ -107,4 +107,44 @@ public class VehiclePricingTests
     {
         Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(Vehicle(), NoCoverage));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(999)]
+    public void LowestCurrentPrice_PostingBelowThePlaceholderFloor_IsIgnoredSoARealPostingWins(int placeholder)
+    {
+        VehicleEntity vehicle = Vehicle(
+            Posting("auto.dev", placeholder),
+            Posting("cars.com", 17000m));
+
+        Assert.Equal(17000m, VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage));
+        Assert.Equal(new PurchasePrice(17000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void LowestCurrentPrice_OnlyActivePostingBelowTheFloor_ReportsNoCurrentPriceLikeNoActivePosting()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("auto.dev", 0m, shippingFee: 500m));
+
+        Assert.Null(VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void LowestCurrentPrice_PostingAtTheFloor_StillCounts()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("auto.dev", PlaceholderPrice.Floor));
+
+        Assert.Equal(PlaceholderPrice.Floor, VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void LowestCurrentPrice_PostingWhoseLatestObservationIsBelowTheFloor_DoesNotFallBackToAnOlderPrice()
+    {
+        PostingEntity posting = Posting("auto.dev", 17000m);
+        posting.PriceObservations.Add(new PriceObservationEntity { PostingId = 0, Price = 0m, ObservedAt = RunTime.AddDays(1) });
+
+        Assert.Null(VehiclePricing.LowestCurrentPrice(Vehicle(posting), NoCoverage));
+    }
 }
