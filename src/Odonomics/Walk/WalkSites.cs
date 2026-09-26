@@ -11,7 +11,7 @@ namespace Odonomics.Walk;
 /// <see cref="Odonomics.Walk.DetailPageOutcome.Repeat"/> or <see cref="Odonomics.Walk.DetailPageOutcome.NotMatching"/>
 /// (the latter now also expected for cars.com's base-model bucket on a hybrid-only-from-year
 /// model, see <see cref="ListingQuery.HybridOnlyFromModelYear"/>) needs a spare
-/// link to replace it with rather than shortening the pair; see README.md's walk section for the
+/// link to replace it with rather than shortening the pair; see docs/walk.md for the
 /// full reasoning. <paramref name="BuildSearchUrls"/> takes the scenario-derived
 /// <see cref="ListingQuery"/> for one model and returns the one or more search URLs the walk visits
 /// for it, in order, sharing the per-pair cap (see <see cref="WalkPairSearches"/>); the query carries
