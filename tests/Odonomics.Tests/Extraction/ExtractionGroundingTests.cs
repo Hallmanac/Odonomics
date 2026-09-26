@@ -95,4 +95,34 @@ public class ExtractionGroundingTests
         Assert.Equal("Holler Honda", grounded.DealerName);
         Assert.Equal("Winter Park, FL", grounded.DealerLocation);
     }
+
+    [Fact]
+    public void GroundInPageText_CarMaxDetailFixtureStatingMileageInThousands_KeepsTheFullMileage()
+    {
+        string pageText = File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", "carmax-detail-29085801.txt"));
+        var extracted = new ExtractionResult(null, 2022, "Toyota", "Prius", "LE", 24998m, 38000, "CarMax Orlando", null);
+
+        ExtractionResult grounded = GroundInPageText(extracted, pageText);
+
+        Assert.Equal(38000, grounded.Mileage);
+        Assert.Equal(24998m, grounded.Price);
+    }
+
+    [Theory]
+    [InlineData(38000, "38K miles", true)]
+    [InlineData(38412, "38K miles", true)]
+    [InlineData(37600, "38k mi", true)]
+    [InlineData(38500, "38.5K miles", true)]
+    [InlineData(38, "38K miles", false)]
+    [InlineData(45000, "38K miles", false)]
+    [InlineData(38000, "Save up to $38K on a new one", false)]
+    [InlineData(38000, "Stock 38K", false)]
+    public void GroundInPageText_ThousandsShorthandMileage_GroundsOnlyAMileageWithinItsRounding(int mileage, string statedOnPage, bool kept)
+    {
+        var extracted = new ExtractionResult(null, 2022, "Toyota", "Prius", null, null, mileage, null, null);
+
+        ExtractionResult grounded = GroundInPageText(extracted, $"2022 Toyota Prius LE {statedOnPage}");
+
+        Assert.Equal(kept ? mileage : null, grounded.Mileage);
+    }
 }
