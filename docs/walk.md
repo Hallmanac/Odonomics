@@ -99,9 +99,14 @@ Every row under "Gone" ends with a short reason, so a car the walk simply no lon
 - "below year facet" when the vehicle's year is under the scenario's minimum for its model.
 - "over mileage" when its mileage is over the scenario's maximum.
 - "search moved" when this run's zip or radius differs from those of the run that last saw the posting.
+- "beyond the cap" when an explicit `--max` stopped the pair before the site ran out of results (see below).
 - "not on search page" otherwise.
 
 Only that last reason suggests the car may have left the market. A run recorded before the ledger kept its zip and radius is never treated as a moved search.
+
+A pair is capped when `--max` ended its link collection with results still unread, or left collected links unvisited. Results were still unread when the pool of links filled while the site had more, or when a search page held a new link the full pool had no room for. A pair whose pages were exhausted is never capped, even when it filled the cap exactly.
+
+A capped pair still counts as covered, so a car it did reach is kept current as usual. It is also stamped as partial coverage, with a `capped:` token beside its `source:model` one in the run's sources. A posting of that pair the run did not touch is listed as "beyond the cap" rather than "not on search page", because the walk never looked for it and nothing says it sold. When any rows are beyond the cap, the heading says how many, for example "Gone (33, 20 beyond the cap)". The pair's own summary line ends with ", capped", and its Status in the end-of-run table reads "capped".
 
 ## Rules every site shares
 
