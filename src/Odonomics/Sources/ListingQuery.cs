@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Odonomics.Domain;
 
 namespace Odonomics.Sources;
@@ -57,6 +58,40 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
 
         return HybridOnlyFromModelYear is int hybridYear && year is int candidateYear && candidateYear >= hybridYear;
     }
+
+    /// <summary>The walk's own version of <see cref="MatchesExtractedVehicle"/>, which also has the
+    /// page text to hand. A hybrid query accepts a page whose extraction split the title into a
+    /// base model plus trim (model "Corolla", trim "LE") when the page's own title line still reads
+    /// "&lt;year&gt; &lt;make&gt; &lt;base model&gt; Hybrid": the extraction model sometimes drops the
+    /// variant word even though the title prints it, and the page is a real Corolla Hybrid all the
+    /// same. Only the title line counts, so a gas page that merely mentions a hybrid elsewhere (a
+    /// similar-vehicles card, a review question) is still rejected. The API sources never call
+    /// this; they have no page text.</summary>
+    public bool MatchesWalkedPage(string? make, string? model, string? trim, int? year, string pageText) =>
+        MatchesExtractedVehicle(make, model, trim, year) || TitleNamesHybrid(make, model, trim, year, pageText);
+
+    private bool TitleNamesHybrid(string? make, string? model, string? trim, int? year, string pageText)
+    {
+        if (!IsHybridVariant || year is not int titleYear || !MatchesMakeAndBaseModel(make, model, trim))
+        {
+            return false;
+        }
+
+        string? title = pageText
+            .Split('\n', StringSplitOptions.TrimEntries)
+            .FirstOrDefault(line => TitleLine.IsMatch(line));
+
+        return title is not null
+            && Regex.IsMatch(
+                title,
+                $@"^(?:(?:New|Used|Certified|Price Drop)\s+)*{titleYear}\s+{Regex.Escape(Make)}\s+{Regex.Escape(BaseModelName)}\s+Hybrid\b",
+                RegexOptions.IgnoreCase);
+    }
+
+    /// <summary>The first line of a page that starts a vehicle title: a year, optionally behind a
+    /// condition or price-drop badge. Same idea as <see cref="Walk.NewCarPage"/>'s title line, so a
+    /// "Similar vehicles" card further down never decides it.</summary>
+    private static readonly Regex TitleLine = new(@"^(?:(?:New|Used|Certified|Price Drop)\s+)*\d{4}\s", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>The year this query's hybrid-only rule takes effect, when a candidate otherwise
     /// matches this query's make and base model but falls below it: lets the walk explain a
