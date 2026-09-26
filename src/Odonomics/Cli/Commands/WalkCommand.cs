@@ -333,6 +333,7 @@ public static class WalkCommand
                 PickupOption? pickup = site.ReadPickup(bodyText);
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
                 string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
+                FeeStatement? feeStatement = site.ReadFeeStatement(bodyText);
                 var candidate = new ListingCandidate
                 {
                     Vin = outcome.Result.Vin,
@@ -363,6 +364,8 @@ public static class WalkCommand
                     Attributes = knownTouches.BadgesOfNewLink(canonicalUrl),
                     PickupFee = pickup?.Fee,
                     PickupLocation = pickup?.Location,
+                    FeePosture = feeStatement?.Posture,
+                    ItemizedFeesTotal = feeStatement?.ItemizedTotal,
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);

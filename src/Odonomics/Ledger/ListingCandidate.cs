@@ -37,4 +37,12 @@ public sealed record ListingCandidate
     public decimal? PickupFee { get; init; }
 
     public string? PickupLocation { get; init; }
+
+    /// <summary>How the source's page says the price relates to the dealer's fees, one of the
+    /// <see cref="FeePostures"/> strings: null when no reader for the source ran (carvana).</summary>
+    public string? FeePosture { get; init; }
+
+    /// <summary>The sum of the fee lines the page itemized on top of <see cref="Price"/>, when
+    /// <see cref="FeePosture"/> is itemized; null otherwise.</summary>
+    public decimal? ItemizedFeesTotal { get; init; }
 }

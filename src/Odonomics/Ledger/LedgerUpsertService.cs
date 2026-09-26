@@ -13,7 +13,7 @@ public sealed record TouchOutcome(int Found, int PriceChanged);
 /// Upsert semantics: a vehicle seen again updates its last-known year/make/model/trim/mileage and
 /// LastSeen; a posting seen again updates LastSeen and appends a PriceObservation only when the
 /// price actually changed (or this is the posting's first sighting), and takes the candidate's
-/// shipping fee and pickup option as the posting's latest, and sets any display-only attributes the
+/// shipping fee, pickup option and fee statement as the posting's latest, and sets any display-only attributes the
 /// candidate carries. Nothing is ever deleted. A posting can also be touched without a detail visit
 /// (see <see cref="TouchAsync"/>), from a search page's result card alone.
 /// </summary>
@@ -98,6 +98,8 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         // The latest sighting's fee replaces the last one, unlike the dealer link above: a fee is
         // per car and per buyer zip, so an older figure is stale rather than more informative.
         posting.ShippingFee = candidate.ShippingFee;
+        posting.FeePosture = candidate.FeePosture;
+        posting.ItemizedFeesTotal = candidate.ItemizedFeesTotal;
 
         // The pickup option is replaced the same way, for the same reason, and so is a page whose
         // block did not render: it leaves both null rather than keeping a figure from another day.
@@ -222,8 +224,8 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     /// it is treated as unknown. A posting whose latest observation already carries the run's StartedAt (a
     /// detail visit this run recorded it) gets no card observation, since the detail page's price is the
     /// firmer reading and two observations at one instant would leave "latest" to row order. Everything
-    /// else about a posting stays as the last detail visit left it: its dealer, its shipping fee, its pickup option, and its
-    /// vehicle row. A URL that matches no posting writes nothing and is not counted in
+    /// else about a posting stays as the last detail visit left it: its dealer, its shipping fee, its pickup option, its fee
+    /// posture, and its vehicle row. A URL that matches no posting writes nothing and is not counted in
     /// <see cref="TouchOutcome.Found"/>.</summary>
     public async Task<TouchOutcome> TouchAsync(string source, IReadOnlyDictionary<string, decimal?> cardPricesByUrl, RunEntity run, CancellationToken cancellationToken)
     {

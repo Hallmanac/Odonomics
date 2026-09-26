@@ -58,7 +58,10 @@ namespace Odonomics.Walk;
 /// (autotrader's "Contact Dealer For Price"); a page either one matches is dropped before extraction as
 /// <see cref="DetailPageOutcome.Sold"/> or <see cref="DetailPageOutcome.NoPriceListed"/> (see
 /// <see cref="ReadsAsSold"/>). Null for a site whose wording has not been confirmed from a recorded page, whose
-/// such pages are then dropped for whatever the extraction makes of them.</summary>
+/// such pages are then dropped for whatever the extraction makes of them.
+/// <paramref name="FeeStatementReader"/> reads what a detail page says about the dealer fees behind its price
+/// (see <see cref="FeeStatements"/>); null for a site whose dealers do not add fees to the price (carvana),
+/// whose postings then store no fee posture.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -78,7 +81,8 @@ public sealed record WalkSite(
     Func<string, PickupOption?>? PickupReader = null,
     string? LazyDetailBlockMarker = null,
     Regex? SoldPagePattern = null,
-    Regex? NoPricePagePattern = null)
+    Regex? NoPricePagePattern = null,
+    Func<string, FeeStatement>? FeeStatementReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -168,6 +172,11 @@ public sealed record WalkSite(
     /// <summary>The pickup option a detail page offers, or null when this site offers none or the
     /// page's block did not render.</summary>
     public PickupOption? ReadPickup(string pageText) => PickupReader?.Invoke(pageText);
+
+    /// <summary>What a detail page says about its dealer fees, or null when this site has no
+    /// <see cref="FeeStatementReader"/>, so a posting from it keeps a null fee posture ("never
+    /// read") and is never mistaken for an unknown one.</summary>
+    public FeeStatement? ReadFeeStatement(string pageText) => FeeStatementReader?.Invoke(pageText);
 
     /// <summary>The asking price a result card shows, read off <paramref name="cardText"/> by this
     /// site's <see cref="CardPriceReader"/>, or null when the site has none or the card shows no price
@@ -342,7 +351,8 @@ public static class WalkSites
         // cars.com pages with a plain page=N on the same URL. A page holds about thirty cards, and the
         // site ignores a page_size parameter, so the search URL carries none.
         PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}",
-        CardBadgeReader: CardBadges.CarsCom);
+        CardBadgeReader: CardBadges.CarsCom,
+        FeeStatementReader: FeeStatements.ReadCarsCom);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
@@ -432,7 +442,8 @@ public static class WalkSites
         NoPricePagePattern: new Regex(
             @"\A(?:(?!^\s*View similar vehicles\s*$)[\s\S])*^\s*Contact Dealer For Price\s*$",
             RegexOptions.IgnoreCase | RegexOptions.Multiline),
-        CardBadgeReader: CardBadges.Autotrader);
+        CardBadgeReader: CardBadges.Autotrader,
+        FeeStatementReader: FeeStatements.ReadAutotrader);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
