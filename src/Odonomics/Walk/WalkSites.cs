@@ -286,11 +286,6 @@ public static class WalkSites
         return base64.Replace('+', '-').Replace('/', '_').TrimEnd('=');
     }
 
-    /// <summary>The largest value of cars.com's own per-page selector (20, 50, 100), which every
-    /// cars.com search URL asks for as page_size. A site that ignored it would still be covered by
-    /// the page=N paging at its default page size.</summary>
-    private const int CarsComPageSize = 100;
-
     public static readonly WalkSite CarsCom = new(
         "cars.com",
         query =>
@@ -300,7 +295,7 @@ public static class WalkSites
             string SearchUrl(string modelSlug, int yearMin) =>
                 $"https://www.cars.com/shopping/results/?stock_type=used&makes[]={makeSlug}" +
                 $"&models[]={modelSlug}&zip={query.Zip}&maximum_distance={query.RadiusMiles}" +
-                $"&year_min={yearMin}&mileage_max={query.MaxMileage}&page_size={CarsComPageSize}";
+                $"&year_min={yearMin}&mileage_max={query.MaxMileage}";
 
             return query.HybridOnlyFromModelYear is int hybridOnlyYear
                 ? [
@@ -315,8 +310,8 @@ public static class WalkSites
         // A cars.com card reads its asking price first, then a price-drop amount when it has one, then
         // mileage, then the "Used <year> ..." title, so the first dollar amount is the price.
         CardPriceReader: CardPrices.FirstDollarAmount,
-        // cars.com pages with a plain page=N on the same URL, and each search asks for the largest
-        // page size its per-page selector offers so a search takes as few page loads as it can.
+        // cars.com pages with a plain page=N on the same URL. A page holds about thirty cards, and the
+        // site ignores a page_size parameter, so the search URL carries none.
         PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}",
         CardBadgeReader: CardBadges.CarsCom);
 

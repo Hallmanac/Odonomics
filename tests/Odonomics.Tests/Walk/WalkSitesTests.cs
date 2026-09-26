@@ -19,7 +19,7 @@ public class WalkSitesTests
         string url = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Corolla")).Single();
 
         Assert.Equal(
-            "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla&zip=32114&maximum_distance=50&year_min=2019&mileage_max=100000&page_size=100",
+            "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla&zip=32114&maximum_distance=50&year_min=2019&mileage_max=100000",
             url);
     }
 
@@ -32,7 +32,7 @@ public class WalkSitesTests
 
         Assert.Equal(first + "&page=2", second);
         Assert.Equal(
-            "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla&zip=32114&maximum_distance=50&year_min=2019&mileage_max=100000&page_size=100&page=3",
+            "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla&zip=32114&maximum_distance=50&year_min=2019&mileage_max=100000&page=3",
             WalkSites.CarsCom.PagedSearchUrl!(first, 3));
     }
 
@@ -44,8 +44,8 @@ public class WalkSitesTests
 
         Assert.Equal(
             [
-                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry_hybrid&zip=32833&maximum_distance=50&year_min=2018&mileage_max=100000&page_size=100&page=2",
-                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry&zip=32833&maximum_distance=50&year_min=2025&mileage_max=100000&page_size=100&page=2",
+                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry_hybrid&zip=32833&maximum_distance=50&year_min=2018&mileage_max=100000&page=2",
+                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry&zip=32833&maximum_distance=50&year_min=2025&mileage_max=100000&page=2",
             ],
             [.. urls.Select(url => WalkSites.CarsCom.PagedSearchUrl!(url, 2))]);
     }
@@ -58,7 +58,7 @@ public class WalkSitesTests
         string url = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Corolla Hybrid", zip: "32833")).Single();
 
         Assert.Equal(
-            "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla_hybrid&zip=32833&maximum_distance=50&year_min=2019&mileage_max=100000&page_size=100",
+            "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla_hybrid&zip=32833&maximum_distance=50&year_min=2019&mileage_max=100000",
             url);
     }
 
@@ -120,8 +120,8 @@ public class WalkSitesTests
 
         Assert.Equal(
             [
-                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry_hybrid&zip=32833&maximum_distance=50&year_min=2018&mileage_max=100000&page_size=100",
-                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry&zip=32833&maximum_distance=50&year_min=2025&mileage_max=100000&page_size=100",
+                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry_hybrid&zip=32833&maximum_distance=50&year_min=2018&mileage_max=100000",
+                "https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-camry&zip=32833&maximum_distance=50&year_min=2025&mileage_max=100000",
             ],
             urls);
     }
@@ -141,7 +141,7 @@ public class WalkSitesTests
         IReadOnlyList<string> urls = WalkSites.CarsCom.BuildSearchUrls(Query("Toyota", "Corolla Hybrid", zip: "32833"));
 
         Assert.Equal(
-            ["https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla_hybrid&zip=32833&maximum_distance=50&year_min=2019&mileage_max=100000&page_size=100"],
+            ["https://www.cars.com/shopping/results/?stock_type=used&makes[]=toyota&models[]=toyota-corolla_hybrid&zip=32833&maximum_distance=50&year_min=2019&mileage_max=100000"],
             urls);
     }
 
@@ -232,9 +232,9 @@ public class WalkSitesTests
         string prius = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Prius")).Single();
         IReadOnlyList<string> camry = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Camry Hybrid"));
 
-        Assert.EndsWith("&year_min=2019&mileage_max=100000&page_size=100", prius);
-        Assert.EndsWith("&year_min=2018&mileage_max=100000&page_size=100", camry[0]);
-        Assert.EndsWith("&year_min=2025&mileage_max=100000&page_size=100", camry[1]);
+        Assert.EndsWith("&year_min=2019&mileage_max=100000", prius);
+        Assert.EndsWith("&year_min=2018&mileage_max=100000", camry[0]);
+        Assert.EndsWith("&year_min=2025&mileage_max=100000", camry[1]);
     }
 
     [Fact]
@@ -254,9 +254,9 @@ public class WalkSitesTests
         string prius = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Prius")).Single();
         IReadOnlyList<string> camry = WalkSites.CarsCom.BuildSearchUrls(ListingQuery.For(scenario, "Toyota Camry Hybrid"));
 
-        Assert.EndsWith("&year_min=2021&mileage_max=65000&page_size=100", prius);
-        Assert.EndsWith("&year_min=2020&mileage_max=65000&page_size=100", camry[0]);
-        Assert.EndsWith("&year_min=2025&mileage_max=65000&page_size=100", camry[1]);
+        Assert.EndsWith("&year_min=2021&mileage_max=65000", prius);
+        Assert.EndsWith("&year_min=2020&mileage_max=65000", camry[0]);
+        Assert.EndsWith("&year_min=2025&mileage_max=65000", camry[1]);
     }
 
     [Fact]
