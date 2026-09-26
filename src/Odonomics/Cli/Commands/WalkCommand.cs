@@ -271,6 +271,8 @@ public static class WalkCommand
                     return DetailPageOutcome.ExtractionFailed;
                 }
 
+                AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: read {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}, fuel type {outcome.Result.FuelType ?? "not stated"}[/]");
+
                 if (string.IsNullOrWhiteSpace(outcome.Result.Vin))
                 {
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NoVin)} found on the page[/]");
@@ -290,7 +292,8 @@ public static class WalkCommand
                         ? string.IsNullOrWhiteSpace(outcome.Result.Trim)
                             ? $"{outcome.Result.Year} {outcome.Result.Model}, gas-only before {hybridYear}"
                             : $"{outcome.Result.Year} {outcome.Result.Model} {outcome.Result.Trim}, gas-only before {hybridYear}"
-                        : $"doesn't match {make} {model}: {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}";
+                        : $"doesn't match {make} {model}: {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}"
+                            + (query.IsHybridVariant ? "; no Hybrid in title, trim, or spec line" : "");
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NotMatching)} ({detail})[/]");
                     return DetailPageOutcome.NotMatching;
                 }
