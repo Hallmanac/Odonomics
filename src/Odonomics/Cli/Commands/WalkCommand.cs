@@ -192,17 +192,14 @@ public static class WalkCommand
         IReadOnlyList<string> searchUrls = site.BuildSearchUrls(query);
         KnownCardTouches knownTouches = await KnownCardTouches.LoadAsync(upsertService, site.Name, currentRun, revisit, cancellationToken);
 
-        // Counts every search page the pair records, across searches and result pages alike, so
-        // each one lands in its own search.txt / search-2.txt / ... and none overwrites another.
-        int searchPagesRecorded = 0;
-
         // Set when a search's link collection stopped with the site's results not all read because
         // the pool was full (see WalkSearchPages); the pair's coverage is then recorded as partial.
         bool linkCollectionCapped = false;
 
-        async Task<SearchPageContent> LoadSearchPageAsync(string pageUrl, string searchLabel, int pageNumber, CancellationToken ct)
+        async Task<SearchPageContent> LoadSearchPageAsync(string pageUrl, string searchLabel, int searchIndex, int pageNumber, CancellationToken ct)
         {
-            string pageLabel = pageNumber > 1 ? $"{searchLabel}, page {pageNumber}" : searchLabel;
+            // A pair with several searches always names the page too, so the line says which search page it is.
+            string pageLabel = pageNumber > 1 || searchUrls.Count > 1 ? $"{searchLabel}, page {pageNumber}" : searchLabel;
             AnsiConsole.MarkupLineInterpolated($"opening {pageLabel} for {make} {model} on {site.Name}");
             await page.GotoAsync(pageUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await CdpConnection.HandleChallengeIfPresentAsync(page, ct);
@@ -213,11 +210,10 @@ public static class WalkCommand
             await Task.Delay(dwell, ct);
 
             string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
-            int searchPageIndex = searchPagesRecorded++;
-            await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchPageIndex), searchBodyText, ct);
+            await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchIndex, pageNumber, searchUrls.Count), searchBodyText, ct);
 
             IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync((script, arg) => page.EvaluateAsync<string[][]>(script, arg), site);
-            await recorder.WriteAsync(WalkPairSearches.CardsFileName(searchPageIndex), SearchPageLinks.CardsJson(site, links), ct);
+            await recorder.WriteAsync(WalkPairSearches.CardsFileName(searchIndex, pageNumber, searchUrls.Count), SearchPageLinks.CardsJson(site, links), ct);
             return new SearchPageContent(links, searchBodyText);
         }
 
@@ -231,7 +227,7 @@ public static class WalkCommand
                 searchUrl,
                 linkPoolSize,
                 knownTouches.TryTouchAsync,
-                (pageUrl, pageNumber, pageCt) => LoadSearchPageAsync(pageUrl, searchLabel, pageNumber, pageCt),
+                (pageUrl, pageNumber, pageCt) => LoadSearchPageAsync(pageUrl, searchLabel, searchIndex, pageNumber, pageCt),
                 (pageNumber, ex) => AnsiConsole.MarkupLineInterpolated($"[yellow]{searchLabel}, page {pageNumber} failed to load, so paging stops there ({ex.Message})[/]"),
                 pageNumber => AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: the search ran out of exact matches, so paging stops there"),
                 () => linkCollectionCapped = true,
