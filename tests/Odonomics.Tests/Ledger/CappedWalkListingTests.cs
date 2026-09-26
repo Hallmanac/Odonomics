@@ -68,7 +68,7 @@ public class CappedWalkListingTests
 
     private static Score ScoreOf(VehicleEntity vehicle, Dictionary<string, DateTimeOffset> coverage)
     {
-        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage);
+        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery);
         var forScoring = new VehicleForScoring
         {
             Vin = vehicle.Vin,
@@ -100,7 +100,7 @@ public class CappedWalkListingTests
         VehicleEntity missed = vehicles.Single(v => v.Vin == MissedVin);
 
         Assert.Equal(FullWalkAt, missed.Postings.Single().LastSeen);
-        Assert.Equal(new PurchasePrice(14000m, null), VehiclePricing.LowestCurrentPurchasePrice(missed, coverage));
+        Assert.Equal(new PurchasePrice(14000m, null), VehiclePricing.LowestCurrentPurchasePrice(missed, coverage, Fulfillment.Delivery));
 
         List<Score> scores = [.. vehicles.Select(v => ScoreOf(v, coverage))];
 

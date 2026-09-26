@@ -302,4 +302,65 @@ public class ScenarioLoaderTests
         Assert.Equal(3.00m, scenario.GasPricePerGallon.Low);
         Assert.Equal(3.60m, scenario.GasPricePerGallon.High);
     }
+
+    private static string ScenarioJson(string extraFields) => $$"""
+        {
+          "name": "test",
+          "zip": "32114",
+          "radiusMiles": 50,
+          "annualMiles": 12000,
+          "gasPricePerGallon": { "min": 3.00, "max": 3.60 },
+          "holdYears": 10,
+          "downPayment": 3000,
+          "apr": { "min": 0.065, "max": 0.095 },
+          "termMonths": 60,
+          "maintenancePerMile": 0.07,
+          "emergencyReservePerMonth": 50,
+          "salesTaxStateRate": 0.06,
+          "countySurtaxRate": 0.005,
+          "countySurtaxSource": "test",
+          "fees": 500,
+          "residualFraction": 0.35,
+          "insuranceMonthlyByModel": {},
+          "mpgByModel": {},
+          "filters": {
+            "minModelYear": 2019,
+            "minModelYearOverrides": {},
+            "maxMileage": 100000,
+            "allowedModels": []
+          },
+          {{extraFields}}
+          "targetMonthlyBudgets": [300]
+        }
+        """;
+
+    [Fact]
+    public void Parse_FulfillmentOmitted_DefaultsToDelivery()
+    {
+        Assert.Equal(Fulfillment.Delivery, ScenarioLoader.Parse(ScenarioJson("")).Fulfillment);
+    }
+
+    [Theory]
+    [InlineData("delivery", Fulfillment.Delivery)]
+    [InlineData("pickup", Fulfillment.Pickup)]
+    [InlineData("Pickup", Fulfillment.Pickup)]
+    public void Parse_FulfillmentNamed_IsRead(string value, Fulfillment expected)
+    {
+        Assert.Equal(expected, ScenarioLoader.Parse(ScenarioJson($"\"fulfillment\": \"{value}\",")).Fulfillment);
+    }
+
+    [Theory]
+    [InlineData("\"shipping\"")]
+    [InlineData("1")]
+    [InlineData("null")]
+    public void Parse_FulfillmentNotAKnownValue_Throws(string value)
+    {
+        Assert.ThrowsAny<JsonException>(() => ScenarioLoader.Parse(ScenarioJson($"\"fulfillment\": {value},")));
+    }
+
+    [Fact]
+    public void Load_ShippedDaughterScenario_AssumesDelivery()
+    {
+        Assert.Equal(Fulfillment.Delivery, ScenarioLoader.Load(DaughterScenarioPath).Fulfillment);
+    }
 }

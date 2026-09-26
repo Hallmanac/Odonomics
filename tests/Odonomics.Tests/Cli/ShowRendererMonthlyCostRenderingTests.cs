@@ -184,9 +184,60 @@ public class ShowRendererMonthlyCostRenderingTests
         Assert.Equal("Monthly cost", lines[0]);
         Assert.Equal(["Asking", "price", "$16,360"], Cells(lines[1]));
         Assert.Equal(["Shipping", "fee", "$1,590"], Cells(lines[2]));
-        Assert.Equal(["Purchase", "price", "$17,950"], Cells(lines[3]));
+        Assert.Equal(["Purchase", "price", "$17,950", "with", "delivery"], Cells(lines[3]));
         Assert.Equal(["Loan", "payment", "$324-$348"], Cells(lines[4]));
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_UnderDeliveryWithAPickupOption_PrintsBothFeesAndAssumesDelivery()
+    {
+        var purchasePrice = new PurchasePrice(17990m, 990m, 0m, "Orlando, FL");
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] lines = Render(cost, purchasePrice: purchasePrice);
+
+        Assert.Equal(["Asking", "price", "$17,990"], Cells(lines[1]));
+        Assert.Equal(["Shipping", "fee", "$990"], Cells(lines[2]));
+        Assert.Equal(["Pickup", "fee", "$0", "at", "Orlando,", "FL"], Cells(lines[3]));
+        Assert.Equal(["Purchase", "price", "$18,980", "with", "delivery"], Cells(lines[4]));
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_UnderPickup_PrintsBothFeesAndAssumesPickup()
+    {
+        var purchasePrice = new PurchasePrice(17990m, 990m, 0m, "Orlando, FL", Fulfillment.Pickup);
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] lines = Render(cost, purchasePrice: purchasePrice);
+
+        Assert.Equal(["Shipping", "fee", "$990"], Cells(lines[2]));
+        Assert.Equal(["Pickup", "fee", "$0", "at", "Orlando,", "FL"], Cells(lines[3]));
+        Assert.Equal(["Purchase", "price", "$17,990", "with", "pickup"], Cells(lines[4]));
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_UnderPickupWithNoPickupFeeRead_SaysTheShippingFeeIsAssumed()
+    {
+        var purchasePrice = new PurchasePrice(17990m, 990m, Fulfillment: Fulfillment.Pickup);
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] lines = Render(cost, purchasePrice: purchasePrice);
+
+        Assert.Equal("  Pickup fee        not read, so the shipping fee is assumed", lines[3]);
+        Assert.Equal(["Purchase", "price", "$18,980", "with", "pickup"], Cells(lines[4]));
+    }
+
+    [Fact]
+    public void RenderMonthlyCost_PickupFeeReadButNoShippingFee_PrintsOnlyThePickupFee()
+    {
+        var purchasePrice = new PurchasePrice(17990m, null, 0m, "Orlando, FL");
+
+        string[] lines = Render(null, "no price", purchasePrice);
+
+        Assert.DoesNotContain(lines, line => line.Contains("Shipping fee"));
+        Assert.Equal(["Pickup", "fee", "$0", "at", "Orlando,", "FL"], Cells(lines[2]));
     }
 
     [Fact]

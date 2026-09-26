@@ -216,15 +216,27 @@ public static class RankRenderer
     private static string PaymentLine(CostBreakdown cost) =>
         $"    loan payment {Format.DuringLoanLines(cost)[0].Figure}  of during {Format.Band(cost.DuringLoanMonthly)}";
 
-    /// <summary>The `--detail` line that names the shipping fee inside the price a row shows: the
-    /// asking price, the fee, and the purchase price they add up to, which is the figure the row's
-    /// costs are computed from. Null when the vehicle's posting shows no fee, so a vehicle without
-    /// one prints exactly what it did before. A fee of zero is still named, since "free shipping" is
-    /// a fact the page gave.</summary>
+    /// <summary>The `--detail` line that names the fee inside the price a row shows: the asking price,
+    /// the fee, the purchase price they add up to, which is the figure the row's costs are computed
+    /// from, and the fulfillment that chose the fee, so a reader can tell which one this run assumed.
+    /// Null when the vehicle's posting has no fee for that fulfillment, so a vehicle without one
+    /// prints exactly what it did before. A fee of zero is still named, since "free shipping" is a
+    /// fact the page gave.</summary>
     private static string? PurchasePriceLine(Score score) =>
-        score.Vehicle.PurchasePrice is { ShippingFee: decimal fee } purchasePrice
-            ? $"    price {Format.Money(purchasePrice.Asking)} asking + {Format.Money(fee)} shipping = {Format.Money(purchasePrice.Total)}"
+        score.Vehicle.PurchasePrice is { AppliedFee: decimal fee } purchasePrice
+            ? $"    price {Format.Money(purchasePrice.Asking)} asking + {Format.Money(fee)} {FeeName(purchasePrice)} = {Format.Money(purchasePrice.Total)} ({FulfillmentNote(purchasePrice)})"
             : null;
+
+    private static string FeeName(PurchasePrice purchasePrice) =>
+        purchasePrice is { Fulfillment: Fulfillment.Pickup, PickupFeeAssumed: false } ? "pickup" : "shipping";
+
+    private static string FulfillmentNote(PurchasePrice purchasePrice) => purchasePrice switch
+    {
+        { Fulfillment: Fulfillment.Delivery } => "delivery",
+        { PickupFeeAssumed: true } => "pickup, fee unknown",
+        { PickupLocation: string place } when !string.IsNullOrWhiteSpace(place) => $"pickup at {Markup.Escape(place)}",
+        _ => "pickup",
+    };
 
     /// <summary>The purchase price the vehicle's costs are computed from: its asking price plus any
     /// shipping fee. A vehicle with no current asking price shows "-" rather than "$0", which would

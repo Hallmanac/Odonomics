@@ -227,6 +227,31 @@ public class ScorerTests
     }
 
     [Fact]
+    public void Score_UnderPickupWithAFreePickup_IsCostedAtTheAskingPriceAlone()
+    {
+        Scenario scenario = BuildScenario() with { Fulfillment = Fulfillment.Pickup };
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 17990m) with
+        {
+            ShippingFee = 990m,
+            PickupFee = 0m,
+            Fulfillment = scenario.Fulfillment,
+        };
+
+        Assert.Equal(17990m, vehicle.PurchasePrice?.Total);
+        Assert.Equal(Scorer.ComputeCost(17990m, 120m, 52m, scenario), Scorer.Score(vehicle, scenario).Cost);
+    }
+
+    [Fact]
+    public void Score_SameCarUnderDeliveryAndPickup_CostsMoreUnderDelivery()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring delivered = Vehicle("Toyota", "Prius", 2020, 40000, 17990m) with { ShippingFee = 990m, PickupFee = 0m };
+        VehicleForScoring pickedUp = delivered with { Fulfillment = Fulfillment.Pickup };
+
+        Assert.True(Scorer.Score(delivered, scenario).Cost!.DuringLoanMonthly.Expected > Scorer.Score(pickedUp, scenario).Cost!.DuringLoanMonthly.Expected);
+    }
+
+    [Fact]
     public void PurchasePrice_VehicleWithNoAskingPrice_IsNullEvenWithAFee()
     {
         VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, null) with { ShippingFee = 1590m };

@@ -14,6 +14,7 @@
   "countySurtaxRate": 0.005,
   "countySurtaxSource": "Volusia County discretionary sales surtax, 0.5%, effective through 2031-12-31. Florida Dept. of Revenue, Discretionary Sales Surtax Rate Table (floridarevenue.com), checked 2026-09-20.",
   "fees": 500,
+  "fulfillment": "delivery",
   "residualFraction": 0.35,
   "insuranceMonthlyByModel": {
     "Honda Insight": null,

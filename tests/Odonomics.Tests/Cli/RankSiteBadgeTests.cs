@@ -65,7 +65,7 @@ public class RankSiteBadgeTests
     }
 
     private static List<Score> Rank(IEnumerable<VehicleEntity> ledger) =>
-        [.. ledger.Select(v => Scorer.Score(RankCommand.ForScoring(v, NoCoverage), DaughterScenario))];
+        [.. ledger.Select(v => Scorer.Score(RankCommand.ForScoring(v, NoCoverage, Fulfillment.Delivery), DaughterScenario))];
 
     private static string[] Render(IReadOnlyList<Score> scores)
     {
@@ -186,7 +186,7 @@ public class RankSiteBadgeTests
             Posting("carvana", "4T1G11AK0LU000009", 20000m, 1590m, Deal("Great Deal")),
             Posting("autotrader", "4T1G11AK0LU000009", 21000m, null, Deal("Good Price")));
 
-        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, NoCoverage);
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery);
 
         Assert.Equal(21000m, forScoring.LowestCurrentPrice);
         Assert.Equal("GP", forScoring.SiteBadge);
@@ -198,7 +198,7 @@ public class RankSiteBadgeTests
         VehicleEntity vehicle = Vehicle("4T1G11AK0LU000009", 2021, "Prius", 30000, Posting("carvana", "4T1G11AK0LU000009", 20000m, null, Deal("Great Deal")));
         var covered = new Dictionary<string, DateTimeOffset> { [RunSources.Key("carvana", "Prius")] = RunTime.AddDays(1) };
 
-        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, covered);
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, covered, Fulfillment.Delivery);
 
         Assert.Null(forScoring.LowestCurrentPrice);
         Assert.Null(forScoring.SiteBadge);

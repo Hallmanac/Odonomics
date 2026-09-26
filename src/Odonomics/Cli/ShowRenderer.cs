@@ -196,18 +196,34 @@ public static class ShowRenderer
     /// then the during-loan total and the ten-year average. Every figure is read from the same
     /// <see cref="CostBreakdown"/> `odo rank` prints, so a "$592-$627" during-loan figure can be
     /// seen to be a payment plus running costs, not a car payment. When the scenario cannot price the
-    /// vehicle, says why in place of the figures. When the vehicle's posting shows a shipping fee, its
-    /// own line under the asking price precedes the figures, with the purchase price they add up to,
-    /// since that is the price the figures are computed from; a vehicle with no fee prints none of
-    /// those lines. Written line by line rather than as a table so nothing wraps at 80 columns.</summary>
+    /// vehicle, says why in place of the figures. When the vehicle's posting shows a shipping fee or a
+    /// pickup option, its fees sit on their own lines under the asking price, both of them when both
+    /// are known, and the purchase price they add up to closes the group with the fulfillment the
+    /// analysis assumed ("with delivery" or "with pickup"), since that price is what the figures are
+    /// computed from. A vehicle with neither prints none of those lines. Written line by line rather
+    /// than as a table so nothing wraps at 80 columns.</summary>
     public static void RenderMonthlyCost(IAnsiConsole console, CostBreakdown? cost, string? unavailableReason, PurchasePrice? purchasePrice = null)
     {
         console.MarkupLine("[bold]Monthly cost[/]");
-        if (purchasePrice is { ShippingFee: decimal shippingFee } price)
+        if (purchasePrice is { } price && (price.ShippingFee is not null || price.PickupFee is not null))
         {
             console.MarkupLine($"  {"Asking price".PadRight(MonthlyCostLabelWidth)}{Format.Money(price.Asking)}");
-            console.MarkupLine($"  {"Shipping fee".PadRight(MonthlyCostLabelWidth)}{Format.Money(shippingFee)}");
-            console.MarkupLine($"  {"Purchase price".PadRight(MonthlyCostLabelWidth)}{Format.Money(price.Total)}");
+            if (price.ShippingFee is decimal shippingFee)
+            {
+                console.MarkupLine($"  {"Shipping fee".PadRight(MonthlyCostLabelWidth)}{Format.Money(shippingFee)}");
+            }
+
+            if (price.PickupFee is decimal pickupFee)
+            {
+                string place = string.IsNullOrWhiteSpace(price.PickupLocation) ? "" : $" at {price.PickupLocation}";
+                console.MarkupLineInterpolated($"  {"Pickup fee".PadRight(MonthlyCostLabelWidth)}{Format.Money(pickupFee)}{place}");
+            }
+            else if (price.PickupFeeAssumed)
+            {
+                console.MarkupLine($"  {"Pickup fee".PadRight(MonthlyCostLabelWidth)}not read, so the shipping fee is assumed");
+            }
+
+            console.MarkupLine($"  {"Purchase price".PadRight(MonthlyCostLabelWidth)}{Format.Money(price.Total)} with {price.Fulfillment.Word()}");
         }
 
         if (cost is null)

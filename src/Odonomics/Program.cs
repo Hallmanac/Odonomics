@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Odonomics.Cli.Commands;
+using Odonomics.Domain;
 using Spectre.Console;
 
 const string defaultScenarioPath = "scenarios/daughter.json";
@@ -38,6 +39,8 @@ walkCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(walkCommand);
 
+var fulfillmentOption = new Option<Fulfillment?>("--fulfillment") { Description = "override the scenario's fulfillment for this run: delivery counts a listing's shipping fee, pickup counts its pickup fee" };
+
 var rankBudgetOption = new Option<decimal?>("--budget") { Description = "list vehicles whose during-loan monthly cost exceeds this under a separate over-budget heading instead of the ranked list" };
 var rankTermOption = new Option<int?>("--term") { Description = "override the scenario's loan term in months (e.g. 48, 60, 72)" };
 var rankDetailOption = new Option<bool>("--detail") { Description = "under each row, also print that vehicle's loan payment beside its during-loan total" };
@@ -46,13 +49,15 @@ rankCommand.Add(scenarioOption);
 rankCommand.Add(rankBudgetOption);
 rankCommand.Add(rankTermOption);
 rankCommand.Add(rankDetailOption);
+rankCommand.Add(fulfillmentOption);
 rankCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     string scenarioPath = parseResult.GetValue(scenarioOption)!;
     decimal? budget = parseResult.GetValue(rankBudgetOption);
     int? term = parseResult.GetValue(rankTermOption);
     bool detail = parseResult.GetValue(rankDetailOption);
-    return await RankCommand.RunAsync(scenarioPath, budget, term, detail, cancellationToken);
+    Fulfillment? fulfillment = parseResult.GetValue(fulfillmentOption);
+    return await RankCommand.RunAsync(scenarioPath, budget, term, detail, fulfillment, cancellationToken);
 });
 rootCommand.Add(rankCommand);
 
@@ -135,10 +140,12 @@ rootCommand.Add(dealerCommand);
 
 var budgetCommand = new Command("budget", "the fixed monthly running cost, then the payment room and max purchase price under the scenario for each target monthly budget");
 budgetCommand.Add(scenarioOption);
+budgetCommand.Add(fulfillmentOption);
 budgetCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     string scenarioPath = parseResult.GetValue(scenarioOption)!;
-    return await BudgetCommand.RunAsync(scenarioPath, cancellationToken);
+    Fulfillment? fulfillment = parseResult.GetValue(fulfillmentOption);
+    return await BudgetCommand.RunAsync(scenarioPath, fulfillment, cancellationToken);
 });
 rootCommand.Add(budgetCommand);
 

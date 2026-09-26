@@ -20,26 +20,28 @@ public static class VehiclePricing
 
     /// <summary>The cheapest way to take this vehicle home among its active postings (see
     /// <see cref="LowestCurrentPrice"/> for which those are): each posting's latest asking price
-    /// plus its shipping fee when one is known, so a far-away carvana car is compared honestly with
-    /// one that has no fee. A posting with a null fee costs its asking price, as before. When two
-    /// postings cost the same to take home, the one with the lower asking price is reported.</summary>
-    public static PurchasePrice? LowestCurrentPurchasePrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
-        CheapestPosting(vehicle, latestCoverageBySource)?.Price;
+    /// plus the fee for <paramref name="fulfillment"/>, so a far-away carvana car is compared honestly
+    /// with one that has no fee. Under delivery that is the shipping fee; under pickup it is the
+    /// pickup fee, or the shipping fee when no pickup fee was read (see <see cref="PurchasePrice"/>).
+    /// A posting with no fee costs its asking price. When two postings cost the same to take home,
+    /// the one with the lower asking price is reported.</summary>
+    public static PurchasePrice? LowestCurrentPurchasePrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment) =>
+        CheapestPosting(vehicle, latestCoverageBySource, fulfillment)?.Price;
 
     /// <summary>The active posting <see cref="LowestCurrentPurchasePrice"/> reports the price of, so a
     /// display that sits beside that price (a site's own badge for the listing) speaks for the same
     /// listing; null when no active posting has a price.</summary>
-    public static PostingEntity? LowestCurrentPurchasePosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
-        CheapestPosting(vehicle, latestCoverageBySource)?.Posting;
+    public static PostingEntity? LowestCurrentPurchasePosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment) =>
+        CheapestPosting(vehicle, latestCoverageBySource, fulfillment)?.Posting;
 
-    private static (PostingEntity Posting, PurchasePrice Price)? CheapestPosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
+    private static (PostingEntity Posting, PurchasePrice Price)? CheapestPosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment)
     {
         (PostingEntity Posting, PurchasePrice Price)[] known =
         [
             .. ActivePostings(vehicle, latestCoverageBySource)
                 .Select(p => (Posting: p, Asking: LatestAskingPrice(p)))
                 .Where(p => p.Asking is not null)
-                .Select(p => (p.Posting, new PurchasePrice(p.Asking.GetValueOrDefault(), p.Posting.ShippingFee))),
+                .Select(p => (p.Posting, new PurchasePrice(p.Asking.GetValueOrDefault(), p.Posting.ShippingFee, p.Posting.PickupFee, p.Posting.PickupLocation, fulfillment))),
         ];
 
         return known.Length == 0

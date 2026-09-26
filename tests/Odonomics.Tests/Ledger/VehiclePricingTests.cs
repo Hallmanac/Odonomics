@@ -8,7 +8,7 @@ public class VehiclePricingTests
     private static readonly DateTimeOffset RunTime = new(2026, 9, 25, 0, 0, 0, TimeSpan.Zero);
     private static readonly IReadOnlyDictionary<string, DateTimeOffset> NoCoverage = new Dictionary<string, DateTimeOffset>();
 
-    private static PostingEntity Posting(string source, decimal price, decimal? shippingFee = null, DateTimeOffset? lastSeen = null) => new()
+    private static PostingEntity Posting(string source, decimal price, decimal? shippingFee = null, DateTimeOffset? lastSeen = null, decimal? pickupFee = null, string? pickupLocation = null) => new()
     {
         VehicleVin = "1HGCM82633A004352",
         Source = source,
@@ -16,6 +16,8 @@ public class VehiclePricingTests
         FirstSeen = RunTime,
         LastSeen = lastSeen ?? RunTime,
         ShippingFee = shippingFee,
+        PickupFee = pickupFee,
+        PickupLocation = pickupLocation,
         PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = price, ObservedAt = RunTime }],
     };
 
@@ -36,10 +38,63 @@ public class VehiclePricingTests
     {
         VehicleEntity vehicle = Vehicle(Posting("carvana", 16410m, shippingFee: 1590m));
 
-        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage);
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
 
         Assert.Equal(new PurchasePrice(16410m, 1590m), price);
         Assert.Equal(18000m, price?.Total);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_UnderDelivery_AddsTheShippingFeeAndIgnoresAKnownPickupFee()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("carvana", 17990m, shippingFee: 990m, pickupFee: 0m, pickupLocation: "Orlando, FL"));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(18980m, price?.Total);
+        Assert.Equal(Fulfillment.Delivery, price?.Fulfillment);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_UnderPickup_AddsTheKnownPickupFeeInsteadOfTheShippingFee()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("carvana", 17990m, shippingFee: 990m, pickupFee: 0m, pickupLocation: "Orlando, FL"));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Pickup);
+
+        Assert.Equal(17990m, price?.Total);
+        Assert.Equal(new PurchasePrice(17990m, 990m, 0m, "Orlando, FL", Fulfillment.Pickup), price);
+        Assert.False(price?.PickupFeeAssumed);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_UnderPickupWithNoPickupFeeRead_TreatsTheShippingFeeAsThePickupFee()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("carvana", 17990m, shippingFee: 990m));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Pickup);
+
+        Assert.Equal(18980m, price?.Total);
+        Assert.True(price?.PickupFeeAssumed);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_UnderPickupWithNoFeeAnywhere_IsTheAskingPrice()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 17990m));
+
+        Assert.Equal(17990m, VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Pickup)?.Total);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_DearerCarvanaCarThatPicksUpFree_WinsOnlyUnderPickup()
+    {
+        VehicleEntity vehicle = Vehicle(
+            Posting("carvana", 17500m, shippingFee: 990m, pickupFee: 0m, pickupLocation: "Orlando, FL"),
+            Posting("cars.com", 18000m));
+
+        Assert.Equal(18000m, VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery)?.Total);
+        Assert.Equal(17500m, VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Pickup)?.Total);
     }
 
     [Fact]
@@ -47,7 +102,7 @@ public class VehiclePricingTests
     {
         VehicleEntity vehicle = Vehicle(Posting("cars.com", 16410m));
 
-        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage);
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
 
         Assert.Equal(16410m, price?.Total);
         Assert.Equal(VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage), price?.Asking);
@@ -60,7 +115,7 @@ public class VehiclePricingTests
             Posting("carvana", 16000m, shippingFee: 1590m),
             Posting("cars.com", 17000m));
 
-        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage);
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
 
         Assert.Equal(new PurchasePrice(17000m, null), price);
         Assert.Equal(16000m, VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage));
@@ -73,7 +128,7 @@ public class VehiclePricingTests
             Posting("carvana", 16000m, shippingFee: 290m),
             Posting("cars.com", 16000m, shippingFee: 0m));
 
-        Assert.Equal(new PurchasePrice(16000m, 0m), VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage));
+        Assert.Equal(new PurchasePrice(16000m, 0m), VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery));
     }
 
     [Fact]
@@ -83,7 +138,7 @@ public class VehiclePricingTests
             Posting("carvana", 16000m, shippingFee: 1000m),
             Posting("cars.com", 17000m));
 
-        Assert.Equal(new PurchasePrice(16000m, 1000m), VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage));
+        Assert.Equal(new PurchasePrice(16000m, 1000m), VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery));
     }
 
     [Fact]
@@ -99,7 +154,7 @@ public class VehiclePricingTests
             [RunSources.Key("cars.com", "Prius")] = laterRun,
         };
 
-        Assert.Equal(new PurchasePrice(17000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+        Assert.Equal(new PurchasePrice(17000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
     }
 
     private static RunEntity WalkRun(DateTimeOffset startedAt, bool capped)
@@ -116,7 +171,7 @@ public class VehiclePricingTests
         VehicleEntity vehicle = Vehicle(Posting("cars.com", 15000m, lastSeen: fullWalk));
         Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource([WalkRun(fullWalk, capped: false), WalkRun(cappedWalk, capped: true)]);
 
-        Assert.Equal(new PurchasePrice(15000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+        Assert.Equal(new PurchasePrice(15000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
         Assert.Equal(15000m, VehiclePricing.LowestCurrentPrice(vehicle, coverage));
     }
 
@@ -128,7 +183,7 @@ public class VehiclePricingTests
         VehicleEntity vehicle = Vehicle(Posting("cars.com", 14000m, lastSeen: cappedWalk), Posting("cars.com", 15000m, lastSeen: fullWalk));
         Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource([WalkRun(fullWalk, capped: false), WalkRun(cappedWalk, capped: true)]);
 
-        Assert.Equal(new PurchasePrice(14000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+        Assert.Equal(new PurchasePrice(14000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
     }
 
     [Fact]
@@ -141,7 +196,7 @@ public class VehiclePricingTests
         Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(
             [WalkRun(fullWalk, capped: false), WalkRun(cappedWalk, capped: true), WalkRun(laterFullWalk, capped: false)]);
 
-        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
     }
 
     [Fact]
@@ -151,13 +206,13 @@ public class VehiclePricingTests
         Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(
             [WalkRun(RunTime, capped: false), WalkRun(RunTime.AddDays(1), capped: true), WalkRun(RunTime.AddDays(2), capped: true)]);
 
-        Assert.Equal(new PurchasePrice(15000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+        Assert.Equal(new PurchasePrice(15000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
     }
 
     [Fact]
     public void LowestCurrentPurchasePrice_NoPostings_IsNull()
     {
-        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(Vehicle(), NoCoverage));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(Vehicle(), NoCoverage, Fulfillment.Delivery));
     }
 
     [Theory]
@@ -171,7 +226,7 @@ public class VehiclePricingTests
             Posting("cars.com", 17000m));
 
         Assert.Equal(17000m, VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage));
-        Assert.Equal(new PurchasePrice(17000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage));
+        Assert.Equal(new PurchasePrice(17000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery));
     }
 
     [Fact]
@@ -180,7 +235,7 @@ public class VehiclePricingTests
         VehicleEntity vehicle = Vehicle(Posting("auto.dev", 0m, shippingFee: 500m));
 
         Assert.Null(VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage));
-        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery));
     }
 
     [Fact]

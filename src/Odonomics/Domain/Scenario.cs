@@ -60,6 +60,12 @@ public sealed record Scenario
     /// four-digit year.</summary>
     public IReadOnlyDictionary<string, int> HybridOnlyFromModelYear { get; init; } = new Dictionary<string, int>();
 
+    /// <summary>How the buyer takes the car home, which decides whether a listing's shipping fee or
+    /// its pickup fee joins the asking price (see <see cref="PurchasePrice"/>). Optional in the scenario
+    /// file, as <c>"fulfillment": "delivery"</c> or <c>"pickup"</c>; absent means delivery, so a scenario
+    /// written before this existed prices exactly as it did.</summary>
+    public Fulfillment Fulfillment { get; init; } = Fulfillment.Delivery;
+
     public required HardFilters Filters { get; init; }
 
     public required IReadOnlyList<decimal> TargetMonthlyBudgets { get; init; }

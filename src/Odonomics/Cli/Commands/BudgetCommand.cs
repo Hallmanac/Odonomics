@@ -5,9 +5,14 @@ namespace Odonomics.Cli.Commands;
 
 public static class BudgetCommand
 {
-    public static Task<int> RunAsync(string scenarioPath, CancellationToken cancellationToken)
+    public static Task<int> RunAsync(string scenarioPath, Fulfillment? fulfillment, CancellationToken cancellationToken)
     {
         Scenario scenario = ScenarioLoader.Load(scenarioPath);
+        if (fulfillment is Fulfillment overrideFulfillment)
+        {
+            scenario = scenario with { Fulfillment = overrideFulfillment };
+        }
+
         Render(AnsiConsole.Console, scenario);
         return Task.FromResult(0);
     }
@@ -15,7 +20,8 @@ public static class BudgetCommand
     /// <summary>Prints the running-cost block and the max-price table. The block comes first so a
     /// reader sees how much of each target is already spoken for before the price it leaves. Both
     /// take their figures from <see cref="BudgetSolver"/>, so neither can drift from the solver. A
-    /// closing line says the max price counts a listing's shipping fee, since `odo rank` prices a
+    /// closing line says the max price counts a listing's fee, the shipping fee under delivery or the
+    /// pickup fee under pickup, and which of the two this run assumed, since `odo rank` prices a
     /// vehicle at its asking price plus that fee and the two commands must agree on what a price is.</summary>
     public static void Render(IAnsiConsole console, Scenario scenario)
     {
@@ -43,6 +49,10 @@ public static class BudgetCommand
         }
 
         console.Write(table);
-        console.MarkupLine("Max purchase price is the asking price plus any shipping fee (Carvana lists one per car), so a car with a shipping fee needs an asking price that much lower.");
+        console.MarkupLine(scenario.Fulfillment switch
+        {
+            Fulfillment.Pickup => "Max purchase price is the asking price plus any pickup fee (Carvana's hub pickup prints none), assuming pickup, so a car with a pickup fee needs an asking price that much lower.",
+            _ => "Max purchase price is the asking price plus any shipping fee (Carvana lists one per car), assuming delivery, so a car with a shipping fee needs an asking price that much lower.",
+        });
     }
 }

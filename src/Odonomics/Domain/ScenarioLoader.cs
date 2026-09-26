@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Odonomics.Domain;
 
@@ -7,6 +8,7 @@ public static class ScenarioLoader
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
     };
 
     public static Scenario Load(string path)
