@@ -5,7 +5,7 @@ The ledger is a plain SQLite file named `odonomics.db`, and it lives in the data
 ## The tables
 
 - Vehicles: one row per VIN. The year, make, model, trim, and mileage reflect the most recent sighting, and the row also carries when the VIN was first and last seen and when it was marked a finalist.
-- Postings: one row per source and URL where a vehicle has been seen, with its first and last seen times, its dealer, its latest shipping fee, and the site-specific fee facts described [below](#site-specific-facts). A vehicle can have several postings, such as the same car on two sites.
+- Postings: one row per source and URL where a vehicle has been seen, with its first and last seen times, its dealer, its latest shipping fee, the site-specific fee facts described [below](#site-specific-facts), and the run, if any, whose detail visit found its page saying the car had sold. A vehicle can have several postings, such as the same car on two sites.
 - Price observations: one row each time a posting's price was recorded. A row is only written on a posting's first sighting or when its price actually changed, so a posting's rows read as its price history.
 - Runs: one row per `odo search` or `odo walk`. It holds when the run started and finished, the zip and radius it searched with, and the list of source-and-model pairs it actually got a usable result for.
 - Dealers: one row per dealer, keyed by name and location. It holds the CarEdge grade, the doc fee and add-ons note CarEdge printed beside it, and when the dealer was last checked, and [dealers.md](dealers.md) explains how a dealer is identified.
