@@ -11,6 +11,7 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
     public DbSet<VinRecordEntity> VinRecords => Set<VinRecordEntity>();
     public DbSet<NoteEntity> Notes => Set<NoteEntity>();
     public DbSet<DealerEntity> Dealers => Set<DealerEntity>();
+    public DbSet<PostingAttributeEntity> PostingAttributes => Set<PostingAttributeEntity>();
     public DbSet<LedgerMigrationEntity> LedgerMigrations => Set<LedgerMigrationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -28,6 +29,13 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
             entity.HasIndex(p => new { p.VehicleVin, p.Source, p.Url }).IsUnique();
             entity.HasMany(p => p.PriceObservations).WithOne(o => o.Posting).HasForeignKey(o => o.PostingId);
             entity.HasOne(p => p.Dealer).WithMany(d => d.Postings).HasForeignKey(p => p.DealerId);
+        });
+
+        modelBuilder.Entity<PostingAttributeEntity>(entity =>
+        {
+            entity.HasIndex(a => new { a.PostingId, a.Name }).IsUnique();
+            entity.HasOne(a => a.Posting).WithMany(p => p.Attributes).HasForeignKey(a => a.PostingId);
+            entity.HasOne<RunEntity>().WithMany().HasForeignKey(a => a.ObservedRunId);
         });
 
         modelBuilder.Entity<VinRecordEntity>().HasKey(r => r.Vin);

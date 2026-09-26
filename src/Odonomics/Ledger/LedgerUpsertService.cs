@@ -113,6 +113,51 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         return new UpsertOutcome(vehicleIsNew, postingIsNew, priceChanged && !postingIsNew, previousPrice);
     }
 
+    /// <summary>Sets the display-only attributes <paramref name="run"/> read from one posting's page
+    /// (see <see cref="PostingAttributeEntity"/>), in one save so either every name lands or none does.
+    /// A name the posting already holds takes the new value and the run's id, since a later observation
+    /// replaces the earlier one; a name it does not hold gets a new row. A name this run did not read is
+    /// left as it was, because a page that stops showing a badge is not proof the badge is gone. Names
+    /// and values are trimmed, and a blank name or value is skipped, since an empty badge says nothing.
+    /// <paramref name="run"/> must already be saved, and the posting must exist.</summary>
+    public async Task SetPostingAttributesAsync(int postingId, IReadOnlyDictionary<string, string> attributes, RunEntity run, CancellationToken cancellationToken)
+    {
+        List<PostingAttributeEntity> existing = await db.PostingAttributes
+            .Where(a => a.PostingId == postingId)
+            .ToListAsync(cancellationToken);
+
+        foreach ((string rawName, string rawValue) in attributes)
+        {
+            string name = rawName.Trim();
+            string value = rawValue.Trim();
+            if (name.Length == 0 || value.Length == 0)
+            {
+                continue;
+            }
+
+            PostingAttributeEntity? current = existing.FirstOrDefault(a => a.Name == name);
+            if (current is null)
+            {
+                var added = new PostingAttributeEntity
+                {
+                    PostingId = postingId,
+                    Name = name,
+                    Value = value,
+                    ObservedRunId = run.Id,
+                };
+                db.PostingAttributes.Add(added);
+                existing.Add(added);
+            }
+            else
+            {
+                current.Value = value;
+                current.ObservedRunId = run.Id;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>The canonical URL of every posting the ledger holds for <paramref name="source"/>,
     /// which is what a walk compares a search page's links against to tell a listing it has seen from one
     /// it has not.</summary>
