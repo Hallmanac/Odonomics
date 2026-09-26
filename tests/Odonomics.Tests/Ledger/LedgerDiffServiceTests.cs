@@ -628,6 +628,38 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_KnownVinWithASecondPostingOnASourceItWasAlreadyOn_IsNotReportedAlsoListed()
+    {
+        // The VIN was already on marketcheck through posting a, which this run sees again; the run
+        // also saves a second marketcheck posting (a different dealer). The car gained no source,
+        // so nothing is reported for it: not "also listed", not "new", and not "moved" either, since
+        // posting a was not left behind.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), sources: "marketcheck:Prius");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://marketcheck.com/a", "marketcheck"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), sources: "marketcheck:Prius");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://marketcheck.com/a", "marketcheck"), run2, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, "https://marketcheck.com/b", "marketcheck"), run2, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        Assert.Empty(diff.New);
+        Assert.Empty(diff.AlsoListed);
+        Assert.Empty(diff.Moved);
+        Assert.Empty(diff.PriceDrops);
+        Assert.Empty(diff.Gone);
+    }
+
+    [Fact]
     public async Task ComputeAsync_VinGoneUnderTwoStalePostings_AppearsOnceUnderGone()
     {
         using var testDb = new LedgerTestDatabase();
