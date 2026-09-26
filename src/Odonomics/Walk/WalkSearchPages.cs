@@ -14,7 +14,7 @@ namespace Odonomics.Walk;
 /// what follows that notice is similar vehicles the facets never asked for. Only the first page is
 /// required: a later page is a bonus, so one that fails to load ends the paging with the links already
 /// collected instead of failing the search. A link the caller says it already knows (the ledger holds
-/// it) is handed to <c>touchKnownAsync</c> with its card's asking price and never enters the pool, so it
+/// it) is handed to <c>touchKnownAsync</c> with its card's asking price and badges and never enters the pool, so it
 /// spends none of the pool; paging goes on past pages made only of known links, and stops when the pool of
 /// new links is full, the stated count is reached, or a page shows nothing not seen before.
 /// A pool size of <see cref="WalkPairSearches.UnboundedPool"/> is the uncapped walk: the pool never fills,
@@ -30,8 +30,10 @@ public static class WalkSearchPages
 {
     /// <summary>The candidate links for <paramref name="searchUrl"/>, in page order, one per
     /// canonical URL and at most <paramref name="poolSize"/>, not counting a link
-    /// <paramref name="touchKnownAsync"/> takes (it is given the link's canonical URL and the card's
-    /// asking price, or null when the card shows none, and returns true for a link it took). <paramref name="loadPageAsync"/> is
+    /// <paramref name="touchKnownAsync"/> takes (it is given the link's canonical URL, the card's
+    /// asking price, or null when the card shows none, and the site's badges the card shows, empty when
+    /// it shows none, and returns true for a link it took; it is asked about every distinct link, so a
+    /// link it does not take is where a caller keeps the card's badges for the detail visit). <paramref name="loadPageAsync"/> is
     /// given a page's URL and its 1-based number, and does everything a person would on that page
     /// (open it, scroll, dwell, record it) before returning its anchors and text, so the pacing between
     /// pages is the pacing between any two page loads. When a page after the first throws (other than
@@ -46,7 +48,7 @@ public static class WalkSearchPages
         WalkSite site,
         string searchUrl,
         int poolSize,
-        Func<string, decimal?, CancellationToken, ValueTask<bool>> touchKnownAsync,
+        Func<string, decimal?, IReadOnlyDictionary<string, string>, CancellationToken, ValueTask<bool>> touchKnownAsync,
         Func<string, int, CancellationToken, Task<SearchPageContent>> loadPageAsync,
         Action<int, Exception> onLaterPageFailed,
         Action<int> onSearchExhausted,
@@ -104,7 +106,7 @@ public static class WalkSearchPages
 
                 considered++;
                 added++;
-                if (await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), cancellationToken))
+                if (await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken))
                 {
                     continue;
                 }

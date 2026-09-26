@@ -21,10 +21,12 @@ public class KnownCardTouchesTests
 
     private static string CardUrl(int id) => $"https://www.carvana.com/vehicle/{id}";
 
-    private static PageLink Card(int id, decimal? price) => new(
+    private static readonly IReadOnlyDictionary<string, string> NoBadges = new Dictionary<string, string>();
+
+    private static PageLink Card(int id, decimal? price, string badgeLines = "") => new(
         CardUrl(id),
         "",
-        price is null ? "2024 Toyota Prius\nLE\n46k miles" : $"2024 Toyota Prius\nLE\n46k miles\nCurrent price:\n${price:N0}\n$440/mo\nestimated");
+        badgeLines + (price is null ? "2024 Toyota Prius\nLE\n46k miles" : $"2024 Toyota Prius\nLE\n46k miles\nCurrent price:\n${price:N0}\n$440/mo\nestimated"));
 
     private static ListingCandidate Candidate(int id, decimal price) => new()
     {
@@ -237,9 +239,9 @@ public class KnownCardTouchesTests
         (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
         KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
 
-        bool first = await touches.TryTouchAsync(CardUrl(1), 17000m, CancellationToken.None);
-        bool again = await touches.TryTouchAsync(CardUrl(1), 16000m, CancellationToken.None);
-        bool unknown = await touches.TryTouchAsync(CardUrl(2), 16000m, CancellationToken.None);
+        bool first = await touches.TryTouchAsync(CardUrl(1), 17000m, NoBadges, CancellationToken.None);
+        bool again = await touches.TryTouchAsync(CardUrl(1), 16000m, NoBadges, CancellationToken.None);
+        bool unknown = await touches.TryTouchAsync(CardUrl(2), 16000m, NoBadges, CancellationToken.None);
 
         Assert.True(first);
         Assert.True(again);
@@ -257,7 +259,7 @@ public class KnownCardTouchesTests
         (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
         KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
 
-        await touches.TryTouchAsync(CardUrl(1), 17000m, CancellationToken.None);
+        await touches.TryTouchAsync(CardUrl(1), 17000m, NoBadges, CancellationToken.None);
 
         Assert.Equal(1, touches.Count);
         Assert.Equal(FirstRunAt, (await db.Postings.SingleAsync()).LastSeen);
@@ -277,8 +279,8 @@ public class KnownCardTouchesTests
         (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
         KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
 
-        await touches.TryTouchAsync(CardUrl(1), null, CancellationToken.None);
-        await touches.TryTouchAsync(CardUrl(1), 17000m, CancellationToken.None);
+        await touches.TryTouchAsync(CardUrl(1), null, NoBadges, CancellationToken.None);
+        await touches.TryTouchAsync(CardUrl(1), 17000m, NoBadges, CancellationToken.None);
         await touches.CommitAsync(CancellationToken.None);
 
         Assert.Equal([18000m, 17000m], (await db.PriceObservations.ToListAsync()).OrderBy(o => o.ObservedAt).Select(o => o.Price));
@@ -313,5 +315,115 @@ public class KnownCardTouchesTests
         Assert.Equal(1, touches.Count);
         Assert.Single(db.PriceObservations);
         Assert.Equal(SecondRunAt, (await db.Postings.SingleAsync()).LastSeen);
+    }
+
+    private static async Task<Dictionary<string, (string Value, int RunId)>> AttributesAtAsync(OdonomicsDbContext db, string url) =>
+        (await db.PostingAttributes.Where(a => a.Posting!.Url == url).ToListAsync())
+        .ToDictionary(a => a.Name, a => (a.Value, a.ObservedRunId));
+
+    [Fact]
+    public async Task ARepeatWalk_AKnownCardsBadgesAreRefreshedOnItsPostingWithoutADetailVisit()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        PostingEntity posting = await db.Postings.SingleAsync();
+        RunEntity first = await db.Runs.SingleAsync(r => r.StartedAt == FirstRunAt);
+        await service.SetPostingAttributesAsync(
+            posting.Id,
+            new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal", [PostingAttributeNames.Shipping] = "Free shipping" },
+            first,
+            CancellationToken.None);
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        IReadOnlyList<string> pool = await CollectAsync(touches, new() { [1] = [Card(1, 18000m, "Price Drop\nFree shipping\n")] }, poolSize: 60);
+
+        Assert.Empty(pool);
+        Dictionary<string, (string Value, int RunId)> stored = await AttributesAtAsync(db, CardUrl(1));
+        Assert.Equal(("Price Drop", second.Id), stored["price-drop"]);
+        Assert.Equal(("Free shipping", second.Id), stored["shipping"]);
+        Assert.Equal(("Great Deal", first.Id), stored["deal"]);
+    }
+
+    [Fact]
+    public async Task ARepeatWalk_AKnownCardWithNoBadgeRecordsNothingAndLeavesEarlierAttributes()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m), (2, 19000m));
+        PostingEntity earlier = await db.Postings.SingleAsync(p => p.Url == CardUrl(1));
+        RunEntity first = await db.Runs.SingleAsync(r => r.StartedAt == FirstRunAt);
+        await service.SetPostingAttributesAsync(earlier.Id, new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal" }, first, CancellationToken.None);
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        await CollectAsync(touches, new() { [1] = [Card(1, 18000m), Card(2, 19000m)] }, poolSize: 60);
+
+        Assert.Equal(("Great Deal", first.Id), Assert.Single(await AttributesAtAsync(db, CardUrl(1))).Value);
+        Assert.Empty(await AttributesAtAsync(db, CardUrl(2)));
+    }
+
+    [Fact]
+    public async Task ARepeatWalk_APostingIsNotWrittenBeforeThePairCommits()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        await touches.TryTouchAsync(CardUrl(1), 18000m, new Dictionary<string, string> { [PostingAttributeNames.PriceDrop] = "Price Drop" }, CancellationToken.None);
+
+        Assert.Empty(await db.PostingAttributes.ToListAsync());
+        await touches.CommitAsync(CancellationToken.None);
+        Assert.Single(await db.PostingAttributes.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ARepeatWalk_ANewLinksCardBadgesAreKeptForItsDetailVisit()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        IReadOnlyList<string> pool = await CollectAsync(touches, new() { [1] = [Card(1, 18000m, "Price Drop\n"), Card(2, 19000m, "Great Deal\nFree shipping\n"), Card(3, 20000m)] }, poolSize: 60);
+
+        Assert.Equal([CardUrl(2), CardUrl(3)], pool);
+        Assert.Equal(
+            new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal", [PostingAttributeNames.Shipping] = "Free shipping" },
+            touches.BadgesOfNewLink(CardUrl(2)));
+        Assert.Empty(touches.BadgesOfNewLink(CardUrl(3)));
+        Assert.Empty(touches.BadgesOfNewLink(CardUrl(1)));
+        Assert.Empty(await AttributesAtAsync(db, CardUrl(2)));
+    }
+
+    [Fact]
+    public async Task Revisit_EveryCardsBadgesAreKeptForItsDetailVisit()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: true, CancellationToken.None);
+
+        IReadOnlyList<string> pool = await CollectAsync(touches, new() { [1] = [Card(1, 18000m, "Price Drop\n")] }, poolSize: 60);
+
+        Assert.Equal([CardUrl(1)], pool);
+        Assert.Equal("Price Drop", touches.BadgesOfNewLink(CardUrl(1))[PostingAttributeNames.PriceDrop]);
+    }
+
+    [Fact]
+    public async Task ADetailVisitedPostingStoresItsCardsBadgesThroughTheUpsert()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity first = await StartRunAsync(db, FirstRunAt);
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", first, revisit: false, CancellationToken.None);
+        await CollectAsync(touches, new() { [1] = [Card(7, 21000m, "Price Drop\nGreat Deal\n")] }, poolSize: 60);
+
+        await service.UpsertAsync(Candidate(7, 21000m) with { Attributes = touches.BadgesOfNewLink(CardUrl(7)) }, first, CancellationToken.None);
+
+        Dictionary<string, (string Value, int RunId)> stored = await AttributesAtAsync(db, CardUrl(7));
+        Assert.Equal(("Price Drop", first.Id), stored["price-drop"]);
+        Assert.Equal(("Great Deal", first.Id), stored["deal"]);
     }
 }
