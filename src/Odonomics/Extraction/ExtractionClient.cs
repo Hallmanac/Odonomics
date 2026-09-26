@@ -255,7 +255,7 @@ public sealed class ExtractionClient
             extracted = extracted with { Price = null };
         }
 
-        if (extracted.Mileage is not null && !ContainsNumber(pageText, extracted.Mileage.Value))
+        if (extracted.Mileage is not null && !ContainsNumber(MaskThousandsMileage(pageText), extracted.Mileage.Value) && !ContainsThousandsMileage(pageText, extracted.Mileage.Value))
         {
             extracted = extracted with { Mileage = null };
         }
@@ -284,6 +284,35 @@ public sealed class ExtractionClient
 
     private static bool ContainsLoosely(string haystack, string needle) =>
         Regex.IsMatch(haystack, $@"\b{Regex.Escape(needle)}\b", RegexOptions.IgnoreCase);
+
+    /// <summary>Matches a mileage a page rounds to thousands ("38K miles", "38.5k mi"), which is how
+    /// CarMax's detail page states it. Only a K directly followed by a miles unit counts, so a
+    /// "$38K" price or an unrelated "38K" elsewhere on the page cannot ground a fabricated mileage.</summary>
+    private static readonly Regex ThousandsMileage = new(@"\b(?<thousands>\d{1,3}(?:\.\d+)?)[ \t]?K[ \t]+(?:miles?|mi)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>The page with each "NNK miles" figure blanked out, so the "38" inside "38K miles" cannot
+    /// ground a mileage of 38: a model that read the shorthand literally would otherwise store a
+    /// 38-mile car. Only <see cref="ContainsThousandsMileage"/> can ground against such a figure.</summary>
+    private static string MaskThousandsMileage(string pageText) =>
+        ThousandsMileage.Replace(pageText, match => new string(' ', match.Length));
+
+    /// <summary>True when the page states a mileage in thousands shorthand and the extracted mileage is
+    /// that figure to within the rounding the shorthand implies (38K reads as 37,500 to 38,499).</summary>
+    private static bool ContainsThousandsMileage(string haystack, decimal value)
+    {
+        foreach (Match match in ThousandsMileage.Matches(haystack))
+        {
+            decimal thousands = decimal.Parse(match.Groups["thousands"].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
+            decimal stated = thousands * 1000m;
+            decimal halfStep = match.Groups["thousands"].Value.Contains('.') ? 50m : 500m;
+            if (value >= stated - halfStep && value < stated + halfStep)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static bool ContainsNumber(string haystack, decimal value)
     {
