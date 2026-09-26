@@ -43,9 +43,14 @@ public static class VehiclePricing
             return !latestCoverageBySource.TryGetValue(key, out DateTimeOffset latestCoverage) || p.LastSeen == latestCoverage;
         });
 
+    /// <summary>The posting's most recent asking price, or null when that price is below
+    /// <see cref="PlaceholderPrice.Floor"/>: a placeholder already on the ledger is history, never
+    /// a price to rank or budget on, and it does not fall back to an older observation.</summary>
     private static decimal? LatestAskingPrice(PostingEntity posting) =>
         posting.PriceObservations
             .OrderByDescending(o => o.ObservedAt)
             .Select(o => (decimal?)o.Price)
-            .FirstOrDefault();
+            .FirstOrDefault() is decimal latest && !PlaceholderPrice.IsBelowFloor(latest)
+            ? latest
+            : null;
 }
