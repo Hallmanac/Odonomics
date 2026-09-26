@@ -119,14 +119,17 @@ Every row under "Gone" ends with a short reason, so a car the walk simply no lon
 - "below year facet" when the vehicle's year is under the scenario's minimum for its model.
 - "over mileage" when its mileage is over the scenario's maximum.
 - "search moved" when this run's zip or radius differs from those of the run that last saw the posting.
+- "pages unread" when a result page after the first failed to load, so the walk never read the pages after it (see below).
 - "beyond the cap" when an explicit `--max` stopped the pair before the site ran out of results (see below).
 - "not on search page" otherwise.
 
-Only that last reason suggests the car may have left the market. A run recorded before the ledger kept its zip and radius is never treated as a moved search.
+Only that last reason suggests the car may have left the market. When a pair has both reasons (a cap on one of its searches and a failed page on another), "pages unread" wins. A run recorded before the ledger kept its zip and radius is never treated as a moved search.
 
 A pair is capped when `--max` kept the walk from reading everything the site returned. That happens when the pool of links filled while a paged site had more pages, or when a second search was never opened because the cap was spent. With `--revisit`, where the pool also holds links the ledger already knows, a link the pool had no room for or the cap left unvisited caps the pair too. Without `--revisit` a leftover link is one the ledger does not hold, and every known posting on the pages that were read has already been kept current from its card, so leftovers alone never cap a pair. A pair whose pages were exhausted is not capped, even when it filled the cap exactly, whenever the site states its match count. A Carvana page that shows none and fills the pool on its last page is still treated as capped, since only loading one more page would tell.
 
 A capped pair still counts as covered, so a car it did reach is kept current as usual. It is also stamped as partial coverage, with a `capped:` token beside its `source:model` one in the run's sources. A posting of that pair the run did not touch is listed as "beyond the cap" rather than "not on search page", because the walk never looked for it and nothing says it sold. A later run that covers the pair in full compares against the newest run that covered it in full, so a posting a capped run never reached is still reported (as "not on search page" if it is still missing) rather than dropping out of the comparison. When any rows are beyond the cap, the heading says how many, for example "Gone (33, 20 beyond the cap)". The pair's own summary line ends with ", capped", and its Status in the end-of-run table reads "capped".
+
+A pair whose later result page failed to load is treated the same way, with a marker of its own: an `unread:` token beside its `source:model` one. Its untouched postings are listed as "pages unread", the heading counts them beside the beyond-the-cap rows (for example "Gone (33, 20 beyond the cap, 5 pages unread)"), its summary line ends with ", page N failed" (N being the first result page that failed), and its Status in the end-of-run table reads "unread". A later run that covers the pair in full compares against the newest run that covered it in full, exactly as it does after a capped run. Re-running the walk reads the pages again.
 
 ## Rules every site shares
 
@@ -170,7 +173,7 @@ Carvana is paged, and so is cars.com. Carvana renders about 21 cards per result 
 
 Two more rules keep the paging to cars the facets asked for. The first page states how many cars match ("16 cars"), and that count bounds the links the pages contribute in total, taken in page order, even when a page shows a few more results than it states. And a result page that says "No exact matches" contributes no links and ends the paging, because everything after that notice is similar vehicles (other models, or other years and mileages) that the search never asked for. The console says the search ran out of exact matches on that page.
 
-Each page gets the same scroll and dwell as the first, is recorded as its own search text (see [Recorded pages](#recorded-pages)), and is announced on the console ("search page, page 2", or "search 2 of 2, toyota-camry facet, page 1" for a cars.com pair with two searches). Only the first page is required. If a later page fails to load, the walk prints a warning, stops paging, and goes on with the links it already has rather than failing the pair.
+Each page gets the same scroll and dwell as the first, is recorded as its own search text (see [Recorded pages](#recorded-pages)), and is announced on the console ("search page, page 2", or "search 2 of 2, toyota-camry facet, page 1" for a cars.com pair with two searches). Only the first page is required. If a later page fails to load, the walk prints a warning, stops paging, and goes on with the links it already has rather than failing the pair. The pages after the one that failed were never read, so the pair's coverage is recorded as partial (see [the Gone reasons](#the-gone-reasons)): its line says which page failed, and a posting the ledger holds from those pages is listed as "pages unread", not as a car that left the market. A first page that fails to load still fails the pair, and a failed pair is never stamped as covered.
 
 A Carvana card's price is the amount after "Current price:".
 
