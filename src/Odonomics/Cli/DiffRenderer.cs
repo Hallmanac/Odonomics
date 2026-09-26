@@ -122,15 +122,23 @@ public static class DiffRenderer
         AnsiConsole.Write(BuildGoneTable(entries));
     }
 
-    /// <summary>The "Gone (N)" line, with how many of the rows are beyond the cap appended when any are:
-    /// those are cars an explicit --max kept the walk from reaching, not cars that left the market, so
-    /// the count says how many of the total to set aside.</summary>
+    /// <summary>The "Gone (N)" line, with how many of the rows are beyond the cap and how many had pages
+    /// unread appended when any are: those are cars an explicit --max or a result page that failed to load
+    /// kept the walk from reaching, not cars that left the market, so the counts say how many of the total
+    /// to set aside.</summary>
     public static string GoneHeading(IReadOnlyList<GonePostingEntry> entries)
     {
-        int beyondTheCap = entries.Count(entry => entry.Reason == GoneReasons.BeyondTheCap);
-        return beyondTheCap == 0
+        List<string> unreached =
+        [
+            .. new[] { GoneReasons.BeyondTheCap, GoneReasons.PagesUnread }
+                .Select(reason => (Count: entries.Count(entry => entry.Reason == reason), Reason: reason))
+                .Where(r => r.Count > 0)
+                .Select(r => $"{r.Count} {r.Reason}")
+        ];
+
+        return unreached.Count == 0
             ? $"Gone ({entries.Count})"
-            : $"Gone ({entries.Count}, {beyondTheCap} {GoneReasons.BeyondTheCap})";
+            : $"Gone ({entries.Count}, {string.Join(", ", unreached)})";
     }
 
     public static Table BuildGoneTable(IReadOnlyList<GonePostingEntry> entries)

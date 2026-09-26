@@ -24,6 +24,7 @@ public static class GoneReasons
     public const string SearchMoved = "search moved";
     public const string NotOnSearchPage = "not on search page";
     public const string BeyondTheCap = "beyond the cap";
+    public const string PagesUnread = "pages unread";
 }
 
 public sealed record SearchDiff(
@@ -59,10 +60,11 @@ public sealed record SearchDiff(
 /// the scenario's minimum for its model, its mileage is over the scenario's maximum, the run that
 /// last saw it searched a different zip or radius than this one, this run covered its pair only
 /// partially (an explicit --max stopped the link collection before the site ran out of results, see
-/// <see cref="RunSources.PartialKey"/>) so the walk never reached it, or otherwise it simply is not
-/// on the search page any more. The first three are cars the search no longer asks for and "beyond
-/// the cap" is a car this run did not look for; only the last is a car that has likely left the
-/// market. "Search moved" compares the zip and radius each run
+/// <see cref="RunSources.PartialKey"/>) so the walk never reached it, this run covered its pair only
+/// partially because a result page after the first failed to load (see <see cref="RunSources.UnreadKey"/>),
+/// or otherwise it simply is not on the search page any more. The first three are cars the search no
+/// longer asks for, and "beyond the cap" and "pages unread" are cars this run did not look for; only the
+/// last is a car that has likely left the market. "Search moved" compares the zip and radius each run
 /// recorded (see <see cref="RunEntity.Zip"/>), so a run recorded before the ledger kept them never
 /// yields it.
 /// </summary>
@@ -215,7 +217,8 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         var vinsSightedThisRun = new HashSet<string>(touchedThisRun.Select(p => p.VehicleVin));
 
         string[] tokens = RunSources.Split(currentRun);
-        HashSet<string> partialTokens = RunSources.PartialCoverage(currentRun);
+        HashSet<string> cappedTokens = RunSources.PartialCoverage(currentRun);
+        HashSet<string> unreadTokens = RunSources.UnreadCoverage(currentRun);
         List<RunEntity> allRuns = await db.Runs.ToListAsync(cancellationToken);
         List<RunEntity> priorRuns = [.. allRuns.Where(r => r.Id != currentRun.Id && r.StartedAt < currentRun.StartedAt)];
 
@@ -251,7 +254,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
 
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
                 RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == posting.LastSeen);
-                gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(vehicle, lastSeenRun, currentRun, scenario, partialTokens.Contains(token))));
+                gone.Add(new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(vehicle, lastSeenRun, currentRun, scenario, cappedTokens.Contains(token), unreadTokens.Contains(token))));
             }
         }
 
@@ -261,7 +264,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         return new SearchDiff(newEntries, alsoListed, moved, priceDrops, gone);
     }
 
-    private static string GoneReason(VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario, bool pairCoveredPartially)
+    private static string GoneReason(VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario, bool pairCapped, bool pairHadUnreadPages)
     {
         if (vehicle.Year < scenario.Filters.MinYearFor($"{vehicle.Make} {vehicle.Model}"))
         {
@@ -278,9 +281,12 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             return GoneReasons.SearchMoved;
         }
 
-        return pairCoveredPartially
-            ? GoneReasons.BeyondTheCap
-            : GoneReasons.NotOnSearchPage;
+        return (pairCapped, pairHadUnreadPages) switch
+        {
+            (_, true) => GoneReasons.PagesUnread,
+            (true, false) => GoneReasons.BeyondTheCap,
+            _ => GoneReasons.NotOnSearchPage,
+        };
     }
 
     private static bool SearchAreaChanged(RunEntity? lastSeenRun, RunEntity currentRun) =>

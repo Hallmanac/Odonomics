@@ -1,5 +1,6 @@
 using Odonomics.Domain;
 using Odonomics.Ledger;
+using Odonomics.Walk;
 
 namespace Odonomics.Tests.Ledger;
 
@@ -837,6 +838,130 @@ public class LedgerDiffServiceTests
 
         Assert.Equal(GoneReasons.BeyondTheCap, gone.Reason);
         Assert.Equal("beyond the cap", gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PairWithAResultPageThatFailedToLoad_ReportsAnUntouchedPostingAsPagesUnread()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000020", 15000m, "https://carvana.com/prius", "carvana");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "carvana:Prius", "32833", 50),
+            Run(SecondRunAt, $"carvana:Prius,{RunSources.UnreadKey("carvana:Prius")}", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.PagesUnread, gone.Reason);
+        Assert.Equal("pages unread", gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PairBothCappedAndWithAFailedPage_ReportsPagesUnread()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000021", 15000m, "https://carvana.com/prius", "carvana");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "carvana:Prius", "32833", 50),
+            Run(SecondRunAt, $"carvana:Prius,{RunSources.PartialKey("carvana:Prius")},{RunSources.UnreadKey("carvana:Prius")}", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.PagesUnread, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PostingAnUnreadRunNeverReached_IsStillGoneOnTheNextFullRunOfThePair()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000022", 15000m, "https://carvana.com/prius", "carvana");
+
+        SearchDiff diff = await DiffAfterRunsAsync(
+            prius,
+            Run(FirstRunAt, "carvana:Prius", "32833", 50),
+            Run(SecondRunAt, $"carvana:Prius,{RunSources.UnreadKey("carvana:Prius")}", "32833", 50),
+            Run(ThirdRunAt, "carvana:Prius", "32833", 50));
+
+        Assert.Equal(GoneReasons.NotOnSearchPage, Assert.Single(diff.Gone).Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_ThePairAFailedPageWasOn_DoesNotChangeAnotherPairsNotOnSearchPage()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000023", 15000m, "https://cars.com/prius", "cars.com");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius,carvana:Prius", "32833", 50),
+            Run(SecondRunAt, $"cars.com:Prius,carvana:Prius,{RunSources.UnreadKey("carvana:Prius")}", "32833", 50),
+            DaughterScenario);
+
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_AWalkWhoseThirdCarvanaPageFailed_DoesNotReportThePostingsOnPagesItNeverReadAsNotOnSearchPage()
+    {
+        // The whole path: page 3 throws inside CollectLinksAsync, the failure lands on the pair's outcome,
+        // WalkCoverage stamps the run, and the diff of that run reads the postings the walk never reached.
+        ListingCandidate onPageOne = Candidate("JTDKN3DU0A0000024", 15000m, "https://www.carvana.com/vehicle/a0", "carvana");
+        ListingCandidate onPageFour = Candidate("JTDKN3DU0A0000025", 16000m, "https://www.carvana.com/vehicle/d0", "carvana");
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        RunEntity run1 = Run(FirstRunAt, "carvana:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(onPageOne, run1, CancellationToken.None);
+        await upsert.UpsertAsync(onPageFour, run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        int? failedPage = null;
+        await WalkCoverage.RunAsync(
+            run2,
+            [WalkSites.Carvana],
+            ["Toyota Prius"],
+            async (site, _, ct) =>
+            {
+                await WalkSearchPages.CollectLinksAsync(
+                    site,
+                    "https://www.carvana.com/cars/filters?zip=32833",
+                    WalkPairSearches.UnboundedPool,
+                    async (url, _, touchCt) =>
+                    {
+                        // The ledger holds page 1's posting, which the walk keeps current from its card.
+                        if (url != onPageOne.Url)
+                        {
+                            return false;
+                        }
+
+                        await upsert.UpsertAsync(onPageOne, run2, touchCt);
+                        return true;
+                    },
+                    (_, pageNumber, _) => pageNumber < 3
+                        ? Task.FromResult(new SearchPageContent(
+                            [.. Enumerable.Range(0, 3).Select(i => new PageLink($"https://www.carvana.com/vehicle/{(char)('a' + pageNumber - 1)}{i}", ""))]))
+                        : throw new TimeoutException("page 3 timed out"),
+                    (pageNumber, _) => failedPage ??= pageNumber,
+                    _ => { },
+                    () => { },
+                    ct);
+                return new WalkPairOutcome(0, 0, new DroppedBreakdown(0, 0, 0, 0), FailedPage: failedPage);
+            },
+            (_, _) => { },
+            (_, _, ex) => throw ex,
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        Assert.Equal(3, failedPage);
+        Assert.Equal("carvana:Prius,unread:carvana:Prius", run2.Sources);
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal(onPageFour.Vin, gone.Vin);
+        Assert.Equal(GoneReasons.PagesUnread, gone.Reason);
     }
 
     [Fact]
