@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Odonomics.CarEdge;
 
 /// <summary>What a CarEdge dealer search page's text resolved to. <see cref="Graded"/> is the only
@@ -36,6 +38,13 @@ public sealed record CarEdgeGradeResult(
     string? AddOnsNote,
     string? Reason)
 {
+    /// <summary><see cref="DocFee"/> as a dollar amount ("$1,199" is 1199), or null when the page
+    /// printed none or it does not read as an amount.</summary>
+    public decimal? DocFeeAmount =>
+        decimal.TryParse(DocFee?.TrimStart('$'), NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out decimal amount)
+            ? amount
+            : null;
+
     public static readonly CarEdgeGradeResult NotFound = new(CarEdgeGradeStatus.NotFound, null, null, null, null, null, null);
     public static readonly CarEdgeGradeResult Unrecognized = new(CarEdgeGradeStatus.Unrecognized, null, null, null, null, null, null);
     public static readonly CarEdgeGradeResult CarEdgeSearchUrlInvalid = new(CarEdgeGradeStatus.CarEdgeSearchUrlInvalid, null, null, null, null, null, null);

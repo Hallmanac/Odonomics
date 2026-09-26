@@ -15,13 +15,16 @@ namespace Odonomics.Cli.Commands;
 /// so is one whose name-matched cards were all in another city or state, or that matched several
 /// same-named cards its partial or absent location could not tell apart. The bare "Carvana" dealer
 /// and the "Private seller" dealer are never looked up (see <see cref="SkipReason"/>); Carvana's hubs
-/// are graded by their own names like any other dealer. Three consecutive CarEdge 404 pages mean the search URL itself is
-/// dead, not that three dealers in a row are unrateable, so the run stops there and exits non-zero
-/// rather than burning through the rest of the list against a URL that will keep failing; every
-/// dealer it never got to stays ungraded and eligible for the next run.</summary>
+/// are graded by their own names like any other dealer. Recording a grade also records the doc fee and
+/// add-ons note the same card prints; `--refresh` looks up dealers that already have a grade again so
+/// ones graded before the ledger kept those two can pick them up (see <see cref="NeedsCheck"/>).
+/// Three consecutive CarEdge 404 pages mean the search URL itself is dead, not that three dealers in
+/// a row are unrateable, so the run stops there and exits non-zero rather than burning through the
+/// rest of the list against a URL that will keep failing; every dealer it never got to stays
+/// ungraded and eligible for the next run.</summary>
 public static class DealerGradeCommand
 {
-    public static async Task<int> RunAsync(bool all, string? vin, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(bool all, string? vin, bool refresh, CancellationToken cancellationToken)
     {
         // Exactly one of --all or a VIN: this is true whenever both are given or neither is.
         if (all == (vin is not null))
@@ -41,7 +44,7 @@ public static class DealerGradeCommand
         List<DealerEntity> targets;
         if (all)
         {
-            targets = await db.Dealers.Where(d => d.GradeCheckedAt == null).OrderBy(d => d.Id).ToListAsync(cancellationToken);
+            targets = [.. (await db.Dealers.OrderBy(d => d.Id).ToListAsync(cancellationToken)).Where(d => NeedsCheck(d, refresh))];
         }
         else
         {
@@ -61,17 +64,17 @@ public static class DealerGradeCommand
                 return 0;
             }
 
-            foreach (DealerEntity dealer in dealers.Where(d => d.GradeCheckedAt is not null))
+            foreach (DealerEntity dealer in dealers.Where(d => !NeedsCheck(d, refresh)))
             {
                 PrintGrade(dealer);
             }
 
-            targets = [.. dealers.Where(d => d.GradeCheckedAt is null)];
+            targets = [.. dealers.Where(d => NeedsCheck(d, refresh))];
         }
 
         if (targets.Count == 0)
         {
-            AnsiConsole.MarkupLine("no ungraded dealers to check");
+            AnsiConsole.MarkupLine(refresh ? "no dealers to check" : "no ungraded dealers to check");
             return 0;
         }
 
@@ -176,6 +179,14 @@ public static class DealerGradeCommand
         return deadSearchUrlGate.ShouldStop ? 1 : 0;
     }
 
+    /// <summary>Whether a run looks this dealer up. By default only a dealer never checked, which is
+    /// the checked-once rule. With <paramref name="refresh"/> a dealer that already has a grade is
+    /// looked up again too, so one graded before the ledger kept the doc fee and add-ons note can
+    /// pick them up; a dealer stamped checked with no grade (unrated, or skipped on purpose) stays
+    /// checked, since a second look has nothing to add to it.</summary>
+    public static bool NeedsCheck(DealerEntity dealer, bool refresh) =>
+        dealer.GradeCheckedAt is null || (refresh && dealer.Grade is not null);
+
     /// <summary>Why a dealer is never looked up on CarEdge, or null when it is. The bare "Carvana"
     /// dealer is the chain, not a seller: CarEdge lists Carvana as a card per hub ("Carvana Winder"), so
     /// a search for the bare name returns hub cards, and taking one would grade the chain by an
@@ -197,6 +208,8 @@ public static class DealerGradeCommand
     public static DealerGradeOutcome ApplySkip(DealerEntity dealer, string reason, DateTimeOffset checkedAt)
     {
         dealer.Grade = null;
+        dealer.DocFee = null;
+        dealer.AddOnsNote = null;
         dealer.GradeReason = reason;
         dealer.GradeCheckedAt = checkedAt;
         return new DealerGradeOutcome($"{dealer.Name}: skipped, {reason}", Color.Grey, DealerGradeTally.Ungraded, Stamped: true);
@@ -205,7 +218,9 @@ public static class DealerGradeCommand
     /// <summary>Applies what the parser made of a dealer's CarEdge page to that dealer, and says how
     /// to report it. <see cref="DealerEntity.GradeCheckedAt"/> is stamped only for the two outcomes
     /// that are final, a grade or CarEdge positively having none; every other outcome leaves the
-    /// dealer untouched so a later run looks it up again.</summary>
+    /// dealer untouched so a later run looks it up again. A dealer that already has a grade and now
+    /// comes back with no card keeps that grade, doc fee, and add-ons note: a refresh never discards
+    /// what an earlier look found.</summary>
     public static DealerGradeOutcome ApplyResult(DealerEntity dealer, CarEdgeGradeResult result, DateTimeOffset checkedAt, string searchUrl)
     {
         switch (result.Status)
@@ -213,11 +228,19 @@ public static class DealerGradeCommand
             case CarEdgeGradeStatus.Graded:
                 dealer.Grade = result.Grade;
                 dealer.GradeReason = result.Reason;
+                dealer.DocFee = result.DocFeeAmount;
+                dealer.AddOnsNote = result.AddOnsNote;
                 dealer.GradeCheckedAt = checkedAt;
                 return new DealerGradeOutcome($"{dealer.Name}: {result.Grade}", Color.Default, DealerGradeTally.Graded, Stamped: true);
             case CarEdgeGradeStatus.NotFound:
                 dealer.GradeCheckedAt = checkedAt;
-                return new DealerGradeOutcome($"{dealer.Name}: not on CarEdge", Color.Grey, DealerGradeTally.Ungraded, Stamped: true);
+                return new DealerGradeOutcome(
+                    dealer.Grade is null
+                        ? $"{dealer.Name}: not on CarEdge"
+                        : $"{dealer.Name}: no longer on CarEdge, keeping the stored grade {dealer.Grade}",
+                    Color.Grey,
+                    DealerGradeTally.Ungraded,
+                    Stamped: true);
             case CarEdgeGradeStatus.Ambiguous:
                 return new DealerGradeOutcome(
                     $"{dealer.Name}: several CarEdge dealers share this name and the location on record is missing or too partial to pick one, left ungraded until a fuller location is known",

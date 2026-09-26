@@ -72,6 +72,97 @@ public class DealerGradeCommandTests
         Assert.Equal(DealerGradeTally.Graded, outcome.Tally);
     }
 
+    [Theory]
+    [InlineData("dealers-q-daytona-toyota.txt", "Daytona Toyota", 1199, "No add-ons")]
+    [InlineData("dealers-q-seminole-toyota.txt", "Seminole Toyota", 999, "$358 add-ons")]
+    public void ApplyResult_RecordedGradedPage_StoresTheDocFeeAsADecimalAndTheAddOnsNote(string fixture, string dealerName, int docFee, string addOnsNote)
+    {
+        string pageText = File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "caredge", fixture));
+        var dealer = new DealerEntity { Name = dealerName, NormalizedName = dealerName.ToUpperInvariant(), NormalizedLocation = "" };
+
+        DealerGradeOutcome outcome = DealerGradeCommand.ApplyResult(dealer, CarEdgeGradeParser.Parse(pageText, dealerName, null), CheckedAt, SearchUrl);
+
+        Assert.Equal(DealerGradeTally.Graded, outcome.Tally);
+        Assert.Equal(docFee, dealer.DocFee);
+        Assert.Equal(addOnsNote, dealer.AddOnsNote);
+    }
+
+    [Fact]
+    public void ApplyResult_DealerAlreadyGradedThenRefreshed_TakesTheNewFeeFieldsAndGrade()
+    {
+        DealerEntity dealer = Dealer();
+        dealer.Grade = "B";
+        dealer.GradeCheckedAt = CheckedAt.AddDays(-30);
+        var refreshed = new CarEdgeGradeResult(CarEdgeGradeStatus.Graded, "A", 91, 8, "$600", "No add-ons", Reason: null);
+
+        DealerGradeCommand.ApplyResult(dealer, refreshed, CheckedAt, SearchUrl);
+
+        Assert.Equal("A", dealer.Grade);
+        Assert.Equal(600m, dealer.DocFee);
+        Assert.Equal("No add-ons", dealer.AddOnsNote);
+        Assert.Equal(CheckedAt, dealer.GradeCheckedAt);
+    }
+
+    [Fact]
+    public void ApplyResult_RefreshThatFindsNoCard_KeepsTheFeeFieldsAlreadyStored()
+    {
+        DealerEntity dealer = Dealer();
+        dealer.Grade = "B";
+        dealer.DocFee = 1199m;
+        dealer.AddOnsNote = "No add-ons";
+
+        DealerGradeCommand.ApplyResult(dealer, CarEdgeGradeResult.Unrecognized, CheckedAt, SearchUrl);
+
+        Assert.Equal(1199m, dealer.DocFee);
+        Assert.Equal("No add-ons", dealer.AddOnsNote);
+    }
+
+    [Fact]
+    public void ApplyResult_RefreshThatFindsNoCardForAGradedDealer_KeepsWhatWasStoredAndSaysSo()
+    {
+        DealerEntity dealer = Dealer();
+        dealer.Grade = "B";
+        dealer.DocFee = 1199m;
+        dealer.AddOnsNote = "No add-ons";
+
+        DealerGradeOutcome outcome = DealerGradeCommand.ApplyResult(dealer, CarEdgeGradeResult.NotFound, CheckedAt, SearchUrl);
+
+        Assert.Equal("B", dealer.Grade);
+        Assert.Equal(1199m, dealer.DocFee);
+        Assert.Equal("No add-ons", dealer.AddOnsNote);
+        Assert.Equal("Holler Honda: no longer on CarEdge, keeping the stored grade B", outcome.Line);
+    }
+
+    [Fact]
+    public void NeedsCheck_ByDefault_IsOnlyADealerNeverChecked()
+    {
+        DealerEntity neverChecked = Dealer();
+        DealerEntity graded = Dealer();
+        graded.Grade = "A";
+        graded.GradeCheckedAt = CheckedAt;
+        DealerEntity unrated = Dealer();
+        unrated.GradeCheckedAt = CheckedAt;
+
+        Assert.True(DealerGradeCommand.NeedsCheck(neverChecked, refresh: false));
+        Assert.False(DealerGradeCommand.NeedsCheck(graded, refresh: false));
+        Assert.False(DealerGradeCommand.NeedsCheck(unrated, refresh: false));
+    }
+
+    [Fact]
+    public void NeedsCheck_WithRefresh_AddsGradedDealersButNotOnesCheckedWithNoGrade()
+    {
+        DealerEntity neverChecked = Dealer();
+        DealerEntity graded = Dealer();
+        graded.Grade = "A";
+        graded.GradeCheckedAt = CheckedAt;
+        DealerEntity unrated = Dealer();
+        unrated.GradeCheckedAt = CheckedAt;
+
+        Assert.True(DealerGradeCommand.NeedsCheck(neverChecked, refresh: true));
+        Assert.True(DealerGradeCommand.NeedsCheck(graded, refresh: true));
+        Assert.False(DealerGradeCommand.NeedsCheck(unrated, refresh: true));
+    }
+
     [Fact]
     public void ApplyResult_UnreadablePage_LeavesTheDealerUnstampedAndCountsItFailed()
     {
@@ -115,12 +206,14 @@ public class DealerGradeCommandTests
     {
         // A row a previous grader run had wrongly graded is cleared too: the bare chain never
         // carries a hub's grade.
-        var dealer = new DealerEntity { Name = "Carvana", NormalizedName = "CARVANA", NormalizedLocation = "", Grade = "A" };
+        var dealer = new DealerEntity { Name = "Carvana", NormalizedName = "CARVANA", NormalizedLocation = "", Grade = "A", DocFee = 999m, AddOnsNote = "No add-ons" };
         string reason = DealerGradeCommand.SkipReason(dealer) ?? throw new InvalidOperationException("expected a skip reason");
 
         DealerGradeOutcome outcome = DealerGradeCommand.ApplySkip(dealer, reason, CheckedAt);
 
         Assert.Null(dealer.Grade);
+        Assert.Null(dealer.DocFee);
+        Assert.Null(dealer.AddOnsNote);
         Assert.Equal(reason, dealer.GradeReason);
         Assert.Equal(CheckedAt, dealer.GradeCheckedAt);
         Assert.True(outcome.Stamped);

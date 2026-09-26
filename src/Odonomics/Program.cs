@@ -116,15 +116,18 @@ finalistCommand.SetAction(async (parseResult, cancellationToken) =>
 rootCommand.Add(finalistCommand);
 
 var dealerGradeAllOption = new Option<bool>("--all") { Description = "grade every ungraded dealer in the ledger" };
+var dealerGradeRefreshOption = new Option<bool>("--refresh") { Description = "also look up dealers that already have a grade again, to pick up their doc fee and add-ons note" };
 var dealerGradeVinArgument = new Argument<string?>("vin") { Description = "grade only this VIN's dealer", Arity = ArgumentArity.ZeroOrOne };
 var dealerGradeCommand = new Command("grade", "look up each ungraded dealer's CarEdge grade over the browser you already launched");
 dealerGradeCommand.Add(dealerGradeAllOption);
+dealerGradeCommand.Add(dealerGradeRefreshOption);
 dealerGradeCommand.Add(dealerGradeVinArgument);
 dealerGradeCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     bool all = parseResult.GetValue(dealerGradeAllOption);
     string? vin = parseResult.GetValue(dealerGradeVinArgument);
-    return await DealerGradeCommand.RunAsync(all, vin, cancellationToken);
+    bool refresh = parseResult.GetValue(dealerGradeRefreshOption);
+    return await DealerGradeCommand.RunAsync(all, vin, refresh, cancellationToken);
 });
 var dealerCommand = new Command("dealer", "dealer-grade commands");
 dealerCommand.Add(dealerGradeCommand);

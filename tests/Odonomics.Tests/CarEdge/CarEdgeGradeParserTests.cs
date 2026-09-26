@@ -567,4 +567,26 @@ public class CarEdgeGradeParserTests
 
         Assert.Equal(CarEdgeGradeStatus.Unrecognized, result.Status);
     }
+
+    [Theory]
+    [InlineData("$1,199", 1199)]
+    [InlineData("$999", 999)]
+    [InlineData("$0", 0)]
+    public void DocFeeAmount_ReadsTheDollarAmountCarEdgePrints(string docFee, int expected)
+    {
+        var result = new CarEdgeGradeResult(CarEdgeGradeStatus.Graded, "A", 90, 5, docFee, "No add-ons", Reason: null);
+
+        Assert.Equal(expected, result.DocFeeAmount);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("varies")]
+    public void DocFeeAmount_IsNullWhenThereIsNoReadableAmount(string? docFee)
+    {
+        var result = new CarEdgeGradeResult(CarEdgeGradeStatus.Graded, "A", 90, 5, docFee, "No add-ons", Reason: null);
+
+        Assert.Null(result.DocFeeAmount);
+    }
 }
