@@ -159,10 +159,17 @@ public static class RankRenderer
             ? "  rc: open recall count. gr: CarEdge dealer grade(s)."
             : "  rc: open recall count.");
 
+        int siteNameWidth = scores.Where(s => s.Vehicle.SiteBadge is not null).Select(s => VehicleName(s).Length).DefaultIfEmpty(0).Max();
+        if (siteNameWidth > 0)
+        {
+            console.MarkupLine("  site: the listing site's own deal badge and dealer rating. Never scored.");
+            console.MarkupLine($"  {SiteBadgeText.Legend}");
+        }
+
         foreach (Score score in scores)
         {
             ResearchStatus? status = research.GetValueOrDefault(score.Vehicle.Vin);
-            console.MarkupLine($"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(VehicleName(score))}");
+            console.MarkupLine(VehicleLine(score, siteNameWidth));
             console.MarkupLine(RankedDetailLine(score, status, anyGraded));
             if (detail)
             {
@@ -174,6 +181,20 @@ public static class RankRenderer
                 console.MarkupLine(PaymentLine(score.Cost!));
             }
         }
+    }
+
+    /// <summary>The line that names a row's vehicle: its VIN and name, then the site badge (see
+    /// <see cref="SiteBadgeText"/>) when the vehicle has one. The name is padded to
+    /// <paramref name="siteNameWidth"/> only on a row that has a badge, so the badges of a section
+    /// line up without a row that has none carrying trailing spaces. The name is at most
+    /// <see cref="VehicleNameMaxWidth"/> wide and a badge is at most 7 ("GrD 4.9"), so the whole line is at
+    /// most 2 + 17 + 2 + 40 + 2 + 5 + 7 = 75 columns and never wraps.</summary>
+    private static string VehicleLine(Score score, int siteNameWidth)
+    {
+        string name = VehicleName(score);
+        return score.Vehicle.SiteBadge is string siteBadge
+            ? $"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(name.PadRight(siteNameWidth))}  site {Format.Cell(siteBadge)}"
+            : $"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(name)}";
     }
 
     private static string VehicleName(Score score) =>

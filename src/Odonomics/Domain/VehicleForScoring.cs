@@ -26,6 +26,12 @@ public sealed record VehicleForScoring
     /// or an ungraded one, keeps this false rather than assuming the worst.</summary>
     public bool OnlyFGradedDealers { get; init; }
 
+    /// <summary>What the cheapest posting's own site said about it, as short text for `odo rank` to
+    /// show beside the row ("GrD 4.9": its deal badge and the dealer's rating on that site); null when
+    /// the ledger holds neither. Display only: the scorer never reads it, so it cannot move the
+    /// ranking or any cost figure.</summary>
+    public string? SiteBadge { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus its shipping fee, which is
     /// the price the cost model uses; null when there is no current asking price.</summary>
     public PurchasePrice? PurchasePrice => LowestCurrentPrice is decimal asking
