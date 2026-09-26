@@ -54,16 +54,15 @@ public static class VehiclePricing
 
     /// <summary>The posting's purchase price at <paramref name="asking"/>. Itemized fees count only when
     /// the posture is itemized: an all-in page's asking price already holds its fees, and adding an
-    /// itemized total the page also printed would count them twice.</summary>
+    /// itemized total the page also printed would count them twice. That total is still carried, for
+    /// display, as the fees an all-in price includes.</summary>
     private static PurchasePrice PurchasePriceOf(PostingEntity posting, decimal asking, Fulfillment fulfillment) =>
-        new(
-            asking,
-            posting.ShippingFee,
-            posting.PickupFee,
-            posting.PickupLocation,
-            fulfillment,
-            posting.FeePosture == FeePostures.Itemized ? posting.ItemizedFeesTotal : null,
-            posting.FeePosture);
+        posting.FeePosture switch
+        {
+            FeePostures.Itemized => new(asking, posting.ShippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, posting.ItemizedFeesTotal, posting.FeePosture),
+            FeePostures.AllIn => new(asking, posting.ShippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture, posting.ItemizedFeesTotal),
+            _ => new(asking, posting.ShippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture),
+        };
 
     private static IEnumerable<PostingEntity> ActivePostings(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
         vehicle.Postings.Where(p =>

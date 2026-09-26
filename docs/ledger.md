@@ -22,7 +22,7 @@ Every site says different things about a listing, and the ledger has two places 
 The typed columns on a posting are the ones the cost model and the red flags read:
 
 - `FeePosture` says how the site's price relates to its fees. It's one of `all-in` (the price already includes them), `itemized` (the site lists them on top), or `unknown` (a run read the page and couldn't tell). It's null when no run has ever read it, which is different from `unknown`.
-- `ItemizedFeesTotal` is the sum of the fees an `itemized` site listed on top of the price.
+- `ItemizedFeesTotal` is the sum of the fee lines the page listed. On an `itemized` posting they come on top of the price and are added to what the car costs. On an `all-in` posting they are already inside the price, so the total is only shown and never added.
 - `PickupFee` and `PickupLocation` are what it costs to pick the car up instead of having it delivered, and where. They sit beside the shipping fee as an option and are never a default, so a posting that ships to you keeps its shipping fee whether or not a pickup fee is stored. The walk fills them for Carvana, and the scenario's `fulfillment` field chooses which of the two fees the cost model counts ([cost-model.md](cost-model.md#what-a-purchase-price-means)).
 
 On a dealer, `DocFee` is the documentation fee in dollars and `AddOnsNote` is the add-ons line, both as CarEdge prints them on the dealer's card. `odo dealer grade` fills them in when it records a grade. A dealer graded before the ledger kept them has them empty until `odo dealer grade --all --refresh` looks it up again ([dealers.md](dealers.md#the-grade-pass)).

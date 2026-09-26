@@ -303,6 +303,19 @@ public class ShowRendererMonthlyCostRenderingTests
     }
 
     [Fact]
+    public void RenderMonthlyCost_AllInPostingWithListedFees_NamesHowMuchOfThePriceTheyAreWithoutAddingThem()
+    {
+        var purchasePrice = new PurchasePrice(17950m, null, FeePosture: "all-in", IncludedFees: 1494m);
+        (CostBreakdown? cost, _) = ShowCommand.MonthlyCostFor("Toyota Prius", purchasePrice.Total, BuildScenario());
+
+        string[] lines = Render(cost, purchasePrice: purchasePrice);
+
+        Assert.Equal(["Asking", "price", "$17,950"], Cells(lines[1]));
+        Assert.Equal(["Fee", "posture", "all-in", "($1,494", "of", "fees", "are", "in", "the", "price)"], Cells(lines[2]));
+        Assert.DoesNotContain(lines, line => line.Contains("Purchase price") || line.Contains("Itemized fees"));
+    }
+
+    [Fact]
     public void RenderMonthlyCost_VehicleWithNoShippingFee_PrintsNoPriceLines()
     {
         var purchasePrice = new PurchasePrice(17950m, ShippingFee: null);

@@ -333,7 +333,7 @@ public static class WalkCommand
                 PickupOption? pickup = site.ReadPickup(bodyText);
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
                 string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
-                FeeStatement? feeStatement = site.ReadFeeStatement(bodyText);
+                FeeStatement? feeStatement = site.ReadFeeStatement(bodyText)?.ForAskingPrice(outcome.Result.Price);
                 var candidate = new ListingCandidate
                 {
                     Vin = outcome.Result.Vin,

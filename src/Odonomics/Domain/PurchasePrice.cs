@@ -14,6 +14,9 @@ namespace Odonomics.Domain;
 /// <param name="FeePosture">How the listing says its price relates to its fees (<c>all-in</c>,
 /// <c>itemized</c>, <c>unknown</c>), for display; null when it was never read. It never changes the
 /// total.</param>
+/// <param name="IncludedFees">The sum of the fee lines an all-in listing itemized inside its asking
+/// price, for display; null when it itemized none. It never changes the total, because those fees are
+/// already in the asking price.</param>
 public readonly record struct PurchasePrice(
     decimal Asking,
     decimal? ShippingFee,
@@ -21,7 +24,8 @@ public readonly record struct PurchasePrice(
     string? PickupLocation = null,
     Fulfillment Fulfillment = Fulfillment.Delivery,
     decimal? ItemizedFees = null,
-    string? FeePosture = null)
+    string? FeePosture = null,
+    decimal? IncludedFees = null)
 {
     /// <summary>The fee the chosen <see cref="Fulfillment"/> adds, or null when the listing gives none.</summary>
     public decimal? AppliedFee => Fulfillment switch

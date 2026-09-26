@@ -46,8 +46,9 @@ public sealed class PostingEntity
     /// <see cref="PickupFee"/>, and <see cref="PickupLocation"/>.</summary>
     public string? FeePosture { get; set; }
 
-    /// <summary>The sum of the itemized fees the site listed on top of the asking price, when its
-    /// <see cref="FeePosture"/> is itemized; null when none were read.</summary>
+    /// <summary>The sum of the fee lines the site itemized: on top of the asking price when its
+    /// <see cref="FeePosture"/> is itemized (and then added to what the car costs), or inside it when
+    /// the posture is all-in (and then only shown); null when none were read.</summary>
     public decimal? ItemizedFeesTotal { get; set; }
 
     /// <summary>The fee for picking the car up instead of having it delivered, recorded beside

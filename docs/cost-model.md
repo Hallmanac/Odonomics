@@ -12,7 +12,7 @@ Only an `itemized` fee posture adds anything. A posting whose page says its pric
 
 The fees are treated as part of the purchase price, so they're financed, taxed, and depreciated along with the car. The price red flags are the exception, and [research.md](research.md#red-flags) says why. Carvana is the only site that stores a shipping fee or a pickup fee, and [walk.md](walk.md#carvana) explains how the walk reads them. cars.com and Autotrader store a fee posture, and [walk.md](walk.md#fee-statements) explains how the walk reads it.
 
-`odo show` prints the asking price, then any shipping fee, pickup fee and itemized fees, then the purchase price they add up to (with the fulfillment that chose the take-home fee), and last the fee posture, all above the monthly figures. `odo rank --detail` names the same fees on a line under each row.
+`odo show` prints the asking price, then any shipping fee, pickup fee and itemized fees, then the purchase price they add up to (with the fulfillment that chose the take-home fee), and last the fee posture, all above the monthly figures. For an all-in posting whose page listed its fees, the posture line says how much of the price they are, and that figure is not added. `odo rank --detail` names the same fees on a line under each row.
 
 ## The three monthly figures
 

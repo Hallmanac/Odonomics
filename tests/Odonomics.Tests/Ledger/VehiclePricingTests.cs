@@ -246,6 +246,17 @@ public class VehiclePricingTests
     }
 
     [Fact]
+    public void LowestCurrentPurchasePrice_AllInPostingWithListedFees_CarriesThemAsIncludedFeesForDisplayOnly()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 17000m, feePosture: FeePostures.AllIn, itemizedFees: 1494m));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(1494m, price?.IncludedFees);
+        Assert.Equal(17000m, price?.Total);
+    }
+
+    [Fact]
     public void LowestCurrentPurchasePrice_ItemizedPostingWhoseFeesMakeItDearer_LosesToAnAllInPostingWithAHigherAskingPrice()
     {
         VehicleEntity vehicle = Vehicle(
