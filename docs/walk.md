@@ -70,6 +70,26 @@ A touched link never enters the pool of detail visits and never spends any of `-
 
 `--revisit` turns all of this off and opens a detail page for every link, as the walk did before. Use it to refresh the dealer or shipping fee of cars the ledger already holds, or to check a site whose cards the walk can't read yet. A posting that was dropped on its detail visit (the wrong model, a new car) never reached the ledger, so it's opened again on every walk.
 
+### Badges
+
+Each site prints its own opinion of a car's price as a badge on the result card, and the walk records what the card says. It reads them from the same card text it already collects for the price, so there is no extra page load. The badges are stored as posting attributes ([ledger.md](ledger.md#site-specific-facts)), which are for reading only: `odo show` lists them under the posting, and `odo rank` shows the deal badge and the dealer rating in one short field. They never touch the score ([cost-model.md](cost-model.md#site-badges-never-touch-the-score)).
+
+A badge is a line of the card that is exactly the badge's text. A card with no badge records nothing. A posting already on the ledger has its badges refreshed when its card is touched, without a detail visit, and a new posting gets the badges of the card it was found on when its detail page is saved. A name a card doesn't show is left as it was, since a card that drops a badge doesn't prove the badge is gone.
+
+| Site | Attribute | What the card prints |
+| --- | --- | --- |
+| cars.com | `deal` | Great Deal, Good Deal, Fair Deal |
+| cars.com | `demand` | High Demand |
+| cars.com | `dealer-rating` | the dealer's rating, a line of its own such as `4.9` |
+| Autotrader | `deal` | Great Price, Good Price |
+| Autotrader | `price-drop` | Price Drop |
+| Autotrader | `paperwork` | Online Paperwork |
+| Carvana | `deal` | Great Deal |
+| Carvana | `price-drop` | Price Drop |
+| Carvana | `shipping` | Free shipping |
+
+A cars.com card shows a dealer rating whether or not it has a badge, so a card with a rating and no badge records the rating alone. Carvana's "Recent" tag is a sort label the page repeats, not a badge, and the walk doesn't read it. Autotrader also prints badges such as High Demand and Newly Listed that aren't recorded. Autotrader's card shape hasn't been confirmed (see below), so until a walk shows that its card text holds the badges, an Autotrader posting may get none.
+
 ### Length and the cap
 
 The walk is uncapped by default. The scenario's own facets (model, minimum year, maximum mileage, zip and radius) are the only filter, and a pair visits every car its searches return. On a paged site (Carvana) that means following it page after page until its own stop rules end it, which are the stated count being reached, a page that adds nothing new, or "No exact matches".
