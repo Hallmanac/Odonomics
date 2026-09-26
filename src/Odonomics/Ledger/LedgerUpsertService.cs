@@ -13,7 +13,8 @@ public sealed record TouchOutcome(int Found, int PriceChanged);
 /// Upsert semantics: a vehicle seen again updates its last-known year/make/model/trim/mileage and
 /// LastSeen; a posting seen again updates LastSeen and appends a PriceObservation only when the
 /// price actually changed (or this is the posting's first sighting), and takes the candidate's
-/// shipping fee as the posting's latest. Nothing is ever deleted. A posting can also be touched
+/// shipping fee as the posting's latest, and sets any display-only attributes the candidate carries.
+/// Nothing is ever deleted. A posting can also be touched
 /// without a detail visit (see <see cref="TouchAsync"/>), from a search page's result card alone.
 /// </summary>
 public sealed class LedgerUpsertService(OdonomicsDbContext db)
@@ -110,6 +111,11 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
 
         await db.SaveChangesAsync(cancellationToken);
 
+        if (candidate.Attributes.Count > 0)
+        {
+            await SetPostingAttributesAsync(posting.Id, candidate.Attributes, run, cancellationToken);
+        }
+
         return new UpsertOutcome(vehicleIsNew, postingIsNew, priceChanged && !postingIsNew, previousPrice);
     }
 
@@ -126,6 +132,34 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
             .Where(a => a.PostingId == postingId)
             .ToListAsync(cancellationToken);
 
+        ApplyAttributes(postingId, existing, attributes, run);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Sets <paramref name="attributesByUrl"/> on the postings of <paramref name="source"/> at
+    /// each URL, the way <see cref="SetPostingAttributesAsync"/> does for one posting, in one save so
+    /// either every posting's attributes land or none do. This is how a known posting touched from its
+    /// search card (see <see cref="TouchAsync"/>) gets the badges the card showed without a detail
+    /// visit. A URL that matches no posting writes nothing. <paramref name="run"/> must already be
+    /// saved.</summary>
+    public async Task SetPostingAttributesByUrlAsync(string source, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> attributesByUrl, RunEntity run, CancellationToken cancellationToken)
+    {
+        string[] urls = [.. attributesByUrl.Keys];
+        List<PostingEntity> postings = await db.Postings
+            .Include(p => p.Attributes)
+            .Where(p => p.Source == source && urls.Contains(p.Url))
+            .ToListAsync(cancellationToken);
+
+        foreach (PostingEntity posting in postings)
+        {
+            ApplyAttributes(posting.Id, [.. posting.Attributes], attributesByUrl[posting.Url], run);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private void ApplyAttributes(int postingId, List<PostingAttributeEntity> existing, IReadOnlyDictionary<string, string> attributes, RunEntity run)
+    {
         foreach ((string rawName, string rawValue) in attributes)
         {
             string name = rawName.Trim();
@@ -154,8 +188,6 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
                 current.ObservedRunId = run.Id;
             }
         }
-
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>The canonical URL of every posting the ledger holds for <paramref name="source"/>,

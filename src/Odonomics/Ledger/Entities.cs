@@ -95,6 +95,32 @@ public sealed class PostingAttributeEntity
     public PostingEntity? Posting { get; set; }
 }
 
+/// <summary>The names the walk gives the display-only facts it reads off a result card, for
+/// <see cref="PostingAttributeEntity.Name"/>. A posting belongs to one site, so a name does not repeat
+/// the site: cars.com's deal badge and carvana's are both <see cref="Deal"/>, and the posting's own
+/// source says whose opinion it is. Nothing here is read by the cost model or the ranking; a site's
+/// price opinion is untested until ledger history shows whether badged cars sell faster or drop less.</summary>
+public static class PostingAttributeNames
+{
+    /// <summary>The site's own verdict on the price: "Great Deal", "Good Deal", "Fair Deal", "Great Price", or "Good Price".</summary>
+    public const string Deal = "deal";
+
+    /// <summary>The site's "High Demand" badge (cars.com).</summary>
+    public const string Demand = "demand";
+
+    /// <summary>The dealer's rating on the site's own scale, as the card prints it, such as "4.9" (cars.com).</summary>
+    public const string DealerRating = "dealer-rating";
+
+    /// <summary>The site's "Price Drop" badge (autotrader and carvana).</summary>
+    public const string PriceDrop = "price-drop";
+
+    /// <summary>The "Online Paperwork" badge (autotrader).</summary>
+    public const string Paperwork = "paperwork";
+
+    /// <summary>The "Free shipping" badge (carvana).</summary>
+    public const string Shipping = "shipping";
+}
+
 /// <summary>A selling dealer, keyed by its normalized name and location (see
 /// <see cref="DealerNormalizer"/>) so the same dealer named slightly differently across sources or
 /// runs still resolves to one row. <see cref="Grade"/>, <see cref="GradeReason"/>, and
