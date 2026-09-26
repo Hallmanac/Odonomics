@@ -58,6 +58,75 @@ public class ShowRendererPostingsTableRenderingTests
         Assert.EndsWith("-", row.TrimEnd());
     }
 
+    private static PostingEntity GradedPosting(decimal? docFee, string? addOnsNote)
+    {
+        PostingEntity posting = CarvanaPosting("Holler Honda");
+        posting.Dealer = new DealerEntity
+        {
+            Name = "Holler Honda",
+            NormalizedName = "HOLLER HONDA",
+            NormalizedLocation = "",
+            Grade = "B",
+            GradeCheckedAt = Seen,
+            DocFee = docFee,
+            AddOnsNote = addOnsNote,
+        };
+        return posting;
+    }
+
+    // A long dealer cell wraps inside its column, so compare the row's text with the wrapping and the
+    // column separators taken out.
+    private static string Flattened(PostingEntity posting) =>
+        string.Join(' ', string.Join(' ', Render(posting)).Replace('│', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
+    [Fact]
+    public void BuildPostingsTable_DealerWithADocFeeAndAddOnsNote_ShowsBothOnTheDealerLine()
+    {
+        string table = Flattened(GradedPosting(1199m, "$358 add-ons"));
+
+        Assert.Contains("Holler Honda (B), doc fee $1,199, $358 add-ons", table);
+    }
+
+    [Fact]
+    public void BuildPostingsTable_DealerWithOnlyAnAddOnsNote_ShowsJustTheNote()
+    {
+        string table = Flattened(GradedPosting(null, "No add-ons"));
+
+        Assert.Contains("Holler Honda (B), No add-ons", table);
+        Assert.DoesNotContain("doc fee", table);
+    }
+
+    [Fact]
+    public void BuildPostingsTable_DealerGradedBeforeFeesWereKept_ShowsTheGradeAlone()
+    {
+        string table = Flattened(GradedPosting(null, null));
+
+        Assert.Contains("Holler Honda (B)", table);
+        Assert.DoesNotContain("doc fee", table);
+        Assert.DoesNotContain("(B),", table);
+    }
+
+    [Fact]
+    public void PostingAttributeLines_ListsOneLinePerNameAndValueWithTheSource()
+    {
+        PostingEntity posting = CarvanaPosting(null);
+        posting.Attributes =
+        [
+            new PostingAttributeEntity { PostingId = 1, Name = "Rating", Value = "4.8", ObservedRunId = 1 },
+            new PostingAttributeEntity { PostingId = 1, Name = "Badge", Value = "Certified [new]", ObservedRunId = 1 },
+        ];
+
+        IReadOnlyList<string> lines = ShowRenderer.PostingAttributeLines([posting]);
+
+        Assert.Equal(["  carvana Badge: Certified [new]", "  carvana Rating: 4.8"], lines);
+    }
+
+    [Fact]
+    public void PostingAttributeLines_PostingsWithNoAttributes_PrintNothing()
+    {
+        Assert.Empty(ShowRenderer.PostingAttributeLines([CarvanaPosting(null)]));
+    }
+
     private static string[] Render(PostingEntity posting)
     {
         var console = new TestConsole();
