@@ -271,20 +271,44 @@ public static class RunSources
     /// partial, so the diff does not read a posting the run never reached as a car that sold.</summary>
     private const string PartialPrefix = "capped:";
 
+    /// <summary>The prefix of the token a walk stamps beside a pair's coverage token when a result page
+    /// after the first failed to load, so the pages after it were never read: "unread:carvana:Prius". It
+    /// is the same kind of marker as <see cref="PartialPrefix"/> with a reason of its own, so the diff can
+    /// say the postings went unread rather than that a cap kept the walk from them.</summary>
+    private const string UnreadPrefix = "unread:";
+
     /// <summary>The token that marks the pair behind <paramref name="coverageKey"/> (a <see cref="Key"/>)
-    /// as partially covered this run.</summary>
+    /// as partially covered this run because an explicit --max stopped its link collection short.</summary>
     public static string PartialKey(string coverageKey) => PartialPrefix + coverageKey;
 
-    /// <summary>The coverage tokens the run stamped, without the partial-coverage markers (see
-    /// <see cref="PartialKey"/>), so a marker is never mistaken for a source and model pair.</summary>
-    public static string[] Split(RunEntity run) =>
-        [.. SplitAll(run).Where(token => !token.StartsWith(PartialPrefix, StringComparison.Ordinal))];
+    /// <summary>The token that marks the pair behind <paramref name="coverageKey"/> (a <see cref="Key"/>)
+    /// as partially covered this run because a result page after the first failed to load.</summary>
+    public static string UnreadKey(string coverageKey) => UnreadPrefix + coverageKey;
 
-    /// <summary>The <see cref="Key"/> of every pair the run covered only partially.</summary>
-    public static HashSet<string> PartialCoverage(RunEntity run) =>
+    /// <summary>The coverage tokens the run stamped, without the partial-coverage markers (see
+    /// <see cref="PartialKey"/> and <see cref="UnreadKey"/>), so a marker is never mistaken for a source
+    /// and model pair.</summary>
+    public static string[] Split(RunEntity run) =>
+        [.. SplitAll(run).Where(token => !IsMarker(token))];
+
+    /// <summary>The <see cref="Key"/> of every pair the run covered only partially because of a cap.</summary>
+    public static HashSet<string> PartialCoverage(RunEntity run) => MarkedPairs(run, PartialPrefix);
+
+    /// <summary>The <see cref="Key"/> of every pair the run covered only partially because a later result
+    /// page failed to load.</summary>
+    public static HashSet<string> UnreadCoverage(RunEntity run) => MarkedPairs(run, UnreadPrefix);
+
+    /// <summary>Whether the run left any of <paramref name="coverageKey"/>'s pair unread, for either reason.</summary>
+    public static bool IsPartial(RunEntity run, string coverageKey) =>
+        PartialCoverage(run).Contains(coverageKey) || UnreadCoverage(run).Contains(coverageKey);
+
+    private static HashSet<string> MarkedPairs(RunEntity run, string prefix) =>
         [.. SplitAll(run)
-            .Where(token => token.StartsWith(PartialPrefix, StringComparison.Ordinal))
-            .Select(token => token[PartialPrefix.Length..])];
+            .Where(token => token.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(token => token[prefix.Length..])];
+
+    private static bool IsMarker(string token) =>
+        token.StartsWith(PartialPrefix, StringComparison.Ordinal) || token.StartsWith(UnreadPrefix, StringComparison.Ordinal);
 
     private static string[] SplitAll(RunEntity run) => run.Sources.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
@@ -298,8 +322,8 @@ public static class RunSources
 
     /// <summary>The runs whose sightings of <paramref name="token"/>'s pair are still current, newest
     /// first: the latest run that covered the pair, then, for as long as the run before covered it only
-    /// partially (see <see cref="PartialKey"/>), the one before that, ending with the first that covered
-    /// it in full. A partial run never looked for the postings it did not reach, so it does not
+    /// partially (see <see cref="PartialKey"/> and <see cref="UnreadKey"/>), the one before that, ending
+    /// with the first that covered it in full. A partial run never looked for the postings it did not reach, so it does not
     /// supersede the coverage that did; a posting last seen by any run in this chain was still listed
     /// when the newest of them ended. Empty when no run covered the pair.</summary>
     public static List<RunEntity> CoverageChain(string token, IEnumerable<RunEntity> runs)
@@ -308,7 +332,7 @@ public static class RunSources
         foreach (RunEntity run in runs.Where(r => Split(r).Contains(token)).OrderByDescending(r => r.StartedAt))
         {
             chain.Add(run);
-            if (!PartialCoverage(run).Contains(token))
+            if (!IsPartial(run, token))
             {
                 break;
             }
@@ -319,7 +343,7 @@ public static class RunSources
 
     /// <summary>For every source and model pair covered by any run in <paramref name="runs"/>, the
     /// StartedAt of the latest run that covered it in full. A run that covered the pair only partially
-    /// (see <see cref="PartialKey"/>) does not replace it, so the postings that run never reached keep
+    /// (see <see cref="PartialKey"/> and <see cref="UnreadKey"/>) does not replace it, so the postings that run never reached keep
     /// counting as listed; a pair only ever covered partially reports its first partial run. A posting
     /// whose LastSeen is at or after this time is still listed as far as the ledger knows.</summary>
     public static Dictionary<string, DateTimeOffset> LatestCoverageBySource(IEnumerable<RunEntity> runs)
