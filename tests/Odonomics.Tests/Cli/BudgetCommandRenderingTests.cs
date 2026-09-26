@@ -115,6 +115,25 @@ public class BudgetCommandRenderingTests
         Assert.Contains("Max purchase price is the asking price plus any shipping fee", prose);
     }
 
+    [Fact]
+    public void Render_UnderDelivery_ClosingLineNamesDelivery()
+    {
+        string prose = JoinTrimmed(SplitLines(RenderWithNoColor(BuildScenario())));
+
+        Assert.Contains("assuming delivery", prose);
+        Assert.DoesNotContain("assuming pickup", prose);
+    }
+
+    [Fact]
+    public void Render_UnderPickup_ClosingLineCountsThePickupFeeAndSaysSo()
+    {
+        string prose = JoinTrimmed(SplitLines(RenderWithNoColor(BuildScenario() with { Fulfillment = Fulfillment.Pickup })));
+
+        Assert.Contains("Max purchase price is the asking price plus any pickup fee", prose);
+        Assert.Contains("assuming pickup", prose);
+        Assert.DoesNotContain("assuming delivery", prose);
+    }
+
     private static string JoinTrimmed(IEnumerable<string> lines) => string.Join(' ', lines.Select(line => line.Trim()));
 
     private static string RenderWithNoColor(Scenario scenario)

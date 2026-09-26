@@ -7,12 +7,17 @@ namespace Odonomics.Cli.Commands;
 
 public static class RankCommand
 {
-    public static async Task<int> RunAsync(string scenarioPath, decimal? budget, int? term, bool detail, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string scenarioPath, decimal? budget, int? term, bool detail, Fulfillment? fulfillment, CancellationToken cancellationToken)
     {
         Scenario scenario = ScenarioLoader.Load(scenarioPath);
         if (term is int overrideTerm)
         {
             scenario = scenario with { TermMonths = overrideTerm };
+        }
+
+        if (fulfillment is Fulfillment overrideFulfillment)
+        {
+            scenario = scenario with { Fulfillment = overrideFulfillment };
         }
 
         using OdonomicsDbContext db = LedgerFactory.Open();
@@ -33,7 +38,7 @@ public static class RankCommand
         var research = new Dictionary<string, ResearchStatus>();
         foreach (VehicleEntity vehicle in vehicles)
         {
-            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource);
+            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment);
             scores.Add(Scorer.Score(forScoring, scenario));
             research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource));
         }
@@ -43,12 +48,12 @@ public static class RankCommand
     }
 
     /// <summary>The slice of a ledger vehicle the scorer reads, plus the site badge rank shows beside
-    /// it. The price, the shipping fee, and the badge all come from the same posting: the cheapest one
-    /// to take home (see <see cref="VehiclePricing.LowestCurrentPurchasePosting"/>).</summary>
-    public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
+    /// it. The price, the fees, and the badge all come from the same posting: the cheapest one to take
+    /// home under <paramref name="fulfillment"/> (see <see cref="VehiclePricing.LowestCurrentPurchasePosting"/>).</summary>
+    public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment)
     {
-        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource);
-        PostingEntity? cheapest = VehiclePricing.LowestCurrentPurchasePosting(vehicle, latestCoverageBySource);
+        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, fulfillment);
+        PostingEntity? cheapest = VehiclePricing.LowestCurrentPurchasePosting(vehicle, latestCoverageBySource, fulfillment);
         return new VehicleForScoring
         {
             Vin = vehicle.Vin,
@@ -58,6 +63,9 @@ public static class RankCommand
             Mileage = vehicle.Mileage,
             LowestCurrentPrice = purchasePrice?.Asking,
             ShippingFee = purchasePrice?.ShippingFee,
+            PickupFee = purchasePrice?.PickupFee,
+            PickupLocation = purchasePrice?.PickupLocation,
+            Fulfillment = fulfillment,
             DealerGrade = DealerGradeSummary(vehicle),
             OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade?.StartsWith('F') == true),
             SiteBadge = cheapest is null ? null : SiteBadgeText.For(cheapest.Attributes),
