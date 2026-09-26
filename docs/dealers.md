@@ -24,7 +24,9 @@ The "Private seller" row that Autotrader's private listings share is never looke
 
 ### What it looks up
 
-With `--all`, it looks up every dealer that has never been checked on CarEdge's Dealer Ratings. It's paced, and it pauses for challenges, the same way the walk is. `odo dealer grade <vin>` does the same for the dealers behind that VIN's postings, and it only looks up the ones not yet checked, printing what's already stored for the rest. Each dealer is looked up by searching `https://caredge.com/dealers?q=<dealer name and location>` and reading the matching result card's letter grade off the page.
+With `--all`, it looks up every dealer that has never been checked on CarEdge's Dealer Ratings. It's paced, and it pauses for challenges, the same way the walk is. `odo dealer grade <vin>` does the same for the dealers behind that VIN's postings, and it only looks up the ones not yet checked, printing what's already stored for the rest. Each dealer is looked up by searching `https://caredge.com/dealers?q=<dealer name and location>` and reading the matching result card's letter grade off the page. The same card prints the dealer's doc fee and an add-ons line ("No add-ons" or, for example, "$358 add-ons"). Whenever a grade is recorded, the run stores the doc fee as a dollar amount ("$1,199" is stored as 1199) and the add-ons line as printed.
+
+`--refresh` looks up dealers that already have a grade again, along with the never-checked ones, and it works with `--all` or with a VIN. It exists so a dealer graded before the ledger kept the doc fee and add-ons note can pick them up. A dealer that was stamped checked with no grade, either because CarEdge has no rating for it or because the run skipped it on purpose, is not looked up again, since a second look has nothing to add. A refresh that comes back with a new grade replaces the old one, and one that can't read the page leaves everything as it was. A refresh that finds CarEdge no longer has a card for the dealer keeps the stored grade, doc fee, and add-ons note, and says so.
 
 ### How a card is matched
 
@@ -44,6 +46,6 @@ A page that's CarEdge's own 404 means the search URL itself is dead, and not tha
 
 ## Where grades appear
 
-`odo show <vin>` prints the grade beside each posting. On the graded pages recorded so far, the current dealer card carries no "why this grade" text, so no reason is shown alongside it. No F-grade page has been recorded, so whether an F still carries one is unknown.
+`odo show <vin>` prints the grade beside each posting, followed by the dealer's doc fee and add-ons note when the ledger has them, as in `Daytona Toyota (B), doc fee $1,199, No add-ons`. On the graded pages recorded so far, the current dealer card carries no "why this grade" text, so no reason is shown alongside it. No F-grade page has been recorded, so whether an F still carries one is unknown.
 
 `odo rank` shows each vehicle's grade whenever at least one vehicle in that section has one. It appears as a `gr` marker on the ranked and over-budget lines, and as a Grade column in the insurance-unknown and F-graded-only tables. Rank also lists any vehicle whose only postings come from F-range-graded dealers under its own warning heading, and that vehicle is still ranked and never hidden.

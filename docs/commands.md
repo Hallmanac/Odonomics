@@ -10,7 +10,8 @@ odo walk [cars.com|carvana|autotrader] [--model "Make Model"] [--max N] [--revis
                                     an operator-assisted browser walk of the shortlist
 odo research [<vin> ...] [--refresh] [--quiet]
                                     safety ratings and VIN history, with a red-flags summary
-odo dealer grade (--all | <vin>)    look up each ungraded dealer's CarEdge grade
+odo dealer grade (--all | <vin>) [--refresh]
+                                    look up each ungraded dealer's CarEdge grade
 odo budget                          the fixed monthly running cost, then the max purchase price
                                     for each target monthly budget
 odo rank [--budget N] [--term M] [--detail]
@@ -40,7 +41,7 @@ odo finalist <vin>                  mark a vehicle a finalist
 
 ## dealer grade
 
-`odo dealer grade` looks up each ungraded dealer's grade on CarEdge, and it needs the same hand-launched browser the walk uses. Pass exactly one of them. `--all` grades every dealer the ledger has never checked, and `<vin>` grades the dealers behind that one VIN's postings that haven't been checked yet. [dealers.md](dealers.md) has the details.
+`odo dealer grade` looks up each ungraded dealer's grade on CarEdge, and it needs the same hand-launched browser the walk uses. Pass exactly one of them. `--all` grades every dealer the ledger has never checked, and `<vin>` grades the dealers behind that one VIN's postings that haven't been checked yet. `--refresh` also looks up dealers that already have a grade, so ones graded before the ledger kept the doc fee and add-ons note can pick them up. [dealers.md](dealers.md) has the details.
 
 ## budget
 
