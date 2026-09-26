@@ -10,30 +10,33 @@ namespace Odonomics.Walk;
 /// on top of the price, and on an all-in page it is how much of the price is fees, which is shown and
 /// never added. <paramref name="ListingPrice"/> and <paramref name="TotalPrice"/> are the page's own
 /// pre-fee and fee-inclusive figures when its price block prints both, so the walk can tell which of
-/// the two it actually stored (see <see cref="ForAskingPrice"/>).</summary>
+/// the two it actually stored (see <see cref="ReconciledWith"/>).</summary>
 public sealed record FeeStatement(string Posture, decimal? ItemizedTotal, decimal? ListingPrice = null, decimal? TotalPrice = null)
 {
-    /// <summary>This statement corrected for the asking price the walk stored for the page. The
-    /// posture rests on the assumption that the stored price is the page's headline (fee-inclusive)
-    /// price, but the price comes from the extraction model, which sometimes stores the pre-fee
-    /// listing price instead. When the page prints a listing price and a total that differ by exactly
-    /// its fee lines, a stored price equal to the listing price means the fees are not in it, so an
-    /// all-in reading becomes itemized; and a stored price equal to the total means they are, so an
-    /// itemized reading becomes all-in and the fees are not counted twice. Any other stored price, or
-    /// a page whose figures do not add up, leaves the statement as read.</summary>
-    public FeeStatement ForAskingPrice(decimal? askingPrice)
+    /// <summary>This statement and the asking price to store, reconciled with the price the walk
+    /// extracted for the page. The posture rests on the assumption that the stored price is the page's
+    /// headline (fee-inclusive) price, but the price comes from the extraction model, which sometimes
+    /// stores the pre-fee listing price instead. When the page prints a listing price and a total that
+    /// differ by exactly its fee lines, an extracted price equal to the listing price is replaced by the
+    /// total, so the stored price is the headline the statement assumes and the posture stays all-in.
+    /// It is not turned into itemized instead: a later cars.com search-card touch re-bases the stored
+    /// price on the card's fee-inclusive figure while leaving the posture alone, which would count the
+    /// fees twice. An extracted price equal to the total means the fees are in it, so an itemized
+    /// reading becomes all-in and they are not counted twice. Any other extracted price, or a page
+    /// whose figures do not add up, leaves both as they were.</summary>
+    public (FeeStatement Statement, decimal AskingPrice) ReconciledWith(decimal askingPrice)
     {
-        if (askingPrice is null || ItemizedTotal is not decimal fees || ListingPrice is not decimal listing
+        if (ItemizedTotal is not decimal fees || ListingPrice is not decimal listing
             || TotalPrice is not decimal total || listing == total || listing + fees != total)
         {
-            return this;
+            return (this, askingPrice);
         }
 
         return (Posture, askingPrice) switch
         {
-            (FeePostures.AllIn, decimal asking) when asking == listing => this with { Posture = FeePostures.Itemized },
-            (FeePostures.Itemized, decimal asking) when asking == total => this with { Posture = FeePostures.AllIn },
-            _ => this,
+            (FeePostures.AllIn, _) when askingPrice == listing => (this, total),
+            (FeePostures.Itemized, _) when askingPrice == total => (this with { Posture = FeePostures.AllIn }, askingPrice),
+            _ => (this, askingPrice),
         };
     }
 }
@@ -48,8 +51,8 @@ public sealed record FeeStatement(string Posture, decimal? ItemizedTotal, decima
 /// the headline equals the printed total, fees included). The lines' sum is still kept on the
 /// statement so it can be shown. A page that lists fee lines with amounts and never says they are
 /// included is itemized, and its total is what the fees add on top. A page that says neither is
-/// unknown. Where the stored price turns out not to be the headline, <see cref="FeeStatement.ForAskingPrice"/>
-/// corrects the reading.
+/// unknown. Where the stored price turns out not to be the headline, <see cref="FeeStatement.ReconciledWith"/>
+/// corrects the price or the reading.
 /// Each reader looks only at its page's own price block, never at the page as a whole, since a
 /// similar-vehicles or search-style section further down carries other cars' "Dealer Fees Included"
 /// badges and one car's page must not borrow another's statement.</summary>
