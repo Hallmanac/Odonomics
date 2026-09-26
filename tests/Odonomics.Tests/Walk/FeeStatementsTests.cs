@@ -113,4 +113,15 @@ public class FeeStatementsTests
     {
         Assert.Equal(FeePostures.Unknown, FeeStatements.ReadAutotrader(Fixture("autotrader-search-style-page-with-badges.txt")).Posture);
     }
+
+    [Fact]
+    public void ReadFeeStatement_EachSiteReadsItsOwnPagesAndCarvanaReadsNone()
+    {
+        string carsCom = Fixture("carscom-detail-fees-not-disclosed.txt");
+        string autotrader = Fixture("autotrader-detail-fees-included.txt");
+
+        Assert.Equal(FeePostures.Unknown, WalkSites.CarsCom.ReadFeeStatement(carsCom)?.Posture);
+        Assert.Equal(FeePostures.AllIn, WalkSites.Autotrader.ReadFeeStatement(autotrader)?.Posture);
+        Assert.Null(WalkSites.Carvana.ReadFeeStatement(autotrader));
+    }
 }
