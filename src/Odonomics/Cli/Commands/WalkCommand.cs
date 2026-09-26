@@ -203,6 +203,7 @@ public static class WalkCommand
                 linkPoolSize,
                 (pageUrl, pageNumber, pageCt) => LoadSearchPageAsync(pageUrl, searchLabel, pageNumber, pageCt),
                 (pageNumber, ex) => AnsiConsole.MarkupLineInterpolated($"[yellow]{searchLabel}, page {pageNumber} failed to load, so paging stops there ({ex.Message})[/]"),
+                pageNumber => AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: the search ran out of exact matches, so paging stops there"),
                 ct);
             AnsiConsole.MarkupLineInterpolated($"found {links.Count} detail link(s) to consider (cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s))");
             return links;
