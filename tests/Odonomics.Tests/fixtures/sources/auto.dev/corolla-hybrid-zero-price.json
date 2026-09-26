@@ -1,0 +1,41 @@
+{
+  "totalCount": 2,
+  "totalCountFormatted": "2",
+  "hitsCount": 2,
+  "records": [
+    {
+      "vin": "JTDBCMFE2T3156781",
+      "year": 2026,
+      "make": "Toyota",
+      "model": "Corolla Hybrid",
+      "price": "$0",
+      "mileage": "6 Miles",
+      "city": "Orlando",
+      "condition": "used",
+      "dealerName": "Example Toyota Orlando",
+      "active": true,
+      "state": "FL",
+      "trim": "LE",
+      "vdpUrl": "https://auto.dev/listing/zero-price",
+      "priceUnformatted": 0,
+      "mileageUnformatted": 6
+    },
+    {
+      "vin": "JTDBCMFE5R3123456",
+      "year": 2024,
+      "make": "Toyota",
+      "model": "Corolla Hybrid",
+      "price": "$23,450",
+      "mileage": "12,300 Miles",
+      "city": "Orlando",
+      "condition": "used",
+      "dealerName": "Example Toyota Orlando",
+      "active": true,
+      "state": "FL",
+      "trim": "LE",
+      "vdpUrl": "https://auto.dev/listing/real-price",
+      "priceUnformatted": 23450,
+      "mileageUnformatted": 12300
+    }
+  ]
+}

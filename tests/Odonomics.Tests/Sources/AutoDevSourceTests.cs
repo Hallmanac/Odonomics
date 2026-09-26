@@ -1,3 +1,4 @@
+using Odonomics.Domain;
 using Odonomics.Ledger;
 using Odonomics.Sources;
 using Odonomics.Tests.TestSupport;
@@ -191,5 +192,82 @@ public class AutoDevSourceTests
         Assert.DoesNotContain(result.Candidates, c => c.Vin == "19XZE4F52ME000999"); // 69,599 miles
         Assert.Contains(result.Candidates, c => c.Vin == "19XZE4F95ME001552"); // 32,500 miles
         Assert.NotEmpty(result.Rejections);
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordedRecordWithAZeroPrice_IsRejectedNamingTheVinAndThePrice()
+    {
+        // auto.dev returned priceUnformatted 0 for a 2026 Corolla Hybrid with 6 miles (search of
+        // 2026-09-26); a zero is not an asking price, and letting it through ranked the car first.
+        ListingQuery query = new("Toyota", "Corolla Hybrid", YearMin: 2018, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
+        {
+            [url] = await File.ReadAllTextAsync(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "sources", "auto.dev", "corolla-hybrid-zero-price.json")),
+        });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("JTDBCMFE5R3123456", candidate.Vin);
+        string rejection = Assert.Single(result.Rejections);
+        Assert.Contains("candidate rejected, placeholder price 0", rejection);
+        Assert.Contains("JTDBCMFE2T3156781", rejection);
+        Assert.Equal(["Corolla Hybrid"], result.ModelsCovered);
+    }
+
+    [Theory]
+    [InlineData("-5", "placeholder price -5")]
+    [InlineData("999", "placeholder price 999")]
+    public async Task RunAsync_NegativeOrSubFloorPrice_IsRejectedAsAPlaceholder(string price, string expectedFragment)
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        string body = $$"""
+            { "records": [ { "vin": "19XZE4F52ME000999", "vdpUrl": "https://auto.dev/listing/1", "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX", "priceUnformatted": {{price}}, "mileageUnformatted": 69599 } ] }
+            """;
+        var source = new AutoDevSource("test-key", new HttpClient(new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body })));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Empty(result.Candidates);
+        Assert.Contains(result.Rejections, r => r.Contains(expectedFragment) && r.Contains("19XZE4F52ME000999"));
+    }
+
+    [Fact]
+    public async Task RunAsync_PriceAtTheFloor_IsAccepted()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        string body = $$"""
+            { "records": [ { "vin": "19XZE4F52ME000999", "vdpUrl": "https://auto.dev/listing/1", "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX", "priceUnformatted": {{PlaceholderPrice.Floor}}, "mileageUnformatted": 69599 } ] }
+            """;
+        var source = new AutoDevSource("test-key", new HttpClient(new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body })));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Single(result.Candidates);
+        Assert.Empty(result.Rejections);
+    }
+
+    [Fact]
+    public async Task RunAsync_MissingPrice_KeepsTheExistingRejectionReason()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}";
+        const string body = """
+            { "records": [ { "vin": "19XZE4F52ME000999", "vdpUrl": "https://auto.dev/listing/1", "year": 2021, "make": "Honda", "model": "Insight", "trim": "EX", "mileageUnformatted": 69599 } ] }
+            """;
+        var source = new AutoDevSource("test-key", new HttpClient(new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body })));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Empty(result.Candidates);
+        Assert.Contains(result.Rejections, r => r.Contains("missing price/mileage") && !r.Contains("placeholder"));
     }
 }
