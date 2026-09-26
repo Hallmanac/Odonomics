@@ -9,9 +9,19 @@ public class WalkPairSummaryLineTests
     {
         var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 0, NotMatching: 0, Failed: 0);
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 9, saved: 7, dropped);
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 9, known: 0, saved: 7, dropped);
 
-        Assert.Equal("cars.com / Honda Insight: 9 pages, 7 saved, 2 dropped (missing fields)", line);
+        Assert.Equal("cars.com / Honda Insight: 9 pages, 0 known from cards, 7 saved, 2 dropped (missing fields)", line);
+    }
+
+    [Fact]
+    public void Format_KnownFromCards_SitsBesideVisitedSavedAndDroppedWithoutEnteringTheirSum()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 1, NoVin: 0, NotMatching: 0, Failed: 0);
+
+        string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 3, known: 146, saved: 2, dropped);
+
+        Assert.Equal("carvana / Toyota Camry Hybrid: 3 pages, 146 known from cards, 2 saved, 1 dropped (missing fields)", line);
     }
 
     [Fact]
@@ -19,9 +29,9 @@ public class WalkPairSummaryLineTests
     {
         var dropped = new DroppedBreakdown(0, 0, 0, 0);
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 7, saved: 7, dropped);
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 7, known: 0, saved: 7, dropped);
 
-        Assert.Equal("cars.com / Honda Insight: 7 pages, 7 saved, 0 dropped", line);
+        Assert.Equal("cars.com / Honda Insight: 7 pages, 0 known from cards, 7 saved, 0 dropped", line);
     }
 
     [Fact]
@@ -29,9 +39,9 @@ public class WalkPairSummaryLineTests
     {
         var dropped = new DroppedBreakdown(MissingFields: 3, NoVin: 0, NotMatching: 4, Failed: 0);
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 14, saved: 7, dropped);
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 14, known: 0, saved: 7, dropped);
 
-        Assert.Equal("cars.com / Honda Insight: 14 pages, 7 saved, 7 dropped (4 wrong model, 3 missing fields)", line);
+        Assert.Equal("cars.com / Honda Insight: 14 pages, 0 known from cards, 7 saved, 7 dropped (4 wrong model, 3 missing fields)", line);
     }
 
     [Fact]
@@ -40,9 +50,9 @@ public class WalkPairSummaryLineTests
         var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 1, NotMatching: 0, Failed: 1);
         int saved = 5;
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: saved + dropped.Total, saved, dropped);
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: saved + dropped.Total, known: 0, saved, dropped);
 
-        Assert.Equal("cars.com / Honda Insight: 9 pages, 5 saved, 4 dropped (2 missing fields, 1 no VIN, 1 failed to load)", line);
+        Assert.Equal("cars.com / Honda Insight: 9 pages, 0 known from cards, 5 saved, 4 dropped (2 missing fields, 1 no VIN, 1 failed to load)", line);
     }
 
     [Fact]
@@ -88,10 +98,10 @@ public class WalkPairSummaryLineTests
         var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 1, NotMatching: 3, Failed: 1, ExtractionFailed: 1, Repeat: 4, NewCar: 11);
         int saved = 12;
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: saved + dropped.Total, saved, dropped);
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: saved + dropped.Total, known: 0, saved, dropped);
 
         Assert.Equal(
-            "cars.com / Toyota Corolla Hybrid: 35 pages, 12 saved, 23 dropped (3 wrong model, 11 new-car listing, 2 missing fields, 1 no VIN, 4 repeat, 1 failed to load, 1 extraction failed)",
+            "cars.com / Toyota Corolla Hybrid: 35 pages, 0 known from cards, 12 saved, 23 dropped (3 wrong model, 11 new-car listing, 2 missing fields, 1 no VIN, 4 repeat, 1 failed to load, 1 extraction failed)",
             line);
     }
 
@@ -138,10 +148,10 @@ public class WalkPairSummaryLineTests
     {
         var dropped = new DroppedBreakdown(MissingFields: 10, NoVin: 0, NotMatching: 14, Failed: 0);
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Camry Hybrid", pages: 35, saved: 11, dropped, width: 80);
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Camry Hybrid", pages: 35, known: 0, saved: 11, dropped, width: 80);
 
         Assert.Equal(
-            "cars.com / Toyota Camry Hybrid: 35 pages, 11 saved, 24 dropped\n    (14 wrong model, 10 missing fields)",
+            "cars.com / Toyota Camry Hybrid: 35 pages, 0 known from cards, 11 saved, 24 dropped\n    (14 wrong model, 10 missing fields)",
             line);
     }
 
@@ -150,10 +160,10 @@ public class WalkPairSummaryLineTests
     {
         var dropped = new DroppedBreakdown(MissingFields: 10, NoVin: 0, NotMatching: 14, Failed: 0);
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Camry Hybrid", pages: 35, saved: 11, dropped, width: 120);
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Camry Hybrid", pages: 35, known: 0, saved: 11, dropped, width: 120);
 
         Assert.Equal(
-            "cars.com / Toyota Camry Hybrid: 35 pages, 11 saved, 24 dropped (14 wrong model, 10 missing fields)",
+            "cars.com / Toyota Camry Hybrid: 35 pages, 0 known from cards, 11 saved, 24 dropped (14 wrong model, 10 missing fields)",
             line);
     }
 
@@ -162,10 +172,10 @@ public class WalkPairSummaryLineTests
     {
         var dropped = new DroppedBreakdown(MissingFields: 0, NoVin: 0, NotMatching: 0, Failed: 0, ExtractionFailed: 24);
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: 35, saved: 11, dropped, width: 80);
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: 35, known: 0, saved: 11, dropped, width: 80);
 
         Assert.Equal(
-            "cars.com / Toyota Corolla Hybrid: 35 pages, 11 saved, 24 dropped\n    (extraction failed)",
+            "cars.com / Toyota Corolla Hybrid: 35 pages, 0 known from cards, 11 saved, 24 dropped\n    (extraction failed)",
             line);
     }
 
@@ -174,10 +184,10 @@ public class WalkPairSummaryLineTests
     {
         var dropped = new DroppedBreakdown(MissingFields: 0, NoVin: 0, NotMatching: 0, Failed: 0, ExtractionFailed: 24);
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: 35, saved: 11, dropped, width: 120);
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Corolla Hybrid", pages: 35, known: 0, saved: 11, dropped, width: 120);
 
         Assert.Equal(
-            "cars.com / Toyota Corolla Hybrid: 35 pages, 11 saved, 24 dropped (extraction failed)",
+            "cars.com / Toyota Corolla Hybrid: 35 pages, 0 known from cards, 11 saved, 24 dropped (extraction failed)",
             line);
     }
 
@@ -185,9 +195,9 @@ public class WalkPairSummaryLineTests
     public void Format_LineExactlyTheConsoleWidth_StaysOnOneLine()
     {
         var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 0, NotMatching: 0, Failed: 0);
-        string expected = "cars.com / Honda Insight: 9 pages, 7 saved, 2 dropped (missing fields)";
+        string expected = "cars.com / Honda Insight: 9 pages, 0 known from cards, 7 saved, 2 dropped (missing fields)";
 
-        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 9, saved: 7, dropped, expected.Length);
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 9, known: 0, saved: 7, dropped, expected.Length);
 
         Assert.Equal(expected, line);
     }
@@ -195,8 +205,8 @@ public class WalkPairSummaryLineTests
     [Fact]
     public void Format_NothingDroppedAtANarrowWidth_NeverAddsAContinuationLine()
     {
-        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 7, saved: 7, new DroppedBreakdown(0, 0, 0, 0), width: 20);
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 7, known: 0, saved: 7, new DroppedBreakdown(0, 0, 0, 0), width: 20);
 
-        Assert.Equal("cars.com / Honda Insight: 7 pages, 7 saved, 0 dropped", line);
+        Assert.Equal("cars.com / Honda Insight: 7 pages, 0 known from cards, 7 saved, 0 dropped", line);
     }
 }

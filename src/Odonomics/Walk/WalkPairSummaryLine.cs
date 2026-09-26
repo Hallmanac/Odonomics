@@ -5,8 +5,9 @@ namespace Odonomics.Walk;
 /// into the "Dropped" cell of the end-of-run summary table, so the two always agree with each
 /// other and with the reason wording <see cref="WalkOutcomeWording"/> gives the per-page detail
 /// lines above them. Saved plus every non-zero dropped reason always sums to pages, since both
-/// come from the same <see cref="DroppedBreakdown"/>. Every non-zero reason is always named, in
-/// the fixed order <see cref="DroppedReasonOrder"/> gives: the table's own column wraps a long
+/// come from the same <see cref="DroppedBreakdown"/>; the known-from-cards count sits beside them but is
+/// not part of that sum, since those links were kept current from their search cards and never visited.
+/// Every non-zero reason is always named, in the fixed order <see cref="DroppedReasonOrder"/> gives: the table's own column wraps a long
 /// breakdown onto a continuation line under the same row rather than ever falling back to a bare
 /// count, since a bare count with no reason is exactly the gap this class exists to close. The
 /// per-pair line itself never wraps mid-parenthetical: when it would exceed the console width the
@@ -36,11 +37,12 @@ public static class WalkPairSummaryLine
         string make,
         string model,
         int pages,
+        int known,
         int saved,
         DroppedBreakdown dropped,
         int width = int.MaxValue)
     {
-        string prefix = $"{site} / {make} {model}: {pages} pages, {saved} saved, {dropped.Total} dropped";
+        string prefix = $"{site} / {make} {model}: {pages} pages, {known} known from cards, {saved} saved, {dropped.Total} dropped";
         string cell = DroppedCell(dropped);
         if (cell.Length == 0)
         {

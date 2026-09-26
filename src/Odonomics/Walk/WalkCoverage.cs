@@ -2,13 +2,15 @@ using Odonomics.Ledger;
 
 namespace Odonomics.Walk;
 
-/// <summary>What one (site, model) pair's walk actually visited.</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped);
+/// <summary>What one (site, model) pair's walk actually visited, and how many of the ledger's known
+/// links it kept current from their search cards without visiting them.</summary>
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
 /// is false when the pair's own walk threw (a page that never loaded, a site that errored); the
-/// walk moves on to the next pair rather than aborting the whole run.</summary>
-public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed);
+/// walk moves on to the next pair rather than aborting the whole run. <see cref="KnownFromCards"/> is
+/// how many links the ledger already held that the pair touched from their cards.</summary>
+public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0);
 
 /// <summary>
 /// Walks every (site, model) pair in order, stamping the run's coverage token the moment each
@@ -67,7 +69,7 @@ public static class WalkCoverage
                         throw;
                     }
 
-                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true));
+                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

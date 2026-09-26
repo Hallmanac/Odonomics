@@ -39,6 +39,29 @@ public class WalkCoverageTests
     }
 
     [Fact]
+    public async Task RunAsync_CarriesEachPairsKnownFromCardsCountIntoItsSummary()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<WalkPairSummary> summaries = await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight", "Toyota Prius"],
+            (_, model, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), KnownFromCards: model == "Honda Insight" ? 12 : 0)),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Equal([12, 0], summaries.Select(s => s.KnownFromCards));
+    }
+
+    [Fact]
     public async Task RunAsync_InterruptedMidway_LeavesOnlyCompletedPairsStampedInTheDatabase()
     {
         using var testDb = new LedgerTestDatabase();

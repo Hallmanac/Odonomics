@@ -20,18 +20,21 @@ rootCommand.Add(searchCommand);
 var walkSiteArgument = new Argument<string?>("site") { Description = "cars.com, carvana, or autotrader; omit to walk all three", Arity = ArgumentArity.ZeroOrOne };
 var walkModelOption = new Option<string?>("--model") { Description = "which target model to visit this run (\"Make Model\"); defaults to every model in the scenario's allowed list" };
 var walkMaxOption = WalkCommand.CreateMaxOption();
+var walkRevisitOption = WalkCommand.CreateRevisitOption();
 var walkCommand = new Command("walk", "an operator-assisted walk, connected over CDP to a browser you already launched, of every site and model in the scenario (or a narrower slice via the site argument and --model)");
 walkCommand.Add(walkSiteArgument);
 walkCommand.Add(scenarioOption);
 walkCommand.Add(walkModelOption);
 walkCommand.Add(walkMaxOption);
+walkCommand.Add(walkRevisitOption);
 walkCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     string? site = parseResult.GetValue(walkSiteArgument);
     string scenarioPath = parseResult.GetValue(scenarioOption)!;
     string? model = parseResult.GetValue(walkModelOption);
     int max = parseResult.GetValue(walkMaxOption);
-    return await WalkCommand.RunAsync(scenarioPath, site, model, max, cancellationToken);
+    bool revisit = parseResult.GetValue(walkRevisitOption);
+    return await WalkCommand.RunAsync(scenarioPath, site, model, max, revisit, cancellationToken);
 });
 rootCommand.Add(walkCommand);
 
