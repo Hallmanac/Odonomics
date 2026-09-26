@@ -23,7 +23,8 @@ namespace Odonomics.Walk;
 /// is the dealer a posting is stamped with when its detail page names none, for a site where the
 /// site itself is the seller (carvana); null for a marketplace whose pages carry the dealer's own
 /// name or none at all. <paramref name="PagedSearchUrl"/> is null for a site whose search is one page
-/// (autotrader), and for one whose results run to more pages (cars.com, carvana) it turns a search URL and a 1-based page number into
+/// (autotrader), and for one whose results run to more pages (cars.com, carvana) it turns a search URL, a 1-based page number, and the
+/// paging token the search's first page gave (null for a site with none) into
 /// that page's URL (see <see cref="WalkSearchPages"/>). <paramref name="MatchCountPattern"/> is for a site whose search page states
 /// how many listings match ("13 Matches") and keeps filling the page with cards for other models and
 /// years after them (autotrader), or states one ("16 cars") and may show a few more results than it counts
@@ -67,7 +68,16 @@ namespace Odonomics.Walk;
 /// <paramref name="DetailHtmlVinReader"/> reads the VIN off a detail page's HTML for a site whose visible text does
 /// not print it (carmax, see <see cref="CarMaxVin"/>); null for a site whose text does. <paramref name="LoadMoreControlPattern"/>
 /// matches the label of the control a site's search page has to be pressed at to show more cards ("Show 25 matches"),
-/// for a site that loads its cards that way instead of by page number (see <see cref="SearchPageLoadMore"/>).</summary>
+/// for a site that loads its cards that way instead of by page number (see <see cref="SearchPageLoadMore"/>).
+/// <paramref name="SponsoredLinkPattern"/> matches a detail link a search page carries for a sponsored card (cargurus's
+/// <c>sponsoredType=PRIORITY</c>, <c>FEATURED</c>, and <c>HIGHLIGHT</c>, everything but <c>NONE</c>): such a link is never a candidate, since a sponsored card ignores the search's facets and
+/// is not one of the counted results. <paramref name="PagingTokenReader"/> reads, off the HTML of a search's first page, the
+/// value the URLs of its later pages have to carry for them to line up with it (cargurus's <c>pageAlignment</c>), and
+/// <paramref name="PagedSearchUrl"/> then takes it as its third argument. <paramref name="CardFeeStatementReader"/> reads what a
+/// result card says about the fees behind its price (cargurus, see <see cref="FeeStatements.ReadCarGurusCard"/>), for a site whose card says
+/// it and whose detail page does not agree with it; when it is set, the card's statement is the one a posting is stored with.
+/// <paramref name="AskingPriceFromCard"/> says the card's price is the one to store, for a site whose card shows what the buyer pays
+/// delivered (cargurus, whose detail page shows the car's price at its lot, shipping not in it).</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -75,7 +85,7 @@ public sealed record WalkSite(
     int DetailLinkOverfetchMultiplier = 1,
     string? FallbackDealerName = null,
     Regex? SkippedCardTitlePattern = null,
-    Func<string, int, string>? PagedSearchUrl = null,
+    Func<string, int, string?, string>? PagedSearchUrl = null,
     Regex? MatchCountPattern = null,
     Regex? PrivateSellerPagePattern = null,
     Regex? ResultCardLinkPattern = null,
@@ -91,7 +101,11 @@ public sealed record WalkSite(
     Func<string, FeeStatement>? FeeStatementReader = null,
     Func<string, CardFee?>? CardFeeReader = null,
     Func<string, string?>? DetailHtmlVinReader = null,
-    Regex? LoadMoreControlPattern = null)
+    Regex? LoadMoreControlPattern = null,
+    Regex? SponsoredLinkPattern = null,
+    Func<string, string?>? PagingTokenReader = null,
+    Func<string, FeeStatement>? CardFeeStatementReader = null,
+    bool AskingPriceFromCard = false)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -124,7 +138,7 @@ public sealed record WalkSite(
             poolSize = Math.Min(poolSize, matchCount);
         }
 
-        List<PageLink> detailLinks = [.. links.Where(l => DetailUrlPattern.IsMatch(l.Href))];
+        List<PageLink> detailLinks = [.. links.Where(l => DetailUrlPattern.IsMatch(l.Href) && !IsSponsored(l))];
         HashSet<string> skipped = SkippedCardTitlePattern is null
             ? []
             : [.. detailLinks
@@ -146,6 +160,11 @@ public sealed record WalkSite(
                 .Take(poolSize)
         ];
     }
+
+    /// <summary>Whether <paramref name="link"/> is the link of a sponsored card (see <see cref="SponsoredLinkPattern"/>). Only that link
+    /// is set aside: a listing that is sponsored on one card and an ordinary result on another is still a candidate through the
+    /// ordinary one.</summary>
+    private bool IsSponsored(PageLink link) => SponsoredLinkPattern is not null && SponsoredLinkPattern.IsMatch(link.Href);
 
     /// <summary>The number of listings <paramref name="searchPageText"/> states this search matches
     /// (see <see cref="MatchCountPattern"/>), or null when this site has no pattern or the text states
@@ -199,6 +218,30 @@ public sealed record WalkSite(
     public IReadOnlyDictionary<string, string> ReadCardBadges(string cardText) =>
         CardBadgeReader?.Invoke(cardText) ?? new Dictionary<string, string>();
 
+    /// <summary>What a result card says about the fees behind its price, read off <paramref name="cardText"/> by this
+    /// site's <see cref="CardFeeStatementReader"/>, or null when the site has none.</summary>
+    public FeeStatement? ReadCardFeeStatement(string cardText) => CardFeeStatementReader?.Invoke(cardText);
+
+    /// <summary>The asking price to store for a detail page whose extraction read <paramref name="extractedPrice"/> and whose
+    /// link's result card said <paramref name="cardText"/> (null when the search pages showed none). A site that stores
+    /// the card's price (see <see cref="AskingPriceFromCard"/>) gets the card's, and null when there is no card or it
+    /// shows no price, so a price read off the detail page, a different figure, is never stored in its place; any other
+    /// site's asking price is the extraction's.</summary>
+    public decimal? AskingPriceOf(decimal? extractedPrice, string? cardText) =>
+        AskingPriceFromCard
+            ? cardText is null ? null : ReadCardPrice(cardText)
+            : extractedPrice;
+
+    /// <summary>What a link's fees are stated to be: its result card's statement when this site's cards make one (see
+    /// <see cref="CardFeeStatementReader"/>), otherwise what its detail page says (see <see cref="FeeStatementReader"/>),
+    /// or null when neither reader applies.</summary>
+    public FeeStatement? FeeStatementOf(string? cardText, string detailPageText) =>
+        (cardText is null ? null : ReadCardFeeStatement(cardText)) ?? ReadFeeStatement(detailPageText);
+
+    /// <summary>The paging token a search's first page gives its later pages' URLs, read off <paramref name="html"/> by this
+    /// site's <see cref="PagingTokenReader"/>, or null when the site has none or the page gives none.</summary>
+    public string? ReadPagingToken(string html) => PagingTokenReader?.Invoke(html);
+
     /// <summary>The fee a result card shows for getting the car home, read off <paramref name="cardText"/>
     /// by this site's <see cref="CardFeeReader"/>, or null when the site has none or the card shows none.</summary>
     public CardFee? ReadCardFee(string cardText) => CardFeeReader?.Invoke(cardText);
@@ -247,16 +290,17 @@ public sealed record WalkSite(
 /// card the anchor sits in (empty when the pull found none, see <see cref="SearchPageLinks"/>).</summary>
 public readonly record struct PageLink(string Href, string Text, string CardText = "");
 
-/// <summary>One loaded search page: its anchors, and its visible text for a site that states its
-/// match count there (see <see cref="WalkSite.MatchCountPattern"/>).</summary>
-public readonly record struct SearchPageContent(IReadOnlyList<PageLink> Links, string? Text = null);
+/// <summary>One loaded search page: its anchors, its visible text for a site that states its
+/// match count there (see <see cref="WalkSite.MatchCountPattern"/>), and the paging token its HTML gave, for a site whose
+/// later pages have to carry one (see <see cref="WalkSite.PagingTokenReader"/>).</summary>
+public readonly record struct SearchPageContent(IReadOnlyList<PageLink> Links, string? Text = null, string? PagingToken = null);
 
 /// <summary>The dealer name and location a walked candidate is stored with, and whether the name is
 /// the site's fallback rather than one the page gave.</summary>
 public readonly record struct ResolvedDealer(string? Name, string? Location, bool IsFallback);
 
 /// <summary>Search-URL shapes and detail-link patterns for the walk targets: cars.com and carvana, whose
-/// hybrid facets the rest of this comment is about, autotrader (see <see cref="Autotrader"/>), and carmax (see <see cref="CarMax"/>). The spike's
+/// hybrid facets the rest of this comment is about, autotrader (see <see cref="Autotrader"/>), carmax (see <see cref="CarMax"/>), and cargurus (see <see cref="CarGurus"/>). The spike's
 /// docs/spike-findings.md recorded both sites as having no working hybrid facet, but that recording
 /// doesn't hold up against the spike's own day-one capture: the cars.com response to a
 /// "toyota-corolla_hybrid" query (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html)
@@ -367,7 +411,7 @@ public static class WalkSites
         CardPriceReader: CardPrices.FirstDollarAmount,
         // cars.com pages with a plain page=N on the same URL. A page holds about thirty cards, and the
         // site ignores a page_size parameter, so the search URL carries none.
-        PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}",
+        PagedSearchUrl: (searchUrl, pageNumber, _) => $"{searchUrl}&page={pageNumber}",
         CardBadgeReader: CardBadges.CarsCom,
         FeeStatementReader: FeeStatements.ReadCarsCom);
 
@@ -393,7 +437,7 @@ public static class WalkSites
         DetailLinkOverfetchMultiplier: 2,
         FallbackDealerName: CarvanaDealerName,
         // Carvana renders about 21 cards a page and pages with a plain page=N on the same filters URL.
-        PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}",
+        PagedSearchUrl: (searchUrl, pageNumber, _) => $"{searchUrl}&page={pageNumber}",
         // A search page states "16 cars" and may show a few more results than that; once the exact
         // matches run out the site says "No exact matches" and pads the page with similar vehicles
         // (other models), so the count bounds the links and that phrase ends the paging.
@@ -508,12 +552,43 @@ public static class WalkSites
         DetailHtmlVinReader: CarMaxVin.Read,
         LoadMoreControlPattern: new Regex(@"^\s*Show\s+\d+\s+match(?:es)?\s*$", RegexOptions.IgnoreCase));
 
+    /// <summary>CarGurus: a marketplace of dealers' cars, searched by the ids CarGurus gives the make and model (see
+    /// <see cref="CarGurusSearch"/>) within the scenario's radius. A search page states "N vehicles found", and that
+    /// count is of the ordinary results only: the page also carries sponsored cards, whose links say
+    /// <c>sponsoredType=PRIORITY</c> (a dealer's ad), <c>FEATURED</c> or <c>HIGHLIGHT</c> (a promoted copy of a
+    /// listing shown again at the top of a page) where an ordinary result's says <c>NONE</c>, and those are never
+    /// candidates (see <see cref="WalkSite.SponsoredLinkPattern"/>). The site pages by <c>page=N</c> plus a
+    /// <c>pageAlignment</c> its first page hands out (see <see cref="CarGurusSearch.PagedSearchUrl"/>), about twenty
+    /// cards a page, so the walk follows it until the count is covered or a page adds nothing. A detail link is
+    /// <c>/details/&lt;digits&gt;</c> followed by a query string of the search's own, which
+    /// <see cref="CanonicalDetailUrl"/> drops.
+    /// The card is where the price is read, and it is not the detail page's: a card shows what the buyer pays
+    /// delivered ("Price includes $462 shipping" is inside it), while the detail page shows the car's price at its lot
+    /// (see <see cref="WalkSite.AskingPriceFromCard"/>). The card also says whether the price includes the dealer's fees
+    /// (see <see cref="FeeStatements.ReadCarGurusCard"/>) and carries CarGurus's deal badge (see
+    /// <see cref="CardBadges.CarGurus"/>). The detail page's text prints the VIN, so no HTML reader is needed for it.</summary>
+    public static readonly WalkSite CarGurus = new(
+        "cargurus",
+        query => [CarGurusSearch.SearchUrl(query)],
+        new Regex(@"^https?://(?:www\.)?cargurus\.com/details/\d+", RegexOptions.IgnoreCase),
+        DetailLinkOverfetchMultiplier: 2,
+        MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+vehicles?\s+found\b", RegexOptions.IgnoreCase),
+        SponsoredLinkPattern: new Regex(@"[?&]sponsoredType=(?!NONE(?:&|$))", RegexOptions.IgnoreCase),
+        PagedSearchUrl: CarGurusSearch.PagedSearchUrl,
+        PagingTokenReader: CarGurusSearch.ReadPagingToken,
+        CardPriceReader: CardPrices.CarGurusPrice,
+        AskingPriceFromCard: true,
+        CardBadgeReader: CardBadges.CarGurus,
+        CardFeeReader: CarGurusCards.ReadFee,
+        CardFeeStatementReader: FeeStatements.ReadCarGurusCard);
+
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
         "cars.com" => CarsCom,
         "carvana" => Carvana,
         "autotrader" => Autotrader,
         "carmax" => CarMax,
+        "cargurus" => CarGurus,
         _ => null,
     };
 }

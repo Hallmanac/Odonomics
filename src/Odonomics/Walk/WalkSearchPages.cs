@@ -17,6 +17,8 @@ namespace Odonomics.Walk;
 /// it) is handed to <c>touchKnownAsync</c> with its card's asking price and badges and never enters the pool, so it
 /// spends none of the pool; paging goes on past pages made only of known links, and stops when the pool of
 /// new links is full, the stated count is reached, or a page shows nothing not seen before.
+/// A site whose later pages need a token from the first (see <see cref="WalkSite.PagingTokenReader"/>) has the first
+/// one a page gives passed to every later page's URL.
 /// A pool size of <see cref="WalkPairSearches.UnboundedPool"/> is the uncapped walk: the pool never fills,
 /// so paging ends only by the stated count, a page that adds nothing, an exhausted search, or a failed page.
 /// A bounded pool can instead end the collection with results still unread: it fills while the site has more
@@ -57,7 +59,8 @@ public static class WalkSearchPages
         CancellationToken cancellationToken,
         bool revisit = false)
     {
-        Func<string, int, string>? pageUrlFor = site.PagedSearchUrl;
+        Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
+        string? pagingToken = null;
         List<string> pool = [];
         HashSet<string> canonicalUrls = [];
         int linkBound = int.MaxValue;
@@ -67,7 +70,7 @@ public static class WalkSearchPages
         for (int pageNumber = 1; ; pageNumber++)
         {
             string pageUrl = pageNumber > 1 && pageUrlFor is not null
-                ? pageUrlFor(searchUrl, pageNumber)
+                ? pageUrlFor(searchUrl, pageNumber, pagingToken)
                 : searchUrl;
             SearchPageContent content;
             try
@@ -79,6 +82,8 @@ public static class WalkSearchPages
                 onLaterPageFailed(pageNumber, ex);
                 break;
             }
+
+            pagingToken ??= content.PagingToken;
 
             if (site.SearchRanOutOfMatches(content.Text))
             {
