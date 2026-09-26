@@ -348,6 +348,8 @@ public static class WalkCommand
             ct => Task.Delay(pacing.RandomDetailGap(), ct),
             cancellationToken);
 
+        await knownTouches.CommitAsync(cancellationToken);
+
         AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width)}");
 
         return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count);

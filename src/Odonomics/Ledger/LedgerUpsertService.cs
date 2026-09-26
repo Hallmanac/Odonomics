@@ -5,9 +5,9 @@ namespace Odonomics.Ledger;
 
 public sealed record UpsertOutcome(bool VehicleIsNew, bool PostingIsNew, bool PriceChanged, decimal? PreviousPrice);
 
-/// <summary>What <see cref="LedgerUpsertService.TouchAsync"/> found: whether the ledger held a posting
-/// at the link at all, and whether the touch appended a price observation.</summary>
-public sealed record TouchOutcome(bool Found, bool PriceChanged);
+/// <summary>What <see cref="LedgerUpsertService.TouchAsync"/> did: how many postings the ledger held at
+/// the links it was given, and how many of them the touch appended a price observation to.</summary>
+public sealed record TouchOutcome(int Found, int PriceChanged);
 
 /// <summary>
 /// Upsert semantics: a vehicle seen again updates its last-known year/make/model/trim/mileage and
@@ -119,32 +119,38 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     public async Task<HashSet<string>> KnownUrlsAsync(string source, CancellationToken cancellationToken) =>
         [.. await db.Postings.Where(p => p.Source == source).Select(p => p.Url).ToListAsync(cancellationToken)];
 
-    /// <summary>Records that the run saw the posting at <paramref name="source"/> and
-    /// <paramref name="url"/> on a search page, without opening its detail page. It stamps the posting's
-    /// LastSeen with the run's own StartedAt, so the diff sees a listing still up and finds it "gone"
-    /// only when a run never touches it, and appends a price observation when
-    /// <paramref name="cardPrice"/> is known and differs from the latest, so the diff reports a drop from
-    /// the card alone. A card price below <see cref="PlaceholderPrice.Floor"/> is a misread (a monthly
-    /// payment, say), not an asking price, so it is treated as unknown. Everything else about the posting
-    /// stays as the last detail visit left it: its dealer, its shipping fee, and its vehicle row. When
-    /// <paramref name="url"/> matches no posting nothing is written and <see cref="TouchOutcome.Found"/>
-    /// is false.</summary>
-    public async Task<TouchOutcome> TouchAsync(string source, string url, decimal? cardPrice, RunEntity run, CancellationToken cancellationToken)
+    /// <summary>Records that the run saw the postings at <paramref name="source"/> and each URL of
+    /// <paramref name="cardPricesByUrl"/> on a search page, without opening their detail pages, in one
+    /// save so either every touch lands or none does. Each touch stamps the posting's LastSeen with the
+    /// run's own StartedAt, so the diff sees a listing still up and finds it "gone" only when a run never
+    /// touches it, and appends a price observation when the card price is known and differs from the
+    /// latest, so the diff reports a drop from the card alone. A card price below
+    /// <see cref="PlaceholderPrice.Floor"/> is a misread (a monthly payment, say), not an asking price, so
+    /// it is treated as unknown. A posting whose latest observation already carries the run's StartedAt (a
+    /// detail visit this run recorded it) gets no card observation, since the detail page's price is the
+    /// firmer reading and two observations at one instant would leave "latest" to row order. Everything
+    /// else about a posting stays as the last detail visit left it: its dealer, its shipping fee, and its
+    /// vehicle row. A URL that matches no posting writes nothing and is not counted in
+    /// <see cref="TouchOutcome.Found"/>.</summary>
+    public async Task<TouchOutcome> TouchAsync(string source, IReadOnlyDictionary<string, decimal?> cardPricesByUrl, RunEntity run, CancellationToken cancellationToken)
     {
+        string[] urls = [.. cardPricesByUrl.Keys];
         List<PostingEntity> postings = await db.Postings
             .Include(p => p.PriceObservations)
-            .Where(p => p.Source == source && p.Url == url)
+            .Where(p => p.Source == source && urls.Contains(p.Url))
             .ToListAsync(cancellationToken);
 
-        bool priceChanged = false;
+        int priceChanges = 0;
         foreach (PostingEntity posting in postings)
         {
             posting.LastSeen = run.StartedAt;
-            decimal? latest = posting.PriceObservations
+            PriceObservationEntity? latest = posting.PriceObservations
                 .OrderByDescending(o => o.ObservedAt)
-                .Select(o => (decimal?)o.Price)
                 .FirstOrDefault();
-            if (cardPrice is decimal price && !PlaceholderPrice.IsBelowFloor(price) && latest != price)
+            if (cardPricesByUrl[posting.Url] is decimal price
+                && !PlaceholderPrice.IsBelowFloor(price)
+                && latest?.Price != price
+                && latest?.ObservedAt != run.StartedAt)
             {
                 posting.PriceObservations.Add(new PriceObservationEntity
                 {
@@ -152,12 +158,12 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
                     Price = price,
                     ObservedAt = run.StartedAt,
                 });
-                priceChanged = true;
+                priceChanges++;
             }
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        return new TouchOutcome(postings.Count > 0, priceChanged);
+        return new TouchOutcome(postings.Count, priceChanges);
     }
 
     /// <summary>The dealer a sighting whose source named none (<see cref="ListingCandidate.DealerNameIsFallback"/>,
