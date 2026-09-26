@@ -102,6 +102,58 @@ public class VehiclePricingTests
         Assert.Equal(new PurchasePrice(17000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
     }
 
+    private static RunEntity WalkRun(DateTimeOffset startedAt, bool capped)
+    {
+        string token = RunSources.Key("cars.com", "Prius");
+        return new RunEntity { Command = "walk", StartedAt = startedAt, Sources = capped ? $"{token},{RunSources.PartialKey(token)}" : token };
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_CappedWalkThatMissedThePosting_KeepsThePostingListedFromTheFullWalk()
+    {
+        DateTimeOffset fullWalk = RunTime;
+        DateTimeOffset cappedWalk = RunTime.AddDays(1);
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 15000m, lastSeen: fullWalk));
+        Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource([WalkRun(fullWalk, capped: false), WalkRun(cappedWalk, capped: true)]);
+
+        Assert.Equal(new PurchasePrice(15000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+        Assert.Equal(15000m, VehiclePricing.LowestCurrentPrice(vehicle, coverage));
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_CappedWalkThatReachedThePosting_CountsIt()
+    {
+        DateTimeOffset fullWalk = RunTime;
+        DateTimeOffset cappedWalk = RunTime.AddDays(1);
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 14000m, lastSeen: cappedWalk), Posting("cars.com", 15000m, lastSeen: fullWalk));
+        Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource([WalkRun(fullWalk, capped: false), WalkRun(cappedWalk, capped: true)]);
+
+        Assert.Equal(new PurchasePrice(14000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_FullWalkAfterTheCappedOneThatDidNotSeeThePosting_DropsIt()
+    {
+        DateTimeOffset fullWalk = RunTime;
+        DateTimeOffset cappedWalk = RunTime.AddDays(1);
+        DateTimeOffset laterFullWalk = RunTime.AddDays(2);
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 15000m, lastSeen: fullWalk));
+        Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(
+            [WalkRun(fullWalk, capped: false), WalkRun(cappedWalk, capped: true), WalkRun(laterFullWalk, capped: false)]);
+
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_PostingTheCappedWalkDidNotReachButAFullWalkBeforeItSaw_IsStillListedAfterTwoCappedWalks()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 15000m, lastSeen: RunTime));
+        Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(
+            [WalkRun(RunTime, capped: false), WalkRun(RunTime.AddDays(1), capped: true), WalkRun(RunTime.AddDays(2), capped: true)]);
+
+        Assert.Equal(new PurchasePrice(15000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage));
+    }
+
     [Fact]
     public void LowestCurrentPurchasePrice_NoPostings_IsNull()
     {

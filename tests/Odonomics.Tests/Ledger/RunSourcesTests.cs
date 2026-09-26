@@ -61,6 +61,44 @@ public class RunSourcesTests
     }
 
     [Fact]
+    public void LatestCoverageBySource_ACappedRun_DoesNotSupersedeTheFullCoverageBeforeIt()
+    {
+        string prius = RunSources.Key("cars.com", "Prius");
+        RunEntity full = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), prius);
+        RunEntity capped = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), $"{prius},{RunSources.PartialKey(prius)}");
+
+        Dictionary<string, DateTimeOffset> latest = RunSources.LatestCoverageBySource([capped, full]);
+
+        Assert.Equal(full.StartedAt, latest[prius]);
+    }
+
+    [Fact]
+    public void LatestCoverageBySource_ACappedRunOverOnePair_LeavesTheRunsOtherPairAlone()
+    {
+        string prius = RunSources.Key("cars.com", "Prius");
+        string insight = RunSources.Key("cars.com", "Insight");
+        RunEntity earlier = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), $"{prius},{insight}");
+        RunEntity later = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), $"{prius},{RunSources.PartialKey(prius)},{insight}");
+
+        Dictionary<string, DateTimeOffset> latest = RunSources.LatestCoverageBySource([earlier, later]);
+
+        Assert.Equal(earlier.StartedAt, latest[prius]);
+        Assert.Equal(later.StartedAt, latest[insight]);
+    }
+
+    [Fact]
+    public void LatestCoverageBySource_APairOnlyEverCoveredPartially_ReportsTheFirstPartialRun()
+    {
+        string prius = RunSources.Key("cars.com", "Prius");
+        RunEntity first = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), $"{prius},{RunSources.PartialKey(prius)}");
+        RunEntity second = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), $"{prius},{RunSources.PartialKey(prius)}");
+
+        Dictionary<string, DateTimeOffset> latest = RunSources.LatestCoverageBySource([first, second]);
+
+        Assert.Equal(first.StartedAt, latest[prius]);
+    }
+
+    [Fact]
     public void Key_RoundTripsThroughSplitKey()
     {
         string token = RunSources.Key("cars.com", "Insight");
