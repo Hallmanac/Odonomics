@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Text.RegularExpressions;
 using System.Web;
 using Microsoft.Playwright;
 using Odonomics.Domain;
@@ -13,7 +14,7 @@ namespace Odonomics.Cli.Commands;
 
 /// <summary>
 /// The assisted browser walk: connects over CDP to a browser the operator already launched by
-/// hand, never launches one itself. With no site argument it walks cars.com, then carvana, then autotrader; a
+/// hand, never launches one itself. With no site argument it walks cars.com, then carvana, then autotrader, then carmax; a
 /// site argument narrows it to that one site. With no --model it walks every model in the
 /// scenario's allowed list, in order, on whichever site(s) it's covering; --model narrows it to
 /// that one model exactly, on whichever site(s) it's covering. The scenario's facets are the only
@@ -46,14 +47,14 @@ public static class WalkCommand
         List<WalkSite> sites;
         if (siteName is null)
         {
-            sites = [WalkSites.CarsCom, WalkSites.Carvana, WalkSites.Autotrader];
+            sites = [WalkSites.CarsCom, WalkSites.Carvana, WalkSites.Autotrader, WalkSites.CarMax];
         }
         else
         {
             WalkSite? site = WalkSites.Find(siteName);
             if (site is null)
             {
-                AnsiConsole.MarkupLineInterpolated($"[red]unknown walk target \"{siteName}\"; expected cars.com, carvana, or autotrader[/]");
+                AnsiConsole.MarkupLineInterpolated($"[red]unknown walk target \"{siteName}\"; expected cars.com, carvana, autotrader, or carmax[/]");
                 return 1;
             }
 
@@ -199,6 +200,11 @@ public static class WalkCommand
         // pages after it were never read, so the pair's coverage is recorded as partial for that reason.
         int? failedResultPage = null;
 
+        // The result card text of every detail link the search pages showed, by canonical URL, for a site
+        // that prints a fee on its cards (see WalkSite.CardFeeReader): the visit of a link has only its
+        // URL, and the card is where that fee is.
+        var cardTextByUrl = new Dictionary<string, string>();
+
         async Task<SearchPageContent> LoadSearchPageAsync(string pageUrl, string searchLabel, int searchIndex, int pageNumber, CancellationToken ct)
         {
             // A pair with several searches always names the page too, so the line says which search page it is.
@@ -212,11 +218,21 @@ public static class WalkCommand
             AnsiConsole.MarkupLineInterpolated($"dwelling {dwell.TotalSeconds:0}s on the search page");
             await Task.Delay(dwell, ct);
 
+            if (site.LoadMoreControlPattern is not null)
+            {
+                await LoadMoreCardsAsync(page, site, site.LoadMoreControlPattern, pacing, ct);
+            }
+
             string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
             await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchIndex, pageNumber, searchUrls.Count), searchBodyText, ct);
 
             IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync((script, arg) => page.EvaluateAsync<string[][]>(script, arg), site);
             await recorder.WriteAsync(WalkPairSearches.CardsFileName(searchIndex, pageNumber, searchUrls.Count), SearchPageLinks.CardsJson(site, links), ct);
+            foreach (PageLink link in links.Where(l => site.DetailUrlPattern.IsMatch(l.Href) && l.CardText.Length > 0))
+            {
+                cardTextByUrl.TryAdd(WalkSites.CanonicalDetailUrl(link.Href), link.CardText);
+            }
+
             return new SearchPageContent(links, searchBodyText);
         }
 
@@ -299,15 +315,30 @@ public static class WalkCommand
 
                 AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: read {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}, fuel type {outcome.Result.FuelType ?? "not stated"}[/]");
 
-                if (string.IsNullOrWhiteSpace(outcome.Result.Vin))
+                string? vin = outcome.Result.Vin;
+                if (site.DetailHtmlVinReader is not null)
+                {
+                    // The page's text does not print the VIN, so it is read from the HTML. A page whose
+                    // HTML gives none is recorded whole, so the reader can be fixed against it.
+                    string html = await detailPage.ContentAsync();
+                    string? htmlVin = site.ReadDetailHtmlVin(html);
+                    if (htmlVin is null)
+                    {
+                        await recorder.WriteAsync($"detail-{i + 1}.html", html, ct);
+                    }
+
+                    vin = htmlVin ?? vin;
+                }
+
+                if (string.IsNullOrWhiteSpace(vin))
                 {
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NoVin)} found on the page[/]");
                     return DetailPageOutcome.NoVin;
                 }
 
-                if (savedVinsThisPair.Contains(outcome.Result.Vin))
+                if (savedVinsThisPair.Contains(vin))
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.Repeat)} ({outcome.Result.Vin} already saved this pair)[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.Repeat)} ({vin} already saved this pair)[/]");
                     return DetailPageOutcome.Repeat;
                 }
 
@@ -326,12 +357,11 @@ public static class WalkCommand
 
                 if (outcome.Result.Year is null || outcome.Result.Price is null || outcome.Result.Mileage is null)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage; {outcome.Result.Vin})[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage; {vin})[/]");
                     return DetailPageOutcome.MissingFields;
                 }
 
                 PickupOption? pickup = site.ReadPickup(bodyText);
-                ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
                 string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
                 FeeStatement? feeStatement = null;
                 decimal askingPrice = outcome.Result.Price.Value;
@@ -340,9 +370,13 @@ public static class WalkCommand
                     (feeStatement, askingPrice) = readStatement.ReconciledWith(askingPrice);
                 }
 
+                CardFee? cardFee = cardTextByUrl.TryGetValue(canonicalUrl, out string? cardText)
+                    ? site.ReadCardFee(cardText)
+                    : null;
+                ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
                 var candidate = new ListingCandidate
                 {
-                    Vin = outcome.Result.Vin,
+                    Vin = vin,
                     Source = site.Name,
                     // Not the raw detailUrl: cars.com appends a per-search-session "sid" query
                     // parameter that's different on every run, and LedgerUpsertService keys a
@@ -366,10 +400,10 @@ public static class WalkCommand
                     DealerName = dealer.Name,
                     DealerLocation = dealer.Location,
                     DealerNameIsFallback = dealer.IsFallback,
-                    ShippingFee = site.ReadShippingFee(bodyText),
+                    ShippingFee = cardFee?.ShippingFee ?? site.ReadShippingFee(bodyText),
                     Attributes = knownTouches.BadgesOfNewLink(canonicalUrl),
                     PickupFee = pickup?.Fee,
-                    PickupLocation = pickup?.Location,
+                    PickupLocation = cardFee?.PickupLocation ?? pickup?.Location,
                     FeePosture = feeStatement?.Posture,
                     ItemizedFeesTotal = feeStatement?.ItemizedTotal,
                 };
@@ -483,6 +517,56 @@ public static class WalkCommand
         { Capped: true } => "capped",
         _ => "ok",
     };
+
+    /// <summary>Presses the search page's "show more" control until the page holds the cards its stated
+    /// count promises or nothing new appears (see <see cref="SearchPageLoadMore"/>), pausing like a person
+    /// between presses and stopping for a bot-defense challenge if one appears.</summary>
+    private static async Task LoadMoreCardsAsync(IPage page, WalkSite site, Regex controlPattern, WalkPacing pacing, CancellationToken cancellationToken)
+    {
+        int? statedCount = site.MatchCountIn(await page.EvaluateAsync<string>("() => document.body.innerText"));
+
+        async Task<int> CountCardsAsync(CancellationToken ct)
+        {
+            string[][] anchors = await page.EvaluateAsync<string[][]>(SearchPageLinks.AnchorScript);
+            return anchors
+                .Where(a => site.DetailUrlPattern.IsMatch(a[0]))
+                .Select(a => WalkSites.CanonicalDetailUrl(a[0]))
+                .Distinct()
+                .Count();
+        }
+
+        async Task<bool> PressControlAsync(CancellationToken ct)
+        {
+            ILocator control = page.GetByText(controlPattern).First;
+            if (await control.CountAsync() == 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                await control.ClickAsync(new LocatorClickOptions { Timeout = ControlClickTimeoutMs });
+                return true;
+            }
+            catch (PlaywrightException)
+            {
+                // A control that cannot be clicked (covered, or gone since it was found) is no more to load.
+                return false;
+            }
+        }
+
+        async Task PauseAsync(CancellationToken ct)
+        {
+            await Task.Delay(pacing.RandomScrollPause(), ct);
+            await CdpConnection.HandleChallengeIfPresentAsync(page, ct);
+        }
+
+        LoadMoreResult result = await SearchPageLoadMore.RunAsync(statedCount, CountCardsAsync, PressControlAsync, PauseAsync, cancellationToken);
+        string statedText = statedCount is int stated ? $"{stated} matches stated" : "no match count stated";
+        AnsiConsole.MarkupLineInterpolated($"loaded {result.Cards} card(s) by pressing the show-more control {result.Presses} time(s) ({statedText})");
+    }
+
+    private const float ControlClickTimeoutMs = 10_000;
 
     private static async Task ScrollInStepsAsync(IPage page, WalkPacing pacing, CancellationToken cancellationToken)
     {
