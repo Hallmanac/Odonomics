@@ -180,7 +180,29 @@ public static class RunSources
 
     public static string Join(IEnumerable<string> sources) => string.Join(',', sources);
 
-    public static string[] Split(RunEntity run) => run.Sources.Split(',', StringSplitOptions.RemoveEmptyEntries);
+    /// <summary>The prefix of the token a walk stamps beside a pair's coverage token when the pair's
+    /// link collection stopped before the site ran out of results (an explicit --max filled the pool):
+    /// "capped:cars.com:Prius" sits beside "cars.com:Prius". The pair is still covered, so its plain
+    /// token stays and every coverage lookup keeps working; the extra token only says the coverage was
+    /// partial, so the diff does not read a posting the run never reached as a car that sold.</summary>
+    private const string PartialPrefix = "capped:";
+
+    /// <summary>The token that marks the pair behind <paramref name="coverageKey"/> (a <see cref="Key"/>)
+    /// as partially covered this run.</summary>
+    public static string PartialKey(string coverageKey) => PartialPrefix + coverageKey;
+
+    /// <summary>The coverage tokens the run stamped, without the partial-coverage markers (see
+    /// <see cref="PartialKey"/>), so a marker is never mistaken for a source and model pair.</summary>
+    public static string[] Split(RunEntity run) =>
+        [.. SplitAll(run).Where(token => !token.StartsWith(PartialPrefix, StringComparison.Ordinal))];
+
+    /// <summary>The <see cref="Key"/> of every pair the run covered only partially.</summary>
+    public static HashSet<string> PartialCoverage(RunEntity run) =>
+        [.. SplitAll(run)
+            .Where(token => token.StartsWith(PartialPrefix, StringComparison.Ordinal))
+            .Select(token => token[PartialPrefix.Length..])];
+
+    private static string[] SplitAll(RunEntity run) => run.Sources.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
     /// <summary>Splits a <see cref="Key"/> token back into its source and model. Only the first
     /// colon is significant; a model name is never expected to contain one.</summary>
