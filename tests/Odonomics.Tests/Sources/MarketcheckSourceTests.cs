@@ -10,6 +10,8 @@ public class MarketcheckSourceTests
 {
     private static string FixturePath => Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "sources", "marketcheck", "honda-insight.json");
 
+    private static string NewAndUsedFixturePath => Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "sources", "marketcheck", "honda-insight-new-and-used.json");
+
     [Fact]
     public async Task RunAsync_NoApiKey_ReportsCouldNotRun()
     {
@@ -28,7 +30,7 @@ public class MarketcheckSourceTests
         int yearMax = DateTime.UtcNow.Year + 1;
         string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
                      $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}&car_type=used";
         var handler = new FixtureHttpMessageHandler(new Dictionary<string, string>
         {
             [url] = await File.ReadAllTextAsync(FixturePath),
@@ -51,6 +53,49 @@ public class MarketcheckSourceTests
     }
 
     [Fact]
+    public async Task RunAsync_BuildsAUsedOnlySearchUrl()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        var handler = new RecordingHttpMessageHandler("""{ "listings": [] }""");
+        var source = new MarketcheckSource("test-key", new HttpClient(handler));
+
+        await source.RunAsync([query], CancellationToken.None);
+
+        string requested = Assert.Single(handler.RequestedUrls);
+        Assert.EndsWith("&miles_range=0-100000&car_type=used", requested);
+        Assert.StartsWith("https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&zip=32114&radius=50&make=Honda&model=Insight&year_range=2019-", requested);
+    }
+
+    [Fact]
+    public async Task RunAsync_ListingMarkedNew_IsRejectedNamingTheVinWhileTheUsedOneIsKept()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        var handler = new RecordingHttpMessageHandler(await File.ReadAllTextAsync(NewAndUsedFixturePath));
+        var source = new MarketcheckSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("19XZE4F52ME000999", candidate.Vin);
+        string rejection = Assert.Single(result.Rejections);
+        Assert.Contains("candidate rejected, new car", rejection);
+        Assert.Contains("19XZE4F59LE013764", rejection);
+    }
+
+    [Fact]
+    public async Task RunAsync_ListingWithNoInventoryType_IsKept()
+    {
+        ListingQuery query = new("Honda", "Insight", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string body = (await File.ReadAllTextAsync(FixturePath)).Replace("\"inventory_type\":\"used\",", "");
+        var source = new MarketcheckSource("test-key", new HttpClient(new RecordingHttpMessageHandler(body)));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Equal(2, result.Candidates.Count);
+        Assert.Empty(result.Rejections);
+    }
+
+    [Fact]
     public async Task RunAsync_ApiReturnsADifferentModelStringThanQueried_CandidateModelStaysCanonical()
     {
         // build.model is free to differ from the model this run actually queried for (a bare
@@ -62,7 +107,7 @@ public class MarketcheckSourceTests
         int yearMax = DateTime.UtcNow.Year + 1;
         string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
                      $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}&car_type=used";
         const string body = """
             {
               "listings": [
@@ -97,7 +142,7 @@ public class MarketcheckSourceTests
         int yearMax = DateTime.UtcNow.Year + 1;
         string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
                      $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}&car_type=used";
         const string body = """
             {
               "listings": [
@@ -130,7 +175,7 @@ public class MarketcheckSourceTests
         int yearMax = DateTime.UtcNow.Year + 1;
         string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
                      $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
-                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}";
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}&car_type=used";
         const string body = """
             {
               "listings": [
