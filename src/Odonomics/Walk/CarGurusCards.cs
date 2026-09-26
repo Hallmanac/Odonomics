@@ -7,8 +7,8 @@ namespace Odonomics.Walk;
 /// how it gets there and what that costs, and the amount is inside the asking price the card shows:
 /// "Price includes $462 shipping" under "Home delivery from Delray Beach, FL" or "Store transfer to
 /// Orlando, FL", or "Free home delivery". A car at a nearby dealer prints neither. The card's price is
-/// the one the walk stores (see <see cref="WalkSite.AskingPriceFromCard"/>) because of that: the detail page
-/// shows the car's price at its lot, without the shipping.</summary>
+/// the one the walk stores (see <see cref="WalkSite.AskingPriceFromCard"/>) because of that: a store-transfer
+/// detail page also lists the dealer's price at its lot, without the shipping.</summary>
 public static class CarGurusCards
 {
     private static readonly Regex ShippingLine = new(
