@@ -2,10 +2,10 @@ namespace Odonomics.Walk;
 
 /// <summary>
 /// Collects one search's candidate detail links across as many result pages as the site has and
-/// the pool needs. A site whose <see cref="WalkSite.PagedSearchUrl"/> is null (cars.com) has one
+/// the pool needs. A site whose <see cref="WalkSite.PagedSearchUrl"/> is null (autotrader) has one
 /// page per search, so this loads it once and returns what <see cref="WalkSite.CollectDetailLinks"/>
 /// finds there. A paged site (carvana renders about 21 cards a page, and its inventory for a model
-/// runs to a hundred or more) is followed page by page until the pool is full or a page adds no
+/// runs to a hundred or more; cars.com asks for a hundred a page and pages the same way) is followed page by page until the pool is full or a page adds no
 /// link the pool did not already hold, which also ends the walk of a search whose last page repeats
 /// or comes back empty. A site that states how many cars the search matches (see
 /// <see cref="WalkSite.MatchCountPattern"/>) has its first page's count taken as the bound on the

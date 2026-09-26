@@ -147,7 +147,7 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
-    public async Task CarsCom_APageWithMoreNewLinksThanThePoolHasRoomFor_IsNotCappedSinceItsKnownLinksWereAllTouched()
+    public async Task CarsCom_APoolFilledByAFirstPageWithMoreLinksThanItHasRoomFor_IsCappedSincePagesAfterItWereNeverRead()
     {
         const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
@@ -159,11 +159,12 @@ public class WalkSearchPagesTests
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 3, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => capped++, CancellationToken.None);
 
         Assert.Equal(3, pool.Count);
-        Assert.Equal(0, capped);
+        Assert.Single(browser.Loads);
+        Assert.Equal(1, capped);
     }
 
     [Fact]
-    public async Task CarsCom_APoolFilledExactlyByTheOnePageItHas_IsNotCapped()
+    public async Task CarsCom_APoolFilledExactlyByAFirstPage_IsCappedSinceNothingSaysThereIsNoSecondPage()
     {
         const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
@@ -174,7 +175,8 @@ public class WalkSearchPagesTests
 
         await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 3, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => capped++, CancellationToken.None);
 
-        Assert.Equal(0, capped);
+        Assert.Single(browser.Loads);
+        Assert.Equal(1, capped);
     }
 
     [Fact]
@@ -214,20 +216,45 @@ public class WalkSearchPagesTests
         Assert.Single(browser.Loads);
     }
 
+    private static List<PageLink> CarsComCards(string prefix, int count) =>
+        [.. Enumerable.Range(0, count).Select(i => new PageLink($"https://www.cars.com/vehicledetail/{prefix}{i}/?sid=x", ""))];
+
     [Fact]
-    public async Task CarsCom_IsLoadedOnceEvenWhenThePoolIsNotFull()
+    public async Task CarsCom_FollowsThreePagesAndStopsWhenAPageAddsNothingNew()
     {
-        const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla";
+        const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla&page_size=100";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
         {
-            [1] = [.. Enumerable.Range(0, 5).Select(i => new PageLink($"https://www.cars.com/vehicledetail/{i}/?sid=x", ""))],
-            [2] = [new PageLink("https://www.cars.com/vehicledetail/99/?sid=x", "")],
+            [1] = CarsComCards("a", 100),
+            [2] = CarsComCards("b", 100),
+            [3] = CarsComCards("c", 37),
+            [4] = CarsComCards("c", 37),
         });
 
-        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 60, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { }, CancellationToken.None);
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 400, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { }, CancellationToken.None);
 
-        Assert.Equal([(search, 1)], browser.Loads);
-        Assert.Equal(5, pool.Count);
+        Assert.Equal(
+            [(search, 1), (search + "&page=2", 2), (search + "&page=3", 3), (search + "&page=4", 4)],
+            browser.Loads);
+        Assert.Equal(237, pool.Count);
+        Assert.Contains("https://www.cars.com/vehicledetail/c36/?sid=x", pool);
+    }
+
+    [Fact]
+    public async Task CarsCom_StopsPagingOnceThePoolIsFull()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=toyota-corolla&page_size=100";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = CarsComCards("a", 100),
+            [2] = CarsComCards("b", 100),
+            [3] = CarsComCards("c", 100),
+        });
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.CarsCom, search, 150, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { }, CancellationToken.None);
+
+        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal(150, pool.Count);
     }
 
     [Fact]

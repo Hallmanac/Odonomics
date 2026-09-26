@@ -22,8 +22,8 @@ namespace Odonomics.Walk;
 /// cars the scenario can rank. <paramref name="FallbackDealerName"/>
 /// is the dealer a posting is stamped with when its detail page names none, for a site where the
 /// site itself is the seller (carvana); null for a marketplace whose pages carry the dealer's own
-/// name or none at all. <paramref name="PagedSearchUrl"/> is null for a site whose search is one page,
-/// and for one whose results run to more pages it turns a search URL and a 1-based page number into
+/// name or none at all. <paramref name="PagedSearchUrl"/> is null for a site whose search is one page
+/// (autotrader), and for one whose results run to more pages (cars.com, carvana) it turns a search URL and a 1-based page number into
 /// that page's URL (see <see cref="WalkSearchPages"/>). <paramref name="MatchCountPattern"/> is for a site whose search page states
 /// how many listings match ("13 Matches") and keeps filling the page with cards for other models and
 /// years after them (autotrader), or states one ("16 cars") and may show a few more results than it counts
@@ -276,6 +276,11 @@ public static class WalkSites
         return base64.Replace('+', '-').Replace('/', '_').TrimEnd('=');
     }
 
+    /// <summary>The largest value of cars.com's own per-page selector (20, 50, 100), which every
+    /// cars.com search URL asks for as page_size. A site that ignored it would still be covered by
+    /// the page=N paging at its default page size.</summary>
+    private const int CarsComPageSize = 100;
+
     public static readonly WalkSite CarsCom = new(
         "cars.com",
         query =>
@@ -285,7 +290,7 @@ public static class WalkSites
             string SearchUrl(string modelSlug, int yearMin) =>
                 $"https://www.cars.com/shopping/results/?stock_type=used&makes[]={makeSlug}" +
                 $"&models[]={modelSlug}&zip={query.Zip}&maximum_distance={query.RadiusMiles}" +
-                $"&year_min={yearMin}&mileage_max={query.MaxMileage}";
+                $"&year_min={yearMin}&mileage_max={query.MaxMileage}&page_size={CarsComPageSize}";
 
             return query.HybridOnlyFromModelYear is int hybridOnlyYear
                 ? [
@@ -299,7 +304,10 @@ public static class WalkSites
         SkippedCardTitlePattern: new Regex(@"^\s*New\s", RegexOptions.IgnoreCase),
         // A cars.com card reads its asking price first, then a price-drop amount when it has one, then
         // mileage, then the "Used <year> ..." title, so the first dollar amount is the price.
-        CardPriceReader: CardPrices.FirstDollarAmount);
+        CardPriceReader: CardPrices.FirstDollarAmount,
+        // cars.com pages with a plain page=N on the same URL, and each search asks for the largest
+        // page size its per-page selector offers so a search takes as few page loads as it can.
+        PagedSearchUrl: (searchUrl, pageNumber) => $"{searchUrl}&page={pageNumber}");
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
