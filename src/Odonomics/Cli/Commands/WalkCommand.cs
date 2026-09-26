@@ -21,9 +21,12 @@ namespace Odonomics.Cli.Commands;
 /// visited per site-and-model pair, not per run or raw page visits: a page rejected for not
 /// matching the model, or one whose VIN this pair already saved through a different link, doesn't
 /// spend the cap, so the walk can open more candidate links than --max to fill it. --max defaults
-/// to 30 (<see cref="WalkPacing.DefaultMaxDetailPages"/>). See the brief for the full pacing spec;
-/// this command implements it as literally as an automated agent can, since the actual bot-defense behavior can
-/// only be proven by the operator running it against a real browser.
+/// to 30 (<see cref="WalkPacing.DefaultMaxDetailPages"/>). A link the ledger already holds is not
+/// opened at all: it is kept current from its search card (see <see cref="KnownCardTouches"/>), so a
+/// repeat walk visits only new cars, and --revisit forces a detail visit for every link as before.
+/// See the brief for the full pacing spec; this command implements it as literally as an automated
+/// agent can, since the actual bot-defense behavior can only be proven by the operator running it
+/// against a real browser.
 /// </summary>
 public static class WalkCommand
 {
@@ -33,7 +36,12 @@ public static class WalkCommand
         DefaultValueFactory = _ => WalkPacing.DefaultMaxDetailPages,
     };
 
-    public static async Task<int> RunAsync(string scenarioPath, string? siteName, string? modelOverride, int maxDetailPages, CancellationToken cancellationToken)
+    public static Option<bool> CreateRevisitOption() => new("--revisit")
+    {
+        Description = "open a detail page for every link, including the ones the ledger already holds; without it those are kept current from their search cards and only new cars are visited",
+    };
+
+    public static async Task<int> RunAsync(string scenarioPath, string? siteName, string? modelOverride, int maxDetailPages, bool revisit, CancellationToken cancellationToken)
     {
         List<WalkSite> sites;
         if (siteName is null)
@@ -102,7 +110,7 @@ public static class WalkCommand
             currentRun,
             sites,
             models,
-            (site, makeModel, ct) => WalkPairAsync(site, makeModel, page, browserCdp, context, scenario, extraction, upsertService, currentRun, dataDirectory, pacing, maxDetailPages, ct),
+            (site, makeModel, ct) => WalkPairAsync(site, makeModel, page, browserCdp, context, scenario, extraction, upsertService, currentRun, dataDirectory, pacing, maxDetailPages, revisit, ct),
             (site, makeModel) => AnsiConsole.MarkupLineInterpolated($"walking {site.Name} for {makeModel}"),
             (site, makeModel, ex) => AnsiConsole.MarkupLineInterpolated($"[yellow]{site.Name} / {makeModel}: walk failed ({ex.Message})[/]"),
             ct => Task.Delay(pacing.RandomPairGap(), ct),
@@ -161,6 +169,7 @@ public static class WalkCommand
         string dataDirectory,
         WalkPacing pacing,
         int maxDetailPages,
+        bool revisit,
         CancellationToken cancellationToken)
     {
         (string make, string model) = MakeModel.Split(makeModel);
@@ -168,6 +177,7 @@ public static class WalkCommand
         var recorder = new WalkRecorder(dataDirectory, site.Name, model, currentRun.StartedAt);
 
         IReadOnlyList<string> searchUrls = site.BuildSearchUrls(query);
+        KnownCardTouches knownTouches = await KnownCardTouches.LoadAsync(upsertService, site.Name, currentRun, revisit, cancellationToken);
 
         // Counts every search page the pair records, across searches and result pages alike, so
         // each one lands in its own search.txt / search-2.txt / ... and none overwrites another.
@@ -186,10 +196,12 @@ public static class WalkCommand
             await Task.Delay(dwell, ct);
 
             string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
-            await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchPagesRecorded++), searchBodyText, ct);
+            int searchPageIndex = searchPagesRecorded++;
+            await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchPageIndex), searchBodyText, ct);
 
-            string[][] anchors = await page.EvaluateAsync<string[][]>("() => Array.from(document.querySelectorAll('a')).map(a => [a.href, a.innerText || ''])");
-            return new SearchPageContent([.. anchors.Select(a => new PageLink(a[0], a[1]))], searchBodyText);
+            IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync((script, arg) => page.EvaluateAsync<string[][]>(script, arg), site);
+            await recorder.WriteAsync(WalkPairSearches.CardsFileName(searchPageIndex), SearchPageLinks.CardsJson(site, links), ct);
+            return new SearchPageContent(links, searchBodyText);
         }
 
         async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
@@ -201,11 +213,12 @@ public static class WalkCommand
                 site,
                 searchUrl,
                 linkPoolSize,
+                knownTouches.TryTouchAsync,
                 (pageUrl, pageNumber, pageCt) => LoadSearchPageAsync(pageUrl, searchLabel, pageNumber, pageCt),
                 (pageNumber, ex) => AnsiConsole.MarkupLineInterpolated($"[yellow]{searchLabel}, page {pageNumber} failed to load, so paging stops there ({ex.Message})[/]"),
                 pageNumber => AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: the search ran out of exact matches, so paging stops there"),
                 ct);
-            AnsiConsole.MarkupLineInterpolated($"found {links.Count} detail link(s) to consider (cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s))");
+            AnsiConsole.MarkupLineInterpolated($"found {links.Count} new detail link(s) to consider (cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)), {knownTouches.Count} known from cards so far");
             return links;
         }
 
@@ -335,9 +348,9 @@ public static class WalkCommand
             ct => Task.Delay(pacing.RandomDetailGap(), ct),
             cancellationToken);
 
-        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width)}");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width)}");
 
-        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped);
+        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
@@ -348,31 +361,40 @@ public static class WalkCommand
     }
 
     // Column widths are chosen so that, added to Border.Minimal's per-column padding and
-    // separators (3 chars per column plus 1 for the table's own edges), the table never needs
-    // more than 80 columns: 10 + 22 + 5 + 5 + 13 + 6 + (3 * 6 + 1) = 80. Site and Model are also
-    // truncated to their column's width before they reach the table, since Spectre wraps a cell
-    // that overflows its declared width onto a second line rather than cropping it, which would
-    // split one pair's row across two lines of the table. Dropped is the one column that's
-    // allowed to wrap: its own reason breakdown can run longer than 13 columns, and none of the
-    // reason words themselves are wider than that, so Spectre folds it onto a continuation line
-    // under the same row at a space rather than mid-word.
+    // separators, the table never needs more than 80 columns. A column with the default padding costs
+    // 3 chars (a space each side and a separator) and the table's own edges cost 1; the three count
+    // columns (Pages, Known, Saved) drop their padding, so each costs only its separator and its
+    // numbers sit right-aligned against it: 10 + 21 + 5 + 5 + 5 + 12 + 6 = 64 for the cells, plus
+    // (3 * 4 + 1 * 3 + 1) = 16, is 80. Site and Model are also truncated to their column's width before
+    // they reach the table, since Spectre wraps a cell that overflows its declared width onto a
+    // second line rather than cropping it, which would split one pair's row across two lines of the
+    // table. Dropped is the one column that's allowed to wrap: its own reason breakdown can run
+    // longer than 12 columns, and none of the reason words themselves are wider than that (the
+    // longest, "(extraction", is 11), so Spectre folds it onto a continuation line under the same row
+    // at a space rather than mid-word.
     private const int SiteColumnWidth = 10;
-    private const int ModelColumnWidth = 22;
+    private const int ModelColumnWidth = 21;
     private const int PagesColumnWidth = 5;
+    private const int KnownColumnWidth = 5;
     private const int SavedColumnWidth = 5;
-    private const int DroppedColumnWidth = 13;
+    private const int DroppedColumnWidth = 12;
     private const int StatusColumnWidth = 6;
 
+    private static TableColumn CountColumn(string header, int width) =>
+        new(header) { Width = width, NoWrap = true, Alignment = Justify.Right, Padding = new Padding(0, 0) };
+
     /// <summary>Builds the end-of-run table without writing it, so a rendering test can capture
-    /// it against a fixed-width console instead of the real one.</summary>
+    /// it against a fixed-width console instead of the real one. Pages counts the detail pages
+    /// visited and Known the links kept current from their search cards without a visit.</summary>
     public static Table BuildSummaryTable(IReadOnlyList<WalkPairSummary> summaries)
     {
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
         table.AddColumn(new TableColumn("Site") { Width = SiteColumnWidth, NoWrap = true });
         table.AddColumn(new TableColumn("Model") { Width = ModelColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Pages") { Width = PagesColumnWidth, NoWrap = true });
-        table.AddColumn(new TableColumn("Saved") { Width = SavedColumnWidth, NoWrap = true });
+        table.AddColumn(CountColumn("Pages", PagesColumnWidth));
+        table.AddColumn(CountColumn("Known", KnownColumnWidth));
+        table.AddColumn(CountColumn("Saved", SavedColumnWidth));
         table.AddColumn(new TableColumn("Dropped") { Width = DroppedColumnWidth });
         table.AddColumn(new TableColumn("Status") { Width = StatusColumnWidth, NoWrap = true });
         foreach (WalkPairSummary summary in summaries)
@@ -381,6 +403,7 @@ public static class WalkCommand
                 Format.Cell(Format.Truncate(summary.Site, SiteColumnWidth)),
                 Format.Cell(Format.Truncate(summary.Model, ModelColumnWidth)),
                 summary.DetailPagesVisited.ToString(),
+                summary.KnownFromCards.ToString(),
                 summary.Upserted.ToString(),
                 Format.Cell(WalkPairSummaryLine.TableCell(summary.Dropped)),
                 summary.Completed ? "ok" : "[yellow]failed[/]");

@@ -13,12 +13,17 @@ namespace Odonomics.Walk;
 /// (see <see cref="WalkSite.ExhaustedSearchPattern"/>) contributes nothing and ends the paging, since
 /// what follows that notice is similar vehicles the facets never asked for. Only the first page is
 /// required: a later page is a bonus, so one that fails to load ends the paging with the links already
-/// collected instead of failing the search.
+/// collected instead of failing the search. A link the caller says it already knows (the ledger holds
+/// it) is handed to <c>touchKnownAsync</c> with its card's asking price and never enters the pool, so it
+/// spends none of the pool; paging goes on past pages made only of known links, and stops when the pool of
+/// new links is full, the stated count is reached, or a page shows nothing not seen before.
 /// </summary>
 public static class WalkSearchPages
 {
     /// <summary>The candidate links for <paramref name="searchUrl"/>, in page order, one per
-    /// canonical URL and at most <paramref name="poolSize"/>. <paramref name="loadPageAsync"/> is
+    /// canonical URL and at most <paramref name="poolSize"/>, not counting a link
+    /// <paramref name="touchKnownAsync"/> takes (it is given the link's canonical URL and the card's
+    /// asking price, or null when the card shows none, and returns true for a link it took). <paramref name="loadPageAsync"/> is
     /// given a page's URL and its 1-based number, and does everything a person would on that page
     /// (open it, scroll, dwell, record it) before returning its anchors and text, so the pacing between
     /// pages is the pacing between any two page loads. When a page after the first throws (other than
@@ -30,6 +35,7 @@ public static class WalkSearchPages
         WalkSite site,
         string searchUrl,
         int poolSize,
+        Func<string, decimal?, CancellationToken, ValueTask<bool>> touchKnownAsync,
         Func<string, int, CancellationToken, Task<SearchPageContent>> loadPageAsync,
         Action<int, Exception> onLaterPageFailed,
         Action<int> onSearchExhausted,
@@ -38,7 +44,8 @@ public static class WalkSearchPages
         Func<string, int, string>? pageUrlFor = site.PagedSearchUrl;
         List<string> pool = [];
         HashSet<string> canonicalUrls = [];
-        int linkBound = poolSize;
+        int linkBound = int.MaxValue;
+        int considered = 0;
 
         for (int pageNumber = 1; ; pageNumber++)
         {
@@ -64,25 +71,32 @@ public static class WalkSearchPages
 
             if (pageNumber == 1 && site.MatchCountIn(content.Text) is int statedCount)
             {
-                linkBound = Math.Min(poolSize, statedCount);
+                linkBound = statedCount;
             }
 
             int added = 0;
-            foreach (string link in site.CollectDetailLinks(content.Links, int.MaxValue, content.Text))
+            foreach (PageLink card in site.CollectDetailCards(content.Links, int.MaxValue, content.Text))
             {
-                if (pool.Count >= linkBound)
+                if (considered >= linkBound)
                 {
                     break;
                 }
 
-                if (canonicalUrls.Add(WalkSites.CanonicalDetailUrl(link)))
+                string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
+                if (!canonicalUrls.Add(canonicalUrl))
                 {
-                    pool.Add(link);
-                    added++;
+                    continue;
+                }
+
+                considered++;
+                added++;
+                if (!await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), cancellationToken) && pool.Count < poolSize)
+                {
+                    pool.Add(card.Href);
                 }
             }
 
-            if (pageUrlFor is null || pool.Count >= linkBound || added == 0)
+            if (pageUrlFor is null || pool.Count >= poolSize || considered >= linkBound || added == 0)
             {
                 break;
             }
