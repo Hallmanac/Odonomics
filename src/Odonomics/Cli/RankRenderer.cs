@@ -264,8 +264,8 @@ public static class RankRenderer
 
     private static string ResearchMarker(ResearchStatus? status) => status switch
     {
-        null or { Researched: false } => "-",
         { HasRedFlag: true } => "[red]flag[/]",
+        null or { Researched: false } => "-",
         _ => "[green]clean[/]",
     };
 

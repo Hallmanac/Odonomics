@@ -41,9 +41,10 @@ public static class ShowCommand
         Dictionary<string, DateTimeOffset> latestCoverageBySource = RunSources.LatestCoverageBySource(runs);
 
         // The red flags compare asking prices with other listings' asking prices, so they keep the
-        // asking price alone; the monthly cost is what taking the car home costs under the scenario's fulfillment.
+        // asking price alone; the monthly cost is what taking the car home costs under the scenario's fulfillment,
+        // itemized fees included. The fee flag comes from the postings, not the research.
         decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-        IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
+        IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment)];
 
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, scenario.Fulfillment);
         (CostBreakdown? monthlyCost, string? unavailable) = MonthlyCostFor($"{vehicle.Make} {vehicle.Model}", purchasePrice?.Total, scenario);
@@ -56,7 +57,7 @@ public static class ShowCommand
     /// scenario would exclude, and its monthly cost is still worth seeing. What it cannot price it
     /// explains instead of throwing: a vehicle with no current price, or a model the scenario has no
     /// insurance or mpg figure for. <paramref name="purchasePrice"/> is what the car costs to take
-    /// home, its asking price plus the fee for the scenario's fulfillment (see <see cref="PurchasePrice.Total"/>).</summary>
+    /// home, its asking price plus the fee for the scenario's fulfillment and any itemized fees (see <see cref="PurchasePrice.Total"/>).</summary>
     public static (CostBreakdown? Cost, string? Unavailable) MonthlyCostFor(string makeModel, decimal? purchasePrice, Scenario scenario)
     {
         if (purchasePrice is not decimal price)

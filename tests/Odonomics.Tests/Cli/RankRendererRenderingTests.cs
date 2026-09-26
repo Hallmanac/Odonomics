@@ -118,6 +118,24 @@ public class RankRendererRenderingTests
     }
 
     [Fact]
+    public void Render_VehicleWithAListingFlagButNoResearch_MarksItFlagRatherThanNotResearched()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score flagged = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, cost: cost);
+        Score plain = BuildScore("4T1G11AK0LU654321", 2020, "Toyota", "Corolla Hybrid", 23000m, cost: cost);
+        var research = new Dictionary<string, ResearchStatus>
+        {
+            ["4T1G11AK0LU123456"] = new ResearchStatus(Researched: false, ResearchedAt: null, HasRedFlag: true, RecallsKnown: false, RecallCount: 0),
+            ["4T1G11AK0LU654321"] = new ResearchStatus(Researched: false, ResearchedAt: null, HasRedFlag: false, RecallsKnown: false, RecallCount: 0),
+        };
+
+        string[] lines = Render([flagged, plain], budget: null, research);
+
+        Assert.Contains(lines, line => line.Contains("$22,000") && line.Contains("flag") && line.Contains("rc -"));
+        Assert.Contains(lines, line => line.Contains("$23,000") && !line.Contains("flag") && line.Contains("rc -"));
+    }
+
+    [Fact]
     public void Render_NoVehicleGraded_OmitsGradeAndPrintsOneLineNote()
     {
         CostBreakdown cost = BuildCost(new Band(590m, 590m, 590m), new Band(612m, 612m, 612m));
