@@ -19,7 +19,7 @@ var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
 CancellationToken cancellationToken = cts.Token;
 
 // `dotnet run --project spike -- --diag <source>` runs one source into a scratch folder without
-// advancing the day counter or touching SPIKE-FINDINGS.md. Build-time debugging only; the single
+// advancing the day counter or touching docs/spike-findings.md. Build-time debugging only; the single
 // command that runs a real day is `dotnet run --project spike` with no arguments.
 if (args.Length > 0 && args[0] == "--diag")
 {
@@ -115,7 +115,7 @@ foreach (SourceRunResult result in results.Where(r => !r.CouldNotRun))
 // included), and that is exactly the data these last two writes must not lose. CancellationToken.None
 // is deliberate: a cancelled token here would throw out of File.ReadAllTextAsync before a single row
 // could be appended, discarding the whole day's results including the sources that succeeded.
-string findingsPath = Path.Combine(repoRoot, "SPIKE-FINDINGS.md");
+string findingsPath = Path.Combine(repoRoot, "docs", "spike-findings.md");
 await FindingsAppender.AppendDayResultsAsync(findingsPath, day, results, CancellationToken.None);
 
 string dumpPath = await recorded.WriteAsync(
