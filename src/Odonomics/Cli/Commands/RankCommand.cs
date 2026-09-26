@@ -40,7 +40,10 @@ public static class RankCommand
         {
             VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment);
             scores.Add(Scorer.Score(forScoring, scenario));
-            research[vehicle.Vin] = ResearchStatusFor(vinRecordsByVin.GetValueOrDefault(vehicle.Vin), VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource));
+            research[vehicle.Vin] = ResearchStatusFor(
+                vinRecordsByVin.GetValueOrDefault(vehicle.Vin),
+                VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource),
+                FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment));
         }
 
         RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets, detail);
@@ -74,18 +77,21 @@ public static class RankCommand
         };
     }
 
-    private static ResearchStatus ResearchStatusFor(VinRecordEntity? record, decimal? currentPrice)
+    /// <summary>The research column's status for one vehicle. <paramref name="listingFlags"/> are the flags
+    /// its postings raise (see <see cref="FeeRedFlags"/>), which need no research, so a vehicle that has
+    /// not been researched yet still reports one.</summary>
+    private static ResearchStatus ResearchStatusFor(VinRecordEntity? record, decimal? currentPrice, IReadOnlyList<RedFlag> listingFlags)
     {
         if (record?.ResearchedAt is not DateTimeOffset researchedAt)
         {
-            return new ResearchStatus(Researched: false, ResearchedAt: null, HasRedFlag: false, RecallsKnown: false, RecallCount: 0);
+            return new ResearchStatus(Researched: false, ResearchedAt: null, HasRedFlag: listingFlags.Count > 0, RecallsKnown: false, RecallCount: 0);
         }
 
         IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlagsForCached(record, currentPrice);
         return new ResearchStatus(
             Researched: true,
             ResearchedAt: researchedAt,
-            HasRedFlag: redFlags.Count > 0,
+            HasRedFlag: redFlags.Count + listingFlags.Count > 0,
             RecallsKnown: record.RecallsRawJson is not null,
             RecallCount: record.OpenRecallCount);
     }

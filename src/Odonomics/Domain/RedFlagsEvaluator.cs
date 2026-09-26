@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Odonomics.Domain;
@@ -47,7 +48,9 @@ public sealed record SellerGroupSummary(
 /// Plain, testable rules over a VIN's research data: mileage that decreased between listings by more
 /// than rounding or a data-entry blip, a listing history spanning several distinct sellers in a short
 /// window, an open recall with no remedy published yet, a safety rating below four stars, or a
-/// current price well above the listing-history price trajectory. Every threshold below is a
+/// current price well above the listing-history price trajectory, or a listing that does not say what
+/// fees sit on top of its price at a dealer CarEdge says sells add-ons (see
+/// <see cref="AddOnsDealer"/>). Every threshold below is a
 /// deliberate v0 simplification, not a value NHTSA or Marketcheck hand us.
 /// </summary>
 public static partial class RedFlagsEvaluator
@@ -136,6 +139,34 @@ public static partial class RedFlagsEvaluator
         }
 
         return new EvaluationResult(flags, mileageNotes);
+    }
+
+    /// <summary>The flag for a listing whose price may not be the price at the desk: its fee posture is
+    /// unknown (<paramref name="feePostureIsUnknown"/>: a page was read and never said whether its fees
+    /// are in the price) and its dealer's CarEdge add-ons note says the dealer sells add-ons, a dollar
+    /// amount such as "$358 add-ons". Null for any other posture, including one never read (nothing is
+    /// known about it either way, so the caller passes false), and for a dealer
+    /// CarEdge says sells none ("No add-ons"), one with no note, or one whose note carries a zero amount.
+    /// The detail names the dealer and, when known, its doc fee. This is a listing-level rule, evaluated
+    /// on the vehicle's cheapest active posting, so it takes that posting's facts and not a VIN
+    /// history.</summary>
+    public static RedFlag? AddOnsDealer(bool feePostureIsUnknown, string? dealerName, decimal? dealerDocFee, string? dealerAddOnsNote)
+    {
+        if (!feePostureIsUnknown
+            || string.IsNullOrWhiteSpace(dealerName)
+            || dealerAddOnsNote is null
+            || AddOnsAmount().Match(dealerAddOnsNote) is not { Success: true } addOns
+            || decimal.Parse(addOns.Groups["amount"].Value, NumberStyles.AllowThousands, CultureInfo.InvariantCulture) == 0m)
+        {
+            return null;
+        }
+
+        string docFee = dealerDocFee is decimal fee
+            ? $" and charges a ${fee:N0} doc fee"
+            : "";
+        return new RedFlag(
+            "add-ons-dealer",
+            $"the listing does not say whether its price includes fees, and {dealerName.Trim()} sells add-ons per CarEdge ({dealerAddOnsNote.Trim()}){docFee}");
     }
 
     /// <summary>The listing history grouped by seller (see <see cref="BuildSellerGroups"/>), for a
@@ -441,6 +472,9 @@ public static partial class RedFlagsEvaluator
         List<T> present = [.. values.Where(v => v is not null).Select(v => v!.Value)];
         return present.Count == 0 ? (null, null) : (present.Min(), present.Max());
     }
+
+    [GeneratedRegex(@"^\s*\$(?<amount>\d[\d,]*)\s+add-ons\b", RegexOptions.IgnoreCase)]
+    private static partial Regex AddOnsAmount();
 
     [GeneratedRegex(@"[^\w\s]")]
     private static partial Regex Punctuation();

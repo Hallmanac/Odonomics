@@ -21,7 +21,8 @@ public sealed record VinResearchResult(
     VinHistoryResult History);
 
 /// <summary>Whether a vehicle has been researched (the safety-ratings/VIN-history lookup, not just
-/// the NHTSA decode `odo show` always ran), whether any red flag exists, and how many open NHTSA
+/// the NHTSA decode `odo show` always ran), whether any red flag exists (one its postings raise counts
+/// even before the vehicle is researched, see <see cref="FeeRedFlags"/>), and how many open NHTSA
 /// recalls it carries. <see cref="RecallsKnown"/> is false when the recalls piece has never once
 /// succeeded (e.g. every attempt hit NHTSA's HTML-error-page failure mode), so <see cref="RecallCount"/>'s
 /// default 0 is never mistaken for a confirmed "no open recalls" by a caller. Purely a display concern

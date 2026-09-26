@@ -21,12 +21,15 @@ public static class ResearchCommand
 
         List<VehicleEntity> allVehicles = await db.Vehicles
             .Include(v => v.Postings).ThenInclude(p => p.PriceObservations)
+            .Include(v => v.Postings).ThenInclude(p => p.Dealer)
             .Include(v => v.VinRecord)
             .ToListAsync(cancellationToken);
 
         List<RunEntity> runs = await db.Runs.ToListAsync(cancellationToken);
         Dictionary<string, DateTimeOffset> latestCoverageBySource = RunSources.LatestCoverageBySource(runs);
 
+        // Explicit VINs need no scenario, so the fee flag's posting is chosen under delivery unless one was loaded.
+        Fulfillment fulfillment = Fulfillment.Delivery;
         List<VehicleEntity> vehicles;
         if (vins.Count > 0)
         {
@@ -46,6 +49,7 @@ public static class ResearchCommand
         else
         {
             Scenario scenario = ScenarioLoader.Load(scenarioPath);
+            fulfillment = scenario.Fulfillment;
             vehicles = SelectVehiclesToResearch(allVehicles, scenario, latestCoverageBySource);
         }
 
@@ -80,7 +84,7 @@ public static class ResearchCommand
                         : await researchService.RefreshAsync(db, vehicle, refresh, cancellationToken);
 
                     decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-                    IReadOnlyList<RedFlag> redFlags = VinResearchService.RedFlags(research, currentPrice);
+                    IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment)];
 
                     bool anyPieceFailed = research.Recalls.CouldNotFetchReason is not null
                         || research.Complaints.CouldNotFetchReason is not null
