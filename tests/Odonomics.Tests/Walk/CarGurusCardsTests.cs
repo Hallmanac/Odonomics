@@ -11,9 +11,9 @@ public class CarGurusCardsTests
 {
     private sealed record CardEntry(string Href, string Text, string Card);
 
-    private static string CardOf(string listingId)
+    private static string CardOf(string listingId, string fixture = "cargurus-insight-search-cards.json")
     {
-        string json = File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", "cargurus-insight-search-cards.json"));
+        string json = File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", fixture));
         return (JsonSerializer.Deserialize<List<CardEntry>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [])
             .First(c => c.Href.Contains($"/details/{listingId}?") && c.Href.Contains("sponsoredType=NONE"))
             .Card;
@@ -36,12 +36,21 @@ public class CarGurusCardsTests
         Assert.Equal(expected, CardPrices.CarGurusPrice(CardOf(listingId)));
     }
 
-    [Fact]
-    public void CarGurusPrice_SkipsAPriceDropAmountAndTheMonthlyEstimate()
+    [Theory]
+    [InlineData("456971502", 22673)]
+    [InlineData("458613016", 24120)]
+    [InlineData("456344008", 24118)]
+    public void CarGurusPrice_RecordedPriceDropCard_IsTheCurrentPriceAfterTheOldOne(string listingId, int expected)
     {
-        const string card = "Price drop\n-$539\nSave this listing\n2024 Toyota Corolla Hybrid\nSE FWD\n35,269 mi\nGreat Deal\n$23,861\nPrice includes fees\n$459/mo est.\nCheck availability";
+        Assert.Equal(expected, CardPrices.CarGurusPrice(CardOf(listingId, "cargurus-corolla-hybrid-search-cards.json")));
+    }
 
-        Assert.Equal(23861, CardPrices.CarGurusPrice(card));
+    [Fact]
+    public void CarGurusPrice_SkipsAPriceDropAmountTheOldPriceAndTheMonthlyEstimate()
+    {
+        const string card = "Price drop\n-$539\nSave this listing\n2024 Toyota Corolla Hybrid\nSE FWD\n35,269 mi\nGreat Deal\n$23,212\n$22,673\nPrice includes fees\n$424/mo est.\nCheck availability";
+
+        Assert.Equal(22673, CardPrices.CarGurusPrice(card));
     }
 
     [Theory]
