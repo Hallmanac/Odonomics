@@ -98,7 +98,7 @@ That's a long run. Each detail page takes about a minute once the random gaps an
 
 You can judge the length before committing to it. The start of the run prints the pairs, the limit if there is one, and how many postings the ledger already holds for each pair. Before its first detail page, each pair prints how many pages it's about to visit and roughly how many minutes that is. Under `--max` a pair with two searches prints only the count its first search starts with. A pair with nothing new to open says so and moves on.
 
-`--max N` puts a limit on it, and the limit is per site-and-model pair, not per run and not per raw page visit. A detail page the walk opens and then rejects for being some other model (a plain Corolla on a Corolla Hybrid walk, say), for repeating a VIN this pair already saved, or for being a new-car listing never spends any of the cap. So the walk keeps taking links until the cap is met with real matches or the search page runs out of links to try.
+`--max N` puts a limit on it, and the limit is per site-and-model pair, not per run and not per raw page visit. A detail page the walk opens and then rejects for being some other model (a plain Corolla on a Corolla Hybrid walk, say), for repeating a VIN this pair already saved, for being a new-car listing, for saying the car has sold, or for listing no price never spends any of the cap. So the walk keeps taking links until the cap is met with real matches or the search page runs out of links to try.
 
 With `--max`, each site's candidate pool is sized to twice the limit, so a wrong-model or repeat page can be replaced by a spare link instead of spending the cap outright. Without it, every link is visited and there's nothing to replace.
 
@@ -108,7 +108,7 @@ A pair's own coverage is only stamped on the run once that pair's walk actually 
 
 ### The pair line and the end table
 
-After each pair's walk finishes, it prints one line summarizing that pair. The line gives how many detail pages were visited, how many known links were kept current from their search cards without a visit, how many were saved, and how many were dropped. The dropped count is broken out by reason when it's non-zero: wrong model, new-car listing, missing fields, no VIN, repeat, failed to load, and extraction failed. When that line would be wider than the console, the breakdown moves intact to a second line indented by four spaces, and it never wraps mid-parenthetical. A pair still reports as one row, however many searches or result pages it took.
+After each pair's walk finishes, it prints one line summarizing that pair. The line gives how many detail pages were visited, how many known links were kept current from their search cards without a visit, how many were saved, and how many were dropped. The dropped count is broken out by reason when it's non-zero: wrong model, new-car listing, listing sold, no price listed, missing fields, no VIN, repeat, failed to load, and extraction failed. When that line would be wider than the console, the breakdown moves intact to a second line indented by four spaces, and it never wraps mid-parenthetical. A pair still reports as one row, however many searches or result pages it took.
 
 At the end, a summary table lists the same figures for every pair, with a "Known" column beside "Pages" and "Saved" for the known count. The usual diff for the whole run follows the table, using the five headings described in [commands.md](commands.md#what-search-asks-for).
 
@@ -116,6 +116,7 @@ At the end, a summary table lists the same figures for every pair, with a "Known
 
 Every row under "Gone" ends with a short reason, so a car the walk simply no longer looks for isn't mistaken for one that sold. The reasons are checked in this order:
 
+- "sold" when this run opened the posting's detail page and it said the car has sold (see "Sold and no-price pages" below).
 - "below year facet" when the vehicle's year is under the scenario's minimum for its model.
 - "over mileage" when its mileage is over the scenario's maximum.
 - "search moved" when this run's zip or radius differs from those of the run that last saw the posting.
@@ -123,7 +124,7 @@ Every row under "Gone" ends with a short reason, so a car the walk simply no lon
 - "beyond the cap" when an explicit `--max` stopped the pair before the site ran out of results (see below).
 - "not on search page" otherwise.
 
-Only that last reason suggests the car may have left the market. When a pair has both reasons (a cap on one of its searches and a failed page on another), "pages unread" wins. A run recorded before the ledger kept its zip and radius is never treated as a moved search.
+"Sold" is the one reason the site itself confirmed. Of the rest, only the last suggests the car may have left the market. When a pair has both reasons (a cap on one of its searches and a failed page on another), "pages unread" wins. A run recorded before the ledger kept its zip and radius is never treated as a moved search.
 
 A pair is capped when `--max` kept the walk from reading everything the site returned. That happens when the pool of links filled while a paged site had more pages, or when a second search was never opened because the cap was spent. With `--revisit`, where the pool also holds links the ledger already knows, a link the pool had no room for or the cap left unvisited caps the pair too. Without `--revisit` a leftover link is one the ledger does not hold, and every known posting on the pages that were read has already been kept current from its card, so leftovers alone never cap a pair. A pair whose pages were exhausted is not capped, even when it filled the cap exactly, whenever the site states its match count. A Carvana page that shows none and fills the pool on its last page is still treated as capped, since only loading one more page would tell.
 
@@ -144,6 +145,14 @@ Only the title line and that spec line decide it. A plain Corolla page that mere
 The hybrid-only-from-year rule feeds the same check. When the scenario's `hybridOnlyFromModelYear` says a base model has no gas version left, a page at or above that year matches the hybrid model even if it never says "Hybrid", and [scenario.md](scenario.md#per-model-maps) covers the field itself. Below that year the page has to say "Hybrid" like any other, and the drop line for a gas page names the year it's gas-only before. This rule is also why cars.com gets a second search for such a model.
 
 cars.com's used search still mixes in new-car cards ("New 2027 Toyota Corolla Hybrid LE"), which the scenario can never rank. So the walk skips any card whose title begins with "New " when it collects detail links, and those links never enter the candidate pool and never count against the cap. As a backstop, a cars.com detail page that still reads as a new car is dropped as a "new-car listing", which likewise never spends the cap. A page reads as a new car when it has a "New" title before the year, or when it has an MSRP line with no Mileage line. "Missing fields" stays as the reason for a used car whose page lacks its year, price, or mileage.
+
+### Sold and no-price pages
+
+Two kinds of detail page are recognized from their text before extraction is attempted, so the drop reason says what actually happened and no extraction call is spent on them. A page that says the car has sold is dropped as "listing sold". A page that lists no price, only a prompt to contact the dealer, is dropped as "no price listed". Neither spends any of the per-pair cap, and both are named in the pair line and the end table.
+
+A sold page carries other cars' cards, so the extraction would otherwise read one of those and drop the page as "no VIN". When the link is already a posting on the ledger, which happens under `--revisit`, the walk stamps that posting as sold for this run. The posting is not touched otherwise, so the diff lists it under "Gone" with the reason "sold". A sold page for a link the ledger never held marks nothing. A page with no price never creates or updates a price observation, since the car is still for sale and only its price is unknown.
+
+Each site carries its own patterns for the two pages, and a site without them drops such a page for whatever the extraction makes of it. Only Autotrader has them so far: its sold page says "It looks like this Toyota Corolla has already found a new home", and its no-price page prints "Contact Dealer For Price" on a line of its own. The cars.com and Carvana wording is added once a page saying so has been recorded.
 
 ## Per site
 
@@ -217,4 +226,4 @@ The prompt asks for ten fields: the VIN, year, make, model, trim, price, mileage
 
 Anything the page doesn't state comes back as null. A VIN has to be exactly 17 characters with no I, O, or Q, or it's null. After the call, odo checks the VIN, make, model, price, mileage, dealer name, and dealer location against the page text, and it nulls any that doesn't appear there. A model that can't be found in the page text is nulled too, so it can't match and the page is dropped as "wrong model".
 
-The nulls then decide what happens to the page. A page is checked in this order: new-car (cars.com only), extraction failed, no VIN, repeat, wrong model, and then missing fields, so the first reason that applies is the one it's dropped for. A null year, price, or mileage gets it dropped as "missing fields". A null dealer only means no dealer is linked to the posting, and it never erases a link an earlier sighting made.
+The nulls then decide what happens to the page. A page is checked in this order: sold, no price listed (both from the page's own text, on the sites that have patterns for them), new-car (cars.com only), extraction failed, no VIN, repeat, wrong model, and then missing fields, so the first reason that applies is the one it's dropped for. A null year, price, or mileage gets it dropped as "missing fields". A null dealer only means no dealer is linked to the posting, and it never erases a link an earlier sighting made.
