@@ -66,6 +66,8 @@ public static class RankCommand
             PickupFee = purchasePrice?.PickupFee,
             PickupLocation = purchasePrice?.PickupLocation,
             Fulfillment = fulfillment,
+            ItemizedFees = purchasePrice?.ItemizedFees,
+            FeePosture = purchasePrice?.FeePosture,
             DealerGrade = DealerGradeSummary(vehicle),
             OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade?.StartsWith('F') == true),
             SiteBadge = cheapest is null ? null : SiteBadgeText.For(cheapest.Attributes),

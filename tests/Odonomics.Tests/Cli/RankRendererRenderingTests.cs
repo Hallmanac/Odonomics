@@ -24,7 +24,8 @@ public class RankRendererRenderingTests
         decimal? shippingFee = null,
         decimal? pickupFee = null,
         string? pickupLocation = null,
-        Fulfillment fulfillment = Fulfillment.Delivery)
+        Fulfillment fulfillment = Fulfillment.Delivery,
+        decimal? itemizedFees = null)
     {
         var vehicle = new VehicleForScoring
         {
@@ -38,6 +39,7 @@ public class RankRendererRenderingTests
             PickupFee = pickupFee,
             PickupLocation = pickupLocation,
             Fulfillment = fulfillment,
+            ItemizedFees = itemizedFees,
             DealerGrade = dealerGrade,
             OnlyFGradedDealers = onlyFGraded,
         };
@@ -497,6 +499,31 @@ public class RankRendererRenderingTests
         int priceLine = Array.FindIndex(lines, line => line.Trim() == "price $22,000 asking + $1,590 shipping = $23,590 (delivery)");
         Assert.True(priceLine >= 0, "expected an itemized price line naming the shipping fee");
         Assert.StartsWith("    loan payment", lines[priceLine + 1]);
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+    }
+
+    [Fact]
+    public void Render_DetailForAVehicleWithItemizedFees_NamesTheFeesAndThePurchasePriceItAddsUpTo()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, cost: cost, itemizedFees: 1494m);
+
+        string[] lines = Render([score], budget: null, detail: true);
+
+        Assert.Contains(lines, line => line.Contains("$23,494") && line.Contains("during $590-$626"));
+        Assert.Contains(lines, line => line.Trim() == "price $22,000 asking + $1,494 fees = $23,494");
+        Assert.DoesNotContain(lines, line => line.Contains("shipping"));
+    }
+
+    [Fact]
+    public void Render_DetailForAVehicleWithShippingAndItemizedFees_NamesBothInOneLine()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, cost: cost, shippingFee: 1590m, itemizedFees: 1494m);
+
+        string[] lines = Render([score], budget: null, detail: true);
+
+        Assert.Contains(lines, line => line.Trim() == "price $22,000 asking + $1,590 shipping + $1,494 fees = $25,084 (delivery)");
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
     }
 

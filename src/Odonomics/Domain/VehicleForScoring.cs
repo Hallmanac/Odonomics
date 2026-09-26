@@ -26,6 +26,14 @@ public sealed record VehicleForScoring
     /// <summary>Which of the two fees <see cref="PurchasePrice"/> adds: the scenario's choice.</summary>
     public Fulfillment Fulfillment { get; init; } = Fulfillment.Delivery;
 
+    /// <summary>The fees that same posting itemized on top of its asking price, null when it
+    /// itemized none (see <see cref="PurchasePrice.ItemizedFees"/>).</summary>
+    public decimal? ItemizedFees { get; init; }
+
+    /// <summary>That same posting's fee posture, for display only (see
+    /// <see cref="PurchasePrice.FeePosture"/>).</summary>
+    public string? FeePosture { get; init; }
+
     /// <summary>Distinct CarEdge grades among this vehicle's postings' dealers, joined with "/"
     /// (e.g. "A+" or "A+/F"); null when no posting has a graded dealer yet.</summary>
     public string? DealerGrade { get; init; }
@@ -42,10 +50,10 @@ public sealed record VehicleForScoring
     public string? SiteBadge { get; init; }
 
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
-    /// <see cref="Fulfillment"/>, which is the price the cost model uses; null when there is no
-    /// current asking price.</summary>
+    /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
+    /// when there is no current asking price.</summary>
     public PurchasePrice? PurchasePrice => LowestCurrentPrice is decimal asking
-        ? new PurchasePrice(asking, ShippingFee, PickupFee, PickupLocation, Fulfillment)
+        ? new PurchasePrice(asking, ShippingFee, PickupFee, PickupLocation, Fulfillment, ItemizedFees, FeePosture)
         : null;
 
     public string MakeModel => $"{Make} {Model}";

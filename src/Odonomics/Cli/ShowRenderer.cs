@@ -196,16 +196,17 @@ public static class ShowRenderer
     /// then the during-loan total and the ten-year average. Every figure is read from the same
     /// <see cref="CostBreakdown"/> `odo rank` prints, so a "$592-$627" during-loan figure can be
     /// seen to be a payment plus running costs, not a car payment. When the scenario cannot price the
-    /// vehicle, says why in place of the figures. When the vehicle's posting shows a shipping fee or a
-    /// pickup option, its fees sit on their own lines under the asking price, both of them when both
-    /// are known, and the purchase price they add up to closes the group with the fulfillment the
+    /// vehicle, says why in place of the figures. When the vehicle's posting shows a shipping fee, a
+    /// pickup option or itemized fees, each sits on its own line under the asking price, both fees when
+    /// both are known, and the purchase price they add up to closes the group with the fulfillment the
     /// analysis assumed ("with delivery" or "with pickup"), since that price is what the figures are
-    /// computed from. A vehicle with neither prints none of those lines. Written line by line rather
-    /// than as a table so nothing wraps at 80 columns.</summary>
+    /// computed from; when the posting's fee posture was read, a last line says what it is. A vehicle
+    /// with none of these prints none of those lines. Written line by line rather than as a table so
+    /// nothing wraps at 80 columns.</summary>
     public static void RenderMonthlyCost(IAnsiConsole console, CostBreakdown? cost, string? unavailableReason, PurchasePrice? purchasePrice = null)
     {
         console.MarkupLine("[bold]Monthly cost[/]");
-        if (purchasePrice is { } price && (price.ShippingFee is not null || price.PickupFee is not null))
+        if (purchasePrice is { } price && (price.ShippingFee is not null || price.PickupFee is not null || price.ItemizedFees is not null || price.FeePosture is not null))
         {
             console.MarkupLine($"  {"Asking price".PadRight(MonthlyCostLabelWidth)}{Format.Money(price.Asking)}");
             if (price.ShippingFee is decimal shippingFee)
@@ -223,7 +224,23 @@ public static class ShowRenderer
                 console.MarkupLine($"  {"Pickup fee".PadRight(MonthlyCostLabelWidth)}not read, so the shipping fee is assumed");
             }
 
-            console.MarkupLine($"  {"Purchase price".PadRight(MonthlyCostLabelWidth)}{Format.Money(price.Total)} with {price.Fulfillment.Word()}");
+            if (price.ItemizedFees is decimal itemizedFees)
+            {
+                console.MarkupLine($"  {"Itemized fees".PadRight(MonthlyCostLabelWidth)}{Format.Money(itemizedFees)}");
+            }
+
+            if (price.AppliedFee is not null || price.ItemizedFees is not null)
+            {
+                string fulfillment = price.AppliedFee is null
+                    ? ""
+                    : $" with {price.Fulfillment.Word()}";
+                console.MarkupLine($"  {"Purchase price".PadRight(MonthlyCostLabelWidth)}{Format.Money(price.Total)}{fulfillment}");
+            }
+
+            if (price.FeePosture is string posture)
+            {
+                console.MarkupLine($"  {"Fee posture".PadRight(MonthlyCostLabelWidth)}{FeePostureText(posture)}");
+            }
         }
 
         if (cost is null)
@@ -240,6 +257,16 @@ public static class ShowRenderer
         console.MarkupLine($"  {"During-loan total".PadRight(MonthlyCostLabelWidth)}{Format.Band(cost.DuringLoanMonthly)}");
         console.MarkupLine($"  {"10-year average".PadRight(MonthlyCostLabelWidth)}{Format.Band(cost.TenYearAverageMonthly)}");
     }
+
+    /// <summary>What a fee posture means for the price above it, in a few words: the price holds the
+    /// fees, the fees come on top of it (and are the itemized line), or the page did not say.</summary>
+    private static string FeePostureText(string posture) => posture switch
+    {
+        FeePostures.AllIn => "all-in (fees are in the price)",
+        FeePostures.Itemized => "itemized (fees are on top)",
+        FeePostures.Unknown => "unknown (the page did not say)",
+        _ => posture,
+    };
 
     /// <summary>The ledger's own postings for one vehicle, one row per posting with its source,
     /// first and last seen dates, price history, and dealer. Built without writing it, so a

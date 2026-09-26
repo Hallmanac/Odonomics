@@ -8,7 +8,7 @@ public class VehiclePricingTests
     private static readonly DateTimeOffset RunTime = new(2026, 9, 25, 0, 0, 0, TimeSpan.Zero);
     private static readonly IReadOnlyDictionary<string, DateTimeOffset> NoCoverage = new Dictionary<string, DateTimeOffset>();
 
-    private static PostingEntity Posting(string source, decimal price, decimal? shippingFee = null, DateTimeOffset? lastSeen = null, decimal? pickupFee = null, string? pickupLocation = null) => new()
+    private static PostingEntity Posting(string source, decimal price, decimal? shippingFee = null, DateTimeOffset? lastSeen = null, decimal? pickupFee = null, string? pickupLocation = null, string? feePosture = null, decimal? itemizedFees = null) => new()
     {
         VehicleVin = "1HGCM82633A004352",
         Source = source,
@@ -18,6 +18,8 @@ public class VehiclePricingTests
         ShippingFee = shippingFee,
         PickupFee = pickupFee,
         PickupLocation = pickupLocation,
+        FeePosture = feePosture,
+        ItemizedFeesTotal = itemizedFees,
         PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = price, ObservedAt = RunTime }],
     };
 
@@ -207,6 +209,57 @@ public class VehiclePricingTests
             [WalkRun(RunTime, capped: false), WalkRun(RunTime.AddDays(1), capped: true), WalkRun(RunTime.AddDays(2), capped: true)]);
 
         Assert.Equal(new PurchasePrice(15000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_ItemizedPosting_AddsTheItemizedFeesToTheAskingPrice()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 17000m, feePosture: FeePostures.Itemized, itemizedFees: 1494m));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(new PurchasePrice(17000m, null, ItemizedFees: 1494m, FeePosture: FeePostures.Itemized), price);
+        Assert.Equal(18494m, price?.Total);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_ItemizedFeesAndAShippingFee_AddsBoth()
+    {
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 17000m, shippingFee: 500m, feePosture: FeePostures.Itemized, itemizedFees: 1494m));
+
+        Assert.Equal(18994m, VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery)?.Total);
+    }
+
+    [Theory]
+    [InlineData(FeePostures.AllIn)]
+    [InlineData(FeePostures.Unknown)]
+    [InlineData(null)]
+    public void LowestCurrentPurchasePrice_AllInUnknownOrUnreadPosture_AddsNothingEvenWithAnItemizedTotalOnTheRow(string? posture)
+    {
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 17000m, feePosture: posture, itemizedFees: 1494m));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(17000m, price?.Total);
+        Assert.Null(price?.ItemizedFees);
+        Assert.Equal(posture, price?.FeePosture);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_ItemizedPostingWhoseFeesMakeItDearer_LosesToAnAllInPostingWithAHigherAskingPrice()
+    {
+        VehicleEntity vehicle = Vehicle(
+            Posting("cars.com", 17000m, feePosture: FeePostures.Itemized, itemizedFees: 1494m),
+            Posting("autotrader", 17800m, feePosture: FeePostures.AllIn));
+
+        Assert.Equal(new PurchasePrice(17800m, null, FeePosture: FeePostures.AllIn), VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery));
+        Assert.Equal("autotrader", VehiclePricing.LowestCurrentPurchasePosting(vehicle, NoCoverage, Fulfillment.Delivery)?.Source);
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePosting_NoPostings_IsNull()
+    {
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePosting(Vehicle(), NoCoverage, Fulfillment.Delivery));
     }
 
     [Fact]
