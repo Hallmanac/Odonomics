@@ -112,7 +112,7 @@ public static class DiffRenderer
 
     private static void RenderGone(IReadOnlyList<GonePostingEntry> entries)
     {
-        AnsiConsole.MarkupLine($"[bold]Gone ({entries.Count})[/]");
+        AnsiConsole.MarkupLine($"[bold]{GoneHeading(entries)}[/]");
         if (entries.Count == 0)
         {
             AnsiConsole.MarkupLine("  none");
@@ -120,6 +120,17 @@ public static class DiffRenderer
         }
 
         AnsiConsole.Write(BuildGoneTable(entries));
+    }
+
+    /// <summary>The "Gone (N)" line, with how many of the rows are beyond the cap appended when any are:
+    /// those are cars an explicit --max kept the walk from reaching, not cars that left the market, so
+    /// the count says how many of the total to set aside.</summary>
+    public static string GoneHeading(IReadOnlyList<GonePostingEntry> entries)
+    {
+        int beyondTheCap = entries.Count(entry => entry.Reason == GoneReasons.BeyondTheCap);
+        return beyondTheCap == 0
+            ? $"Gone ({entries.Count})"
+            : $"Gone ({entries.Count}, {beyondTheCap} {GoneReasons.BeyondTheCap})";
     }
 
     public static Table BuildGoneTable(IReadOnlyList<GonePostingEntry> entries)
