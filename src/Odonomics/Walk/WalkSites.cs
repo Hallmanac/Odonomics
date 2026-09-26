@@ -61,7 +61,13 @@ namespace Odonomics.Walk;
 /// such pages are then dropped for whatever the extraction makes of them.
 /// <paramref name="FeeStatementReader"/> reads what a detail page says about the dealer fees behind its price
 /// (see <see cref="FeeStatements"/>); null for a site whose dealers do not add fees to the price (carvana),
-/// whose postings then store no fee posture.</summary>
+/// whose postings then store no fee posture.
+/// <paramref name="CardFeeReader"/> reads what taking the car home costs off a result card's own text (carmax, which
+/// prints it on every card, see <see cref="CarMaxCards"/>); null for a site whose fee, if it prints one, is read off the detail page.
+/// <paramref name="DetailHtmlVinReader"/> reads the VIN off a detail page's HTML for a site whose visible text does
+/// not print it (carmax, see <see cref="CarMaxVin"/>); null for a site whose text does. <paramref name="LoadMoreControlPattern"/>
+/// matches the label of the control a site's search page has to be pressed at to show more cards ("Show 25 matches"),
+/// for a site that loads its cards that way instead of by page number (see <see cref="SearchPageLoadMore"/>).</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -82,7 +88,10 @@ public sealed record WalkSite(
     string? LazyDetailBlockMarker = null,
     Regex? SoldPagePattern = null,
     Regex? NoPricePagePattern = null,
-    Func<string, FeeStatement>? FeeStatementReader = null)
+    Func<string, FeeStatement>? FeeStatementReader = null,
+    Func<string, CardFee?>? CardFeeReader = null,
+    Func<string, string?>? DetailHtmlVinReader = null,
+    Regex? LoadMoreControlPattern = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -190,6 +199,14 @@ public sealed record WalkSite(
     public IReadOnlyDictionary<string, string> ReadCardBadges(string cardText) =>
         CardBadgeReader?.Invoke(cardText) ?? new Dictionary<string, string>();
 
+    /// <summary>The fee a result card shows for getting the car home, read off <paramref name="cardText"/>
+    /// by this site's <see cref="CardFeeReader"/>, or null when the site has none or the card shows none.</summary>
+    public CardFee? ReadCardFee(string cardText) => CardFeeReader?.Invoke(cardText);
+
+    /// <summary>The VIN a detail page's HTML carries, read by this site's <see cref="DetailHtmlVinReader"/>,
+    /// or null when the site has none or the HTML carries none.</summary>
+    public string? ReadDetailHtmlVin(string html) => DetailHtmlVinReader?.Invoke(html);
+
     /// <summary>The dealer name to store for a page whose extraction returned
     /// <paramref name="extractedDealerName"/>: that name (trimmed) when the page gave one, such as
     /// a carvana hub ("Carvana Winder"), otherwise <see cref="FallbackDealerName"/>, which is null
@@ -239,7 +256,7 @@ public readonly record struct SearchPageContent(IReadOnlyList<PageLink> Links, s
 public readonly record struct ResolvedDealer(string? Name, string? Location, bool IsFallback);
 
 /// <summary>Search-URL shapes and detail-link patterns for the walk targets: cars.com and carvana, whose
-/// hybrid facets the rest of this comment is about, and autotrader (see <see cref="Autotrader"/>). The spike's
+/// hybrid facets the rest of this comment is about, autotrader (see <see cref="Autotrader"/>), and carmax (see <see cref="CarMax"/>). The spike's
 /// docs/spike-findings.md recorded both sites as having no working hybrid facet, but that recording
 /// doesn't hold up against the spike's own day-one capture: the cars.com response to a
 /// "toyota-corolla_hybrid" query (spike/recorded/cars.com/day1/Toyota-Corolla_Hybrid-search.html)
@@ -445,11 +462,58 @@ public static class WalkSites
         CardBadgeReader: CardBadges.Autotrader,
         FeeStatementReader: FeeStatements.ReadAutotrader);
 
+    /// <summary>What CarMax's own name is stored as when a detail page names no store. A CarMax page
+    /// normally names the store the car is at ("CarMax Orlando"), and a page that does not is still a
+    /// CarMax car.</summary>
+    public const string CarMaxDealerName = "CarMax";
+
+    /// <summary>CarMax's model path segment for a scenario model: the make's own path, then the base
+    /// model, then "/hybrid" for a hybrid variant of a base model ("Corolla Hybrid" is
+    /// <c>corolla/hybrid</c>, "Camry Hybrid" is <c>camry/hybrid</c>), and just the model for one that is
+    /// hybrid by name ("prius", "insight"). The site redirects <c>corolla-hybrid</c> to
+    /// <c>corolla/hybrid</c>, so the slash form is built directly and no redirect is followed.</summary>
+    private static string CarMaxModelPath(string model) =>
+        IsHybridVariant(model) ? $"{Slugify(BaseModelName(model))}/hybrid" : Slugify(model);
+
+    /// <summary>CarMax's search URL for <paramref name="query"/>, which takes the model year range in its
+    /// path: from the scenario's minimum year through the year after <paramref name="currentYear"/>, since
+    /// a dealer stocks next year's model year before the year turns. The radius is deliberately not read
+    /// from the query: <c>distance=nationwide</c> is a per-site override of the scenario's radius. CarMax
+    /// transfers a car from any of its stores for a per-car fee printed on the card (as little as $49),
+    /// so a car far from the buyer is a real candidate here, and a radius would hide most of the stock
+    /// (a nationwide Prius search matched 526 cars where the default radius matched 4).</summary>
+    public static string CarMaxSearchUrl(ListingQuery query, int currentYear) =>
+        $"https://www.carmax.com/cars/{Slugify(query.Make)}/{CarMaxModelPath(query.Model)}/{query.YearMin}-{currentYear + 1}" +
+        $"?zip={query.Zip}&distance=nationwide&mileage={query.MaxMileage}";
+
+    /// <summary>CarMax: its own retail stock, sold at one no-haggle price, with a per-car transfer fee
+    /// printed on the search card ("$49 shipping·Get it by Monday", or "Available today·Orlando" for a car
+    /// at a nearby store, see <see cref="CarMaxCards"/>). A search page states the filtered count first
+    /// ("526 matches") and later prints site-wide and category totals ("86,317 matches"), so the count is
+    /// the first line matching <c>N matches</c>, and a "Show 25 matches" control is not one (see
+    /// <see cref="WalkSite.MatchCountPattern"/>). Cards load behind that control, which the walk presses
+    /// until the count is covered or nothing new appears (see <see cref="SearchPageLoadMore"/>), so the
+    /// site is not paged by URL. A detail link is <c>/car/&lt;digits&gt;</c>, a stock number, and the
+    /// detail page's visible text does not print the VIN but its HTML does (see <see cref="CarMaxVin"/>).
+    /// It has no <see cref="WalkSite.CardPriceReader"/>: no recorded card shows which dollar amount on it is
+    /// the price, so a known CarMax listing is seen again from its card without a price until one does.</summary>
+    public static readonly WalkSite CarMax = new(
+        "carmax",
+        query => [CarMaxSearchUrl(query, TimeProvider.System.GetLocalNow().Year)],
+        new Regex(@"^https?://(?:www\.)?carmax\.com/car/\d+", RegexOptions.IgnoreCase),
+        DetailLinkOverfetchMultiplier: 2,
+        FallbackDealerName: CarMaxDealerName,
+        MatchCountPattern: new Regex(@"(?<!Show\s)(?<![\d,])(\d[\d,]*)\s+match(?:es)?\b", RegexOptions.IgnoreCase),
+        CardFeeReader: CarMaxCards.ReadFee,
+        DetailHtmlVinReader: CarMaxVin.Read,
+        LoadMoreControlPattern: new Regex(@"^\s*Show\s+\d+\s+matches\s*$", RegexOptions.IgnoreCase));
+
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
         "cars.com" => CarsCom,
         "carvana" => Carvana,
         "autotrader" => Autotrader,
+        "carmax" => CarMax,
         _ => null,
     };
 }
