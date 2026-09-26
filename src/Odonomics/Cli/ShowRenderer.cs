@@ -173,6 +173,10 @@ public static class ShowRenderer
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Postings[/]");
         AnsiConsole.Write(BuildPostingsTable(vehicle.Postings));
+        foreach (string line in PostingAttributeLines(vehicle.Postings))
+        {
+            AnsiConsole.WriteLine(line);
+        }
 
         AnsiConsole.WriteLine();
         RenderMonthlyCost(AnsiConsole.Console, monthlyCost, monthlyCostUnavailable, purchasePrice);
@@ -247,6 +251,12 @@ public static class ShowRenderer
 
         return table;
     }
+
+    /// <summary>One line per name and value of each posting's attributes (see
+    /// <see cref="PostingAttributeEntity"/>), led by the posting's source so a line says which site
+    /// showed it, in posting order and then name order; empty when no posting has any.</summary>
+    public static IReadOnlyList<string> PostingAttributeLines(IEnumerable<PostingEntity> postings) =>
+        [.. postings.SelectMany(p => p.Attributes.OrderBy(a => a.Name, StringComparer.Ordinal).Select(a => $"  {p.Source} {a.Name}: {a.Value}"))];
 
     /// <summary>A recall's report date as yyyy-MM-dd. NHTSA's recallsByVehicle endpoint reports it as
     /// dd/MM/yyyy text; anything that does not parse as that (an ISO date already, or a blank) is
@@ -394,8 +404,9 @@ public static class ShowRenderer
     private static string Stars(int? rating) => rating is int stars ? $"{stars}/5" : "(not rated)";
 
     /// <summary>The dealer name plus grade for one posting's "Dealer" cell: bare name when no
-    /// dealer is known or it hasn't been checked yet, "Name (Grade)" once checked, and the F
-    /// reason appended when the grade is F.</summary>
+    /// dealer is known or it hasn't been checked yet, "Name (Grade)" once checked, followed by the
+    /// doc fee and the add-ons note when the dealer has them, and the F reason appended when the
+    /// grade is F.</summary>
     private static string DealerCell(DealerEntity? dealer)
     {
         if (dealer is null)
@@ -409,8 +420,25 @@ public static class ShowRenderer
         }
 
         string label = dealer.Grade is null ? $"{dealer.Name} (ungraded)" : $"{dealer.Name} ({dealer.Grade})";
+        if (DealerFeeText(dealer) is string feeText)
+        {
+            label = $"{label}, {feeText}";
+        }
+
         return dealer.Grade is not null && dealer.Grade.StartsWith('F') && dealer.GradeReason is not null
             ? $"{label}: {dealer.GradeReason}"
             : label;
+    }
+
+    /// <summary>The dealer's doc fee and add-ons note as CarEdge printed them ("doc fee $1,199, No
+    /// add-ons"), whichever of the two are known, or null when neither is.</summary>
+    private static string? DealerFeeText(DealerEntity dealer)
+    {
+        string[] parts = [.. new[]
+        {
+            dealer.DocFee is decimal docFee ? $"doc fee {Format.Money(docFee)}" : null,
+            dealer.AddOnsNote,
+        }.OfType<string>()];
+        return parts.Length == 0 ? null : string.Join(", ", parts);
     }
 }
