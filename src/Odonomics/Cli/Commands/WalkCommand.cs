@@ -332,6 +332,9 @@ public static class WalkCommand
                     return DetailPageOutcome.ExtractionFailed;
                 }
 
+                // A site whose title line names the model the extraction left blank (carmax) gets it from there.
+                outcome = outcome with { Result = outcome.Result with { Model = site.ResolveModel(outcome.Result.Model, outcome.Result.Make, outcome.Result.Year, bodyText) } };
+
                 AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: read {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}, fuel type {outcome.Result.FuelType ?? "not stated"}[/]");
 
                 string? vin = outcome.Result.Vin;

@@ -127,9 +127,77 @@ public class CarMaxWalkTests
     [InlineData("Show 1 match", true)]
     [InlineData("526 matches", false)]
     [InlineData("Show all filters", false)]
-    public void LoadMoreControlPattern_MatchesOnlyTheShowControlLabel(string label, bool expected)
+    [InlineData("Load more", true)]
+    [InlineData("  load more ", true)]
+    [InlineData("44 of 527 results", false)]
+    [InlineData("Load more results", false)]
+    public void LoadMoreControlPattern_MatchesOnlyTheLoadMoreControlLabels(string label, bool expected)
     {
         Assert.Equal(expected, WalkSites.CarMax.LoadMoreControlPattern?.IsMatch(label));
+    }
+
+    [Theory]
+    [InlineData("carmax-prius-search.txt", "Show 25 matches")]
+    [InlineData("carmax-camry-hybrid-search.txt", "Load more")]
+    public void LoadMoreControlPattern_RecordedSearchPages_MatchTheirOwnControlAndNothingElse(string fixture, string control)
+    {
+        string[] matchingLines = [.. Fixture(fixture)
+            .Split('\n', StringSplitOptions.TrimEntries)
+            .Where(line => WalkSites.CarMax.LoadMoreControlPattern?.IsMatch(line) == true)];
+
+        Assert.Equal([control], matchingLines);
+    }
+
+    [Fact]
+    public void MatchCountIn_LiveSearchPage_ReadsTheStatedCountAndNotTheResultsLine()
+    {
+        string pageText = Fixture("carmax-camry-hybrid-search.txt");
+        Assert.Contains("44 of 527 results", pageText);
+
+        Assert.Equal(527, WalkSites.CarMax.MatchCountIn(pageText));
+    }
+
+    [Fact]
+    public void ResolveModel_RecordedCamryPage_ReadsTheModelOffTheTitleLineWhenTheExtractionLeftItBlank()
+    {
+        string pageText = Fixture("carmax-camry-detail-3.txt");
+
+        Assert.Equal("Camry", WalkSites.CarMax.ResolveModel(null, "Toyota", 2025, pageText));
+        Assert.Equal("Camry", WalkSites.CarMax.ResolveModel("  ", "Toyota", 2025, pageText));
+    }
+
+    [Fact]
+    public void ResolveModel_ExtractionReadAModel_KeepsIt()
+    {
+        Assert.Equal("Camry SE", WalkSites.CarMax.ResolveModel("Camry SE", "Toyota", 2025, Fixture("carmax-camry-detail-3.txt")));
+    }
+
+    [Fact]
+    public void ResolveModel_RecordedCamryPage_IsKeptAsTheCamryHybrid()
+    {
+        string pageText = Fixture("carmax-camry-detail-3.txt");
+        ListingQuery camryHybrid = Query("Toyota", "Camry Hybrid", yearMin: 2018, hybridOnlyFromModelYear: 2025);
+        Assert.False(camryHybrid.MatchesWalkedPage("Toyota", null, "SE", 2025, pageText));
+
+        string? model = WalkSites.CarMax.ResolveModel(null, "Toyota", 2025, pageText);
+
+        Assert.True(camryHybrid.MatchesWalkedPage("Toyota", model, "SE", 2025, pageText));
+    }
+
+    [Theory]
+    [InlineData(null, 2025)]
+    [InlineData("Toyota", null)]
+    [InlineData("Honda", 2025)]
+    [InlineData("Toyota", 2024)]
+    public void ResolveModel_TitleLineOfAnotherCarOrNoMakeOrYear_StaysBlank(string? make, int? year)
+    {
+        Assert.Null(WalkSites.CarMax.ResolveModel(null, make, year, Fixture("carmax-camry-detail-3.txt")));
+    }
+
+    [Fact]
+    public void ResolveModel_SiteWithoutATitleReader_KeepsTheBlankModel()
+    {
+        Assert.Null(WalkSites.Carvana.ResolveModel(null, "Toyota", 2025, "2025 Toyota Camry\nSE"));
     }
 
     [Fact]
