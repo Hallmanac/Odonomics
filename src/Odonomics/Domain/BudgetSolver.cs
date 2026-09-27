@@ -89,7 +89,7 @@ public static class ScenarioAverages
 
     public static decimal AverageMpg(this Scenario scenario)
     {
-        decimal[] mpgs = [.. scenario.MpgByModel.Values];
-        return mpgs.Length == 0 ? 0m : mpgs.Average();
+        decimal[] known = [.. scenario.MpgByModel.Values.Where(v => v is not null).Select(v => v!.Value)];
+        return known.Length == 0 ? 0m : known.Average();
     }
 }

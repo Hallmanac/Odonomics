@@ -8,5 +8,6 @@ public sealed record Score
     public required bool Passes { get; init; }
     public required IReadOnlyList<string> FailureReasons { get; init; }
     public required bool InsuranceUnknown { get; init; }
+    public required bool MpgUnknown { get; init; }
     public CostBreakdown? Cost { get; init; }
 }

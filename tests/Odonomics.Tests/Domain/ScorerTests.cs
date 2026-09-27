@@ -26,14 +26,20 @@ public class ScorerTests
         {
             ["Toyota Prius"] = 120m,
             ["Honda Insight"] = null,
+            ["Toyota Prius Prime"] = null,
         },
-        MpgByModel = new Dictionary<string, decimal> { ["Toyota Prius"] = 52m, ["Honda Insight"] = 52m },
+        MpgByModel = new Dictionary<string, decimal?>
+        {
+            ["Toyota Prius"] = 52m,
+            ["Honda Insight"] = 52m,
+            ["Toyota Prius Prime"] = null,
+        },
         Filters = new HardFilters
         {
             MinModelYear = 2019,
             MinModelYearOverrides = new Dictionary<string, int> { ["Toyota Camry Hybrid"] = 2018 },
             MaxMileage = 100000,
-            AllowedModels = ["Toyota Prius", "Honda Insight", "Toyota Camry Hybrid"],
+            AllowedModels = ["Toyota Prius", "Honda Insight", "Toyota Camry Hybrid", "Toyota Prius Prime"],
         },
         TargetMonthlyBudgets = [300, 400],
     };
@@ -149,6 +155,49 @@ public class ScorerTests
         Assert.True(score.Passes);
         Assert.True(score.InsuranceUnknown);
         Assert.Null(score.Cost);
+    }
+
+    [Fact]
+    public void Score_PriusPrimeWithBothLinesNull_PassesButHasNoCostBreakdown()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius Prime", 2024, 40000, 28000m);
+
+        Score score = Scorer.Score(vehicle, scenario);
+
+        Assert.True(score.Passes);
+        Assert.True(score.InsuranceUnknown);
+        Assert.True(score.MpgUnknown);
+        Assert.Null(score.Cost);
+    }
+
+    [Fact]
+    public void Score_PriusPrimeWithBothLinesFilled_ComputesCostBreakdown()
+    {
+        Scenario scenario = BuildScenario() with
+        {
+            InsuranceMonthlyByModel = new Dictionary<string, decimal?>
+            {
+                ["Toyota Prius"] = 120m,
+                ["Honda Insight"] = null,
+                ["Toyota Prius Prime"] = 110m,
+            },
+            MpgByModel = new Dictionary<string, decimal?>
+            {
+                ["Toyota Prius"] = 52m,
+                ["Honda Insight"] = 52m,
+                ["Toyota Prius Prime"] = 48m,
+            },
+        };
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius Prime", 2024, 40000, 28000m);
+
+        Score score = Scorer.Score(vehicle, scenario);
+
+        Assert.True(score.Passes);
+        Assert.False(score.InsuranceUnknown);
+        Assert.False(score.MpgUnknown);
+        Assert.NotNull(score.Cost);
+        Assert.Equal(Scorer.ComputeCost(28000m, 110m, 48m, scenario), score.Cost);
     }
 
     [Fact]

@@ -50,7 +50,7 @@ The badges are the sites' own opinions of a price, and the score doesn't use the
 
 `--fulfillment delivery|pickup` overrides the scenario's `fulfillment` for that run, the way `--term` overrides the loan term.
 
-When no rankable vehicle's expected during-loan cost meets one or more of the scenario's target monthly budgets, rank says so in one line above the Ranked section. That line names only the unmet targets and the cheapest vehicle's during-loan range, then points at `odo budget` for the purchase price each target allows. It reads the targets from the scenario rather than from `--budget`, and it still counts vehicles that `--budget` moved into the over-budget section, so a tight `--budget` doesn't hide it. It isn't printed when every target is met or when there's no rankable vehicle. A rankable vehicle is one that passes the scenario's filters, has a known insurance figure, and has a current price.
+When no rankable vehicle's expected during-loan cost meets one or more of the scenario's target monthly budgets, rank says so in one line above the Ranked section. That line names only the unmet targets and the cheapest vehicle's during-loan range, then points at `odo budget` for the purchase price each target allows. It reads the targets from the scenario rather than from `--budget`, and it still counts vehicles that `--budget` moved into the over-budget section, so a tight `--budget` doesn't hide it. It isn't printed when every target is met or when there's no rankable vehicle. A rankable vehicle is one that passes the scenario's filters, has a known insurance and mpg figure, and has a current price. A vehicle whose model is missing either figure (a freshly added target model, or `Toyota Prius Prime` in the shipped scenario, which has neither yet) is listed under its own "Not ranked: scenario data missing" heading instead, naming exactly which figure the scenario needs for that model, and it's never priced as though the missing figure were known or as another model that does have one.
 
 ### show
 
@@ -58,4 +58,4 @@ When no rankable vehicle's expected during-loan cost meets one or more of the sc
 
 The itemized lines are rounded to whole dollars once, so their low ends, and their high ends, add up to the during-loan total printed beneath them. `odo rank --detail` takes its loan payment from that same rounding, so the two commands print the identical payment for a vehicle.
 
-`show` prices a vehicle the scenario's filters would exclude too. A vehicle with no current price, or a model the scenario has no insurance or mpg figure for, gets a line saying why nothing was computed instead.
+`show` prices a vehicle the scenario's filters would exclude too. A vehicle with no current price, or a model the scenario needs an insurance or an mpg figure for, gets a line saying why nothing was computed instead.

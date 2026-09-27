@@ -35,7 +35,7 @@ A vehicle that fails the filters lands in the Excluded section of `odo rank` wit
 
 Four fields are keyed by model, and each key is the same "Make Model" string, such as `"Toyota Camry Hybrid"`.
 
-`insuranceMonthlyByModel` is your monthly insurance figure for each model. A missing key or a `null` value both mean unknown and never zero, so a vehicle of that model shows up under "Not ranked: insurance unknown" until you add a figure. `mpgByModel` is the EPA combined mpg for each model, and it feeds the fuel cost. The VIN decode doesn't return fuel economy, so v0 always uses this table.
+`insuranceMonthlyByModel` is your monthly insurance figure for each model, and `mpgByModel` is the EPA combined mpg for each model, feeding the fuel cost (the VIN decode doesn't return fuel economy, so v0 always uses this table). A missing key or a `null` value both mean unknown and never zero, in either table, so a vehicle of a model missing an insurance or an mpg figure shows up under "Not ranked: scenario data missing" until you add one. The shipped scenario keeps `Toyota Prius Prime` this way on purpose: it's a real, separate target model (a walked Prius Prime or a search result naming one is matched and saved as it, never priced as a plain Prius), but neither figure has been supplied yet.
 
 `minModelYearOverrides` (inside `filters`) names a model whose minimum year differs from `minModelYear`, and it wins when both apply. The shipped scenario lets a 2018 Camry Hybrid through while every other model starts at 2019, and the walk's search facets follow the same rule.
 
