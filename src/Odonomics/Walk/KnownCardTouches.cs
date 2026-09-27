@@ -44,6 +44,12 @@ public sealed class KnownCardTouches
     /// <summary>How many distinct known links were seen on cards so far.</summary>
     public int Count => _pendingPricesByUrl.Count;
 
+    /// <summary>Whether the ledger already holds <paramref name="canonicalUrl"/>, for a caller deciding
+    /// whether a link <see cref="TryTouchAsync"/> was never asked about (a card that never rendered, and so
+    /// was never touched) is a posting whose coverage should be recorded as partial rather than left to read
+    /// as a car that left the market.</summary>
+    public bool IsKnown(string canonicalUrl) => _knownUrls.Contains(canonicalUrl);
+
     /// <summary>The touches for <paramref name="source"/> against what the ledger holds for it now, or
     /// touches that treat every link as new when <paramref name="revisit"/> is set.</summary>
     public static async ValueTask<KnownCardTouches> LoadAsync(LedgerUpsertService ledger, string source, RunEntity run, bool revisit, CancellationToken cancellationToken) =>

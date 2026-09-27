@@ -309,7 +309,17 @@ public static class WalkCommand
                 () => skippedNoDistance++,
                 () => skippedBeyondRadius--,
                 () => skippedNoDistance--,
-                () => skippedUnrendered++);
+                canonicalUrl =>
+                {
+                    skippedUnrendered++;
+                    // A known posting whose card never rendered was never touched, so its LastSeen did not
+                    // move; recording the pair as capped keeps the diff from reading it as gone rather than
+                    // as a posting the walk simply never got to measure.
+                    if (knownTouches.IsKnown(canonicalUrl))
+                    {
+                        linkCollectionCapped = true;
+                    }
+                });
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
