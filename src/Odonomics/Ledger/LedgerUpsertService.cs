@@ -118,9 +118,9 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
 
         await db.SaveChangesAsync(cancellationToken);
 
-        if (candidate.Attributes.Count > 0)
+        if (candidate.Attributes.Count > 0 || candidate.AttributesToClear.Count > 0)
         {
-            await SetPostingAttributesAsync(posting.Id, candidate.Attributes, run, cancellationToken);
+            await SetPostingAttributesAsync(posting.Id, candidate.Attributes, candidate.AttributesToClear, run, cancellationToken);
         }
 
         return new UpsertOutcome(vehicleIsNew, postingIsNew, priceChanged && !postingIsNew, previousPrice);
@@ -130,16 +130,19 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     /// (see <see cref="PostingAttributeEntity"/>), in one save so either every name lands or none does.
     /// A name the posting already holds takes the new value and the run's id, since a later observation
     /// replaces the earlier one; a name it does not hold gets a new row. A name this run did not read is
-    /// left as it was, because a page that stops showing a badge is not proof the badge is gone. Names
-    /// and values are trimmed, and a blank name or value is skipped, since an empty badge says nothing.
-    /// <paramref name="run"/> must already be saved, and the posting must exist.</summary>
-    public async Task SetPostingAttributesAsync(int postingId, IReadOnlyDictionary<string, string> attributes, RunEntity run, CancellationToken cancellationToken)
+    /// left as it was, because a page that stops showing a badge is not proof the badge is gone, unless
+    /// <paramref name="attributesToClear"/> names it: that is for a page whose own text states a stored
+    /// state has positively ended (see <see cref="ListingCandidate.AttributesToClear"/>), so that name's
+    /// row is removed outright rather than left. Names and values are trimmed, and a blank name or
+    /// value is skipped, since an empty badge says nothing. <paramref name="run"/> must already be
+    /// saved, and the posting must exist.</summary>
+    public async Task SetPostingAttributesAsync(int postingId, IReadOnlyDictionary<string, string> attributes, IReadOnlyCollection<string> attributesToClear, RunEntity run, CancellationToken cancellationToken)
     {
         List<PostingAttributeEntity> existing = await db.PostingAttributes
             .Where(a => a.PostingId == postingId)
             .ToListAsync(cancellationToken);
 
-        ApplyAttributes(postingId, existing, attributes, run);
+        ApplyAttributes(postingId, existing, attributes, attributesToClear, run);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -159,7 +162,7 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
 
         foreach (PostingEntity posting in postings)
         {
-            ApplyAttributes(posting.Id, [.. posting.Attributes], attributesByUrl[posting.Url], run);
+            ApplyAttributes(posting.Id, [.. posting.Attributes], attributesByUrl[posting.Url], [], run);
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -205,8 +208,19 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private void ApplyAttributes(int postingId, List<PostingAttributeEntity> existing, IReadOnlyDictionary<string, string> attributes, RunEntity run)
+    private void ApplyAttributes(int postingId, List<PostingAttributeEntity> existing, IReadOnlyDictionary<string, string> attributes, IReadOnlyCollection<string> attributesToClear, RunEntity run)
     {
+        foreach (string rawName in attributesToClear)
+        {
+            string name = rawName.Trim();
+            PostingAttributeEntity? cleared = existing.FirstOrDefault(a => a.Name == name);
+            if (cleared is not null)
+            {
+                db.PostingAttributes.Remove(cleared);
+                existing.Remove(cleared);
+            }
+        }
+
         foreach ((string rawName, string rawValue) in attributes)
         {
             string name = rawName.Trim();
