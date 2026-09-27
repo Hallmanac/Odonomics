@@ -574,6 +574,55 @@ public class CarMaxBackfillTests
     }
 
     [Fact]
+    public async Task RunAsync_TwoAnchoredRecordingsDisagreeOnAvailability_FillsFromTheNewestRatherThanDeclining()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        string dataDirectory = Path.GetDirectoryName(testDb.DatabasePath)!;
+
+        // Both recordings carry the candidate's own canonical URL via their pair's cards.json, so
+        // they're certainly the same car: the older run read it "Reserved at CarMax Laurel, MD" and the
+        // newer run read the very same URL "Only at CarMax Laurel, MD". Because the URL anchor already
+        // proves it's one car, this disagreement is evidence the car changed between runs, not a
+        // fingerprint collision, so the newest recording should still win rather than the candidate
+        // being declined as unmatched.
+        WriteRecordedDetailPage(dataDirectory, "20260901-000000", "insight", "detail-1.txt",
+            "2019 Honda Insight\nEX\n42k miles\n\n$23,998\n\nReserved at CarMax Laurel, MD\n");
+        WriteCardsJson(dataDirectory, "20260901-000000", "insight", "cards.json",
+            ("https://www.carmax.com/car/70206244", "2019 Honda Insight\nEX\n42k miles\n\n$23,998"));
+        WriteRecordedDetailPage(dataDirectory, "20260927-192443", "insight", "detail-1.txt",
+            "2019 Honda Insight\nEX\n42k miles\n\n$23,998\n\nOnly at CarMax Laurel, MD\n");
+        WriteCardsJson(dataDirectory, "20260927-192443", "insight", "cards.json",
+            ("https://www.carmax.com/car/70206244", "2019 Honda Insight\nEX\n42k miles\n\n$23,998"));
+
+        var upsertService = new LedgerUpsertService(db);
+        var seedRun = new RunEntity { Command = "walk", Sources = "carmax:Insight", StartedAt = new DateTimeOffset(2026, 9, 27, 19, 24, 43, TimeSpan.Zero) };
+        db.Runs.Add(seedRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsertService.UpsertAsync(
+            BarePosting("19XZE4F50KE000010", 2019, "Insight", "EX", 42000, 23998m, url: "https://www.carmax.com/car/70206244"),
+            seedRun,
+            CancellationToken.None);
+
+        var backfillRun = new RunEntity { Command = "walk --backfill-carmax", Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        db.Runs.Add(backfillRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<PostingEntity> candidates = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+
+        CarMaxBackfillTally tally = await CarMaxBackfill.RunAsync(dataDirectory, candidates, upsertService, backfillRun, CancellationToken.None);
+
+        Assert.Equal(new CarMaxBackfillTally(Filled: 1, AlreadySet: 0, CouldNotMatch: 0), tally);
+
+        // The newest recording ("Only at") wins, not the older, disagreeing one ("Reserved at"): the
+        // store still fills in, and no stale Reserved attribute is written.
+        PostingEntity posting = (await upsertService.CarMaxPostingsAsync(CancellationToken.None)).Single(p => p.VehicleVin == "19XZE4F50KE000010");
+        Assert.Equal("CarMax Laurel", posting.Dealer?.Name);
+        Assert.DoesNotContain(posting.Attributes, a => a.Name == PostingAttributeNames.Availability);
+    }
+
+    [Fact]
     public async Task RunAsync_RecordingsAcrossDifferentRunsDisagreeOnAvailability_LeavesTheCandidateUnmatched()
     {
         using var testDb = new LedgerTestDatabase();
