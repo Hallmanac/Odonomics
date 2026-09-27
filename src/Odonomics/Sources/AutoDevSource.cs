@@ -118,7 +118,20 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
             return;
         }
 
-        if (!query.MatchesExtractedVehicle(apiMake, apiModel, trim, year))
+        // The canonical model queried, not the API's own "model" field: VehicleEntity.Model has to
+        // match the model half of the "source:model" token ModelsCovered feeds into RunSources.Key.
+        // The API is free to return a bare model ("Camry") for a query on a compound one ("Camry
+        // Hybrid"), but MatchesExtractedVehicle below has already rejected any candidate that isn't
+        // actually this query's model, so stamping the canonical model here never mislabels a
+        // vehicle the API returned for a different reason. The one exception is a Prius Prime the
+        // API returned for the plain "Toyota Prius" query (the same mixing-in the walk sees): it is
+        // stored as Toyota Prius Prime rather than rejected as an unknown model, since the scenario
+        // scores that variant on its own.
+        string? storedModel = query.MatchesExtractedVehicle(apiMake, apiModel, trim, year)
+            ? query.Model
+            : PriusPrimeVariant.ReadsAsPrime(apiMake, apiModel) ? PriusPrimeVariant.StoredModel : null;
+
+        if (storedModel is null)
         {
             result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, returned vehicle doesn't match the query ({vin}: {apiMake} {apiModel} {trim})");
             return;
@@ -131,13 +144,7 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
             Url = url,
             Year = year.Value,
             Make = make,
-            // The canonical model queried, not the API's own "model" field: VehicleEntity.Model has
-            // to match the model half of the "source:model" token ModelsCovered feeds into
-            // RunSources.Key. The API is free to return a bare model ("Camry") for a query on a
-            // compound one ("Camry Hybrid"), but MatchesExtractedVehicle above has already rejected
-            // any candidate that isn't actually this query's model, so stamping the canonical model
-            // here never mislabels a vehicle the API returned for a different reason.
-            Model = query.Model,
+            Model = storedModel,
             Trim = trim,
             Price = price.Value,
             Mileage = mileage.Value,
