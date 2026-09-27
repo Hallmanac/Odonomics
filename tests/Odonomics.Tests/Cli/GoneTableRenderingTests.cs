@@ -15,6 +15,7 @@ public class GoneTableRenderingTests
         new("JTDKN3DU0A0000002", 2020, "Toyota", "Prius", "marketcheck", "https://mc/d", 15000m, GoneReasons.OverMileage),
         new("JTDKN3DU0A0000003", 2021, "Toyota", "Prius", "carvana", "https://carvana.com/e", 16000m, GoneReasons.BeyondTheCap),
         new("JTDKN3DU0A0000004", 2021, "Toyota", "Prius", "carvana", "https://carvana.com/f", 17000m, GoneReasons.PagesUnread),
+        new("JTDKN3DU0A0000005", 2021, "Toyota", "Prius", "cars.com", "https://cars.com/g", 18000m, GoneReasons.CardNeverRendered),
     ];
 
     [Fact]
@@ -49,20 +50,21 @@ public class GoneTableRenderingTests
     [Fact]
     public void GoneHeading_WithRowsBeyondTheCap_SaysHowManyThereAre()
     {
-        Assert.Equal("Gone (6, 1 beyond the cap, 1 pages unread)", DiffRenderer.GoneHeading(Entries));
+        Assert.Equal("Gone (7, 1 beyond the cap, 1 pages unread, 1 card never rendered)", DiffRenderer.GoneHeading(Entries));
     }
 
     [Fact]
     public void GoneHeading_WithOnlyOneKindOfUnreachedRow_NamesOnlyThatKind()
     {
-        Assert.Equal("Gone (5, 1 pages unread)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason != GoneReasons.BeyondTheCap)]));
-        Assert.Equal("Gone (5, 1 beyond the cap)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason != GoneReasons.PagesUnread)]));
+        Assert.Equal("Gone (6, 1 pages unread, 1 card never rendered)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason != GoneReasons.BeyondTheCap)]));
+        Assert.Equal("Gone (6, 1 beyond the cap, 1 card never rendered)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason != GoneReasons.PagesUnread)]));
+        Assert.Equal("Gone (6, 1 beyond the cap, 1 pages unread)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason != GoneReasons.CardNeverRendered)]));
     }
 
     [Fact]
     public void GoneHeading_WithNoRowsTheWalkNeverReached_IsTheBareCount()
     {
-        Assert.Equal("Gone (4)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason is not (GoneReasons.BeyondTheCap or GoneReasons.PagesUnread))]));
+        Assert.Equal("Gone (4)", DiffRenderer.GoneHeading([.. Entries.Where(e => e.Reason is not (GoneReasons.BeyondTheCap or GoneReasons.PagesUnread or GoneReasons.CardNeverRendered))]));
         Assert.Equal("Gone (0)", DiffRenderer.GoneHeading([]));
     }
 }
