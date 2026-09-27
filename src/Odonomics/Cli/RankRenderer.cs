@@ -184,17 +184,18 @@ public static class RankRenderer
     }
 
     /// <summary>The line that names a row's vehicle: its VIN and name, then the site badge (see
-    /// <see cref="SiteBadgeText"/>) when the vehicle has one. The name is padded to
-    /// <paramref name="siteNameWidth"/> only on a row that has a badge, so the badges of a section
-    /// line up without a row that has none carrying trailing spaces. The name is at most
-    /// <see cref="VehicleNameMaxWidth"/> wide and a badge is at most 7 ("GrD 4.9"), so the whole line is at
-    /// most 2 + 17 + 2 + 40 + 2 + 5 + 7 = 75 columns and never wraps.</summary>
+    /// <see cref="SiteBadgeText"/>) when the vehicle has one, then, when its cheapest posting is
+    /// reserved or in transit, that fact in red so it stands out beside the row it still ranks
+    /// alongside every other. The name is padded to <paramref name="siteNameWidth"/> only on a row
+    /// that has a badge, so the badges of a section line up without a row that has none carrying
+    /// trailing spaces.</summary>
     private static string VehicleLine(Score score, int siteNameWidth)
     {
         string name = VehicleName(score);
+        string availability = score.Vehicle.Availability is string note ? $"  [red]{Markup.Escape(note)}[/]" : "";
         return score.Vehicle.SiteBadge is string siteBadge
-            ? $"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(name.PadRight(siteNameWidth))}  site {Format.Cell(siteBadge)}"
-            : $"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(name)}";
+            ? $"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(name.PadRight(siteNameWidth))}  site {Format.Cell(siteBadge)}{availability}"
+            : $"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(name)}{availability}";
     }
 
     private static string VehicleName(Score score) =>

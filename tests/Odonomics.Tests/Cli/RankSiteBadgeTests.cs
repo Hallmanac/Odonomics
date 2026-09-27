@@ -2,6 +2,7 @@ using Odonomics.Cli;
 using Odonomics.Cli.Commands;
 using Odonomics.Domain;
 using Odonomics.Ledger;
+using Odonomics.Walk;
 using Spectre.Console.Testing;
 
 namespace Odonomics.Tests.Cli;
@@ -190,6 +191,37 @@ public class RankSiteBadgeTests
 
         Assert.Equal(21000m, forScoring.LowestCurrentPrice);
         Assert.Equal("GP", forScoring.SiteBadge);
+    }
+
+    [Fact]
+    public void ForScoring_CheapestPostingReservedAtCarMax_CarriesTheAvailabilityNote()
+    {
+        VehicleEntity vehicle = Vehicle(
+            "4T1G11AK0LU000009", 2021, "Prius", 30000,
+            Posting("carmax", "4T1G11AK0LU000009", 20000m, null, (PostingAttributeNames.Availability, CarMaxStores.Reserved)));
+
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(CarMaxStores.Reserved, forScoring.Availability);
+    }
+
+    [Fact]
+    public void Rank_AReservedCarMaxPosting_ShowsTheNoteBesideTheRowAndStillRanksIt()
+    {
+        List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
+        ledger[0].Postings[0].Source = "carmax";
+        ledger[0].Postings[0].Attributes =
+        [
+            .. ledger[0].Postings[0].Attributes,
+            new PostingAttributeEntity { PostingId = 0, Name = PostingAttributeNames.Availability, Value = CarMaxStores.Reserved, ObservedRunId = 1 },
+        ];
+
+        string[] plainLines = Render(Rank(FixtureLedger(withBadges: true)));
+        string[] reservedLines = Render(Rank(ledger));
+
+        Assert.Equal(VinOrder(plainLines), VinOrder(reservedLines));
+        Assert.Contains(CarMaxStores.Reserved, string.Concat(reservedLines));
+        Assert.DoesNotContain(CarMaxStores.Reserved, string.Concat(plainLines));
     }
 
     [Fact]
