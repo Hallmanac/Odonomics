@@ -413,6 +413,85 @@ public class CarMaxBackfillTests
     }
 
     [Fact]
+    public async Task RunAsync_TwoPostingsWithDriftedFingerprintsTolerantlyTieOnOneRecordedPage_LeavesBothUnmatched()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        string dataDirectory = Path.GetDirectoryName(testDb.DatabasePath)!;
+
+        // Only one page is on disk (the other car's own recording was pruned or never made). Both
+        // postings still tolerantly match it: P1's mileage was overwritten to an exact figure by
+        // another source sharing its VIN (see lesson 84abc33f), which rounds right back to the page's
+        // "33k miles"; P2's is untouched CarMax mileage that already equals it exactly. Their exact
+        // fingerprints differ (33,210 vs. 33,000), so the ambiguous-fingerprint check above can't see
+        // this tie; only the tolerant Matches check can.
+        WriteRecordedDetailPage(dataDirectory, "20260927-192443", "corolla", "detail-1.txt",
+            "2022 Toyota Corolla Hybrid\nLE\n33k miles\n\n$24,998\n\nOnly at CarMax Laurel, MD\n");
+
+        var upsertService = new LedgerUpsertService(db);
+        var seedRun = new RunEntity { Command = "walk", Sources = "carmax:Corolla Hybrid", StartedAt = new DateTimeOffset(2026, 9, 27, 19, 24, 43, TimeSpan.Zero) };
+        db.Runs.Add(seedRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsertService.UpsertAsync(BarePosting("5YFEPRAE0NP000001", 2022, "Corolla Hybrid", "LE", 33210, 24998m, make: "Toyota"), seedRun, CancellationToken.None);
+        await upsertService.UpsertAsync(BarePosting("5YFEPRAE0NP000002", 2022, "Corolla Hybrid", "LE", 33000, 24998m, make: "Toyota"), seedRun, CancellationToken.None);
+
+        var backfillRun = new RunEntity { Command = "walk --backfill-carmax", Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        db.Runs.Add(backfillRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<PostingEntity> candidates = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+        Assert.Equal(2, candidates.Count);
+
+        CarMaxBackfillTally tally = await CarMaxBackfill.RunAsync(dataDirectory, candidates, upsertService, backfillRun, CancellationToken.None);
+
+        Assert.Equal(new CarMaxBackfillTally(Filled: 0, AlreadySet: 0, CouldNotMatch: 2), tally);
+    }
+
+    [Fact]
+    public async Task RunAsync_ANewerPageThatAlsoTiesAnotherPostingDisagreesOnStore_LeavesTheOlderMatchUnmatched()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        string dataDirectory = Path.GetDirectoryName(testDb.DatabasePath)!;
+
+        // P1 (older run, $24,998) ties only candidate A, since B was never observed at that price. P2
+        // (newer run, $23,998, a different store) tolerantly ties both A (whose observed prices include
+        // $23,998) and B (whose only observed price is $23,998), so P2 is excluded as a fill source for
+        // either. Before the fix, excluding P2 up front also hid its disagreement from A, so A matched
+        // only P1 and was filled from Laurel even though the newer, possibly-its-own P2 says North
+        // Houston. A must be left alone, not merely defaulted to the older recording.
+        WriteRecordedDetailPage(dataDirectory, "20260901-000000", "corolla", "detail-1.txt",
+            "2022 Toyota Corolla Hybrid\nLE\n33k miles\n\n$24,998\n\nOnly at CarMax Laurel, MD\n");
+        WriteRecordedDetailPage(dataDirectory, "20260920-000000", "corolla", "detail-1.txt",
+            "2022 Toyota Corolla Hybrid\nLE\n33k miles\n\n$23,998\n\nOnly at CarMax North Houston, TX\n");
+
+        var upsertService = new LedgerUpsertService(db);
+        var firstRun = new RunEntity { Command = "walk", Sources = "carmax:Corolla Hybrid", StartedAt = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero) };
+        var priceDropRun = new RunEntity { Command = "walk", Sources = "carmax:Corolla Hybrid", StartedAt = new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero) };
+        db.Runs.AddRange(firstRun, priceDropRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsertService.UpsertAsync(BarePosting("5YFEPRAE0NP000003", 2022, "Corolla Hybrid", "LE", 33210, 24998m, make: "Toyota"), firstRun, CancellationToken.None);
+        await upsertService.UpsertAsync(BarePosting("5YFEPRAE0NP000003", 2022, "Corolla Hybrid", "LE", 33210, 23998m, make: "Toyota"), priceDropRun, CancellationToken.None);
+        await upsertService.UpsertAsync(BarePosting("5YFEPRAE0NP000004", 2022, "Corolla Hybrid", "LE", 33000, 23998m, make: "Toyota"), priceDropRun, CancellationToken.None);
+
+        var backfillRun = new RunEntity { Command = "walk --backfill-carmax", Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        db.Runs.Add(backfillRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<PostingEntity> candidates = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+        Assert.Equal(2, candidates.Count);
+
+        CarMaxBackfillTally tally = await CarMaxBackfill.RunAsync(dataDirectory, candidates, upsertService, backfillRun, CancellationToken.None);
+
+        Assert.Equal(new CarMaxBackfillTally(Filled: 0, AlreadySet: 0, CouldNotMatch: 2), tally);
+
+        List<PostingEntity> updated = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+        Assert.All(updated, p => Assert.Equal(WalkSites.CarMaxDealerName, p.Dealer?.Name));
+    }
+
+    [Fact]
     public async Task RunAsync_BarePlainModelPostingAgainstAPageTitledAsTheHybridVariant_LeavesItUnmatched()
     {
         using var testDb = new LedgerTestDatabase();

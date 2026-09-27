@@ -42,12 +42,22 @@ public sealed record CarMaxBackfillTally(int Filled, int AlreadySet, int CouldNo
 /// same-mileage cars of the same model) can't be told apart, so neither is touched; a candidate no
 /// recorded page matches at all is left alone the same way. A candidate that ties two or more distinct
 /// recorded pages is left alone for the identical reason — nothing on either side says which one is
-/// really its own page.</para>
+/// really its own page. The same is true the other way around: a single recorded page that tolerantly
+/// matches more than one posting (candidate or already resolved) can never be trusted as the page a
+/// candidate is filled from, since those tolerances can tie two postings whose own fingerprints no
+/// longer match exactly — one posting's mileage or price has drifted since the page was recorded, the
+/// other's hasn't — to the very same page. That page still counts against every candidate it tolerantly
+/// matches, though, rather than being dropped from view outright: a candidate is left alone whenever any
+/// recorded page it tolerantly matches, trustworthy enough to fill from or not, disagrees about the
+/// store or the availability with the page that would otherwise be trusted. Dropping an untrustworthy
+/// page outright, instead of only barring it from being the source, would let a bare posting be filled
+/// from an older recording while a newer page that also plausibly is its own car, and disagrees about
+/// which store it's at now, went unseen.</para>
 ///
-/// <para>When a posting matches more than one recorded page (the same car walked more than once, across
-/// different runs), the page from the newest run wins, since a later recording can only be truer than
-/// an older one about which store the car is at now — unless the pages that tie disagree about which
-/// store that is, or two of them come from the very same run. Either is proof the pages are two
+/// <para>When a posting matches more than one trustworthy recorded page (the same car walked more than
+/// once, across different runs), the page from the newest run wins, since a later recording can only be
+/// truer than an older one about which store the car is at now — unless the pages that tie disagree about
+/// which store that is, or two of them come from the very same run. Either is proof the pages are two
 /// different cars that merely share a fingerprint (CarMax prices in round, model-year-and-mileage-keyed
 /// steps, so this does happen among its own inventory), not one car recorded twice, since a single
 /// run's own detail pages are never the same car under two different files; a tie like that is left
@@ -93,7 +103,7 @@ public static class CarMaxBackfill
             cancellationToken.ThrowIfCancellationRequested();
 
             if (ambiguousFingerprints.Contains(candidate.Fingerprint)
-                || !TryFindMatch(candidate, recordedPages, out RecordedMatch match))
+                || !TryFindMatch(candidate, recordedPages, allPostings, out RecordedMatch match))
             {
                 // A posting already on a real store only ever entered this loop for its availability
                 // reading, which a missing attribute usually just means is unremarkable ("not
@@ -216,13 +226,19 @@ public static class CarMaxBackfill
 
     /// <summary>Every recorded page that could plausibly be <paramref name="candidate"/>'s own (see
     /// <see cref="Matches"/>), reduced to the one <paramref name="match"/> to trust, or false when
-    /// there is none to trust: no page matched at all, the pages that did disagree about which store
-    /// the car is at (proof they're two different cars, not one recorded twice), or two of them come
-    /// from the very same run (proof of the same thing, since a run's own detail pages are never one
-    /// car under two different files). Otherwise the page from the newest run wins; run folders sort
-    /// newest last by name (<c>yyyyMMdd-HHmmss</c>), so an ordinal string comparison is exactly
-    /// chronological order.</summary>
-    private static bool TryFindMatch(Candidate candidate, List<RecordedPage> recordedPages, out RecordedMatch match)
+    /// there is none to trust: no page matched at all; the pages that did disagree about which store
+    /// the car is at (proof they're two different cars, not one recorded twice); two of them come from
+    /// the very same run (proof of the same thing, since a run's own detail pages are never one car
+    /// under two different files); or every page left, once a page that also tolerantly matches some
+    /// other posting in <paramref name="allPostings"/> is barred from being the source, is one of those
+    /// barred pages. The store-disagreement and same-run checks run first, against every page that
+    /// tolerantly matches the candidate at all, not only the ones trustworthy enough to fill from: a
+    /// page can't be trusted as the source and still be silently dropped, since dropping it would let a
+    /// newer page's disagreement about the store go unseen and the candidate get filled from an older
+    /// page instead (see the class doc). Otherwise the page from the newest run among the trustworthy
+    /// ones wins; run folders sort newest last by name (<c>yyyyMMdd-HHmmss</c>), so an ordinal string
+    /// comparison is exactly chronological order.</summary>
+    private static bool TryFindMatch(Candidate candidate, List<RecordedPage> recordedPages, List<Candidate> allPostings, out RecordedMatch match)
     {
         List<RecordedPage> matches = [.. recordedPages.Where(page => Matches(candidate, page.Fingerprint))];
         if (matches.Count == 0)
@@ -245,7 +261,21 @@ public static class CarMaxBackfill
             return false;
         }
 
-        RecordedPage newest = matches.Aggregate((a, b) => string.CompareOrdinal(a.RunFolder, b.RunFolder) >= 0 ? a : b);
+        // A page that also tolerantly matches some other posting can never be the one this candidate is
+        // filled from: the same tolerances that let this candidate's own drifted mileage or price still
+        // find its page (see the class doc) can just as easily let that other posting's page be this
+        // one's instead. It wasn't dropped above, since its disagreement about the store still had to be
+        // able to veto the match; with none found, only a page trustworthy enough to actually name a
+        // source is left standing here.
+        List<RecordedPage> usableMatches =
+            [.. matches.Where(page => allPostings.Count(p => Matches(p, page.Fingerprint)) <= 1)];
+        if (usableMatches.Count == 0)
+        {
+            match = default;
+            return false;
+        }
+
+        RecordedPage newest = usableMatches.Aggregate((a, b) => string.CompareOrdinal(a.RunFolder, b.RunFolder) >= 0 ? a : b);
         match = new RecordedMatch(newest.Store, newest.Availability);
         return true;
     }
