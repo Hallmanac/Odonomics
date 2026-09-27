@@ -117,14 +117,20 @@ public class CardBadgesTests
         Check Availability
         """;
 
+    // Recorded run 20260926-121057, prius/search.txt lines 321-331 (Southern Trust Auto Group, 2019
+    // Toyota Prius Limited).
     private const string AutotraderNoBadge = """
         Used
-        2025 Toyota Prius
-        LE
-        17K mi
+        2019 Toyota Prius
+        Limited
+        22K mi
          Hybrid
-        29,524
+        23,999
         See payment
+        Southern Trust Auto Group
+        29.21 mi. away
+        (407) 573-2140
+        Check Availability
         """;
 
     // Recorded run 20260927-162013, insight/search.txt lines 37-50 (Driver's Mart Sanford, 2021 Honda
