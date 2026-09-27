@@ -231,6 +231,12 @@ public static class WalkCommand
         int skippedBeyondRadius = 0;
         int skippedNoDistance = 0;
 
+        // A card whose site checks its own stated year and mileage against the scenario's facets (see
+        // WalkSite.CardFacetsReader): how many failed the minimum year, and how many failed the maximum
+        // mileage. Zero for a site with no such check.
+        int skippedBelowYearFloor = 0;
+        int skippedOverMileageCap = 0;
+
         // A card a site's render wait gave up on within its bounded scans (see
         // WalkSite.WaitsForRenderedCards): never rendered a dollar amount of its own, so never a
         // candidate either. Zero for a site with no such wait.
@@ -346,7 +352,11 @@ public static class WalkCommand
                     // than marking the whole pair capped, so every other untouched posting in the pair is
                     // still compared against this run's own full coverage.
                     knownTouches.RecordIfKnown(canonicalUrl, unrenderedKnownUrls);
-                });
+                },
+                query.CardYearFloor,
+                query.MaxMileage,
+                () => skippedBelowYearFloor++,
+                () => skippedOverMileageCap++);
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -592,7 +602,7 @@ public static class WalkCommand
         }
 
         bool capped = linkCollectionCapped || tally.Capped;
-        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered)}");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, skippedBelowYearFloor, skippedOverMileageCap)}");
 
         // The Prius pair's own search always mixes Prime candidates into its results (see
         // isPriusPrime above), whether or not one happens to be new this run: a Prime already on

@@ -386,4 +386,42 @@ public class WalkPairSummaryLineTests
 
         Assert.Equal("cars.com / Honda Insight: 1 pages, 0 known from cards, 1 saved, 0 dropped, 1 unrendered, capped", line);
     }
+
+    [Fact]
+    public void Format_SkippedBelowYearFloor_IsNamedAfterTheDroppedTotal()
+    {
+        string line = WalkPairSummaryLine.Format("carmax", "Toyota", "Camry Hybrid", pages: 498, known: 0, saved: 488, new DroppedBreakdown(0, 0, 0, 0), skippedBelowYearFloor: 10);
+
+        Assert.Equal("carmax / Toyota Camry Hybrid: 498 pages, 0 known from cards, 488 saved, 0 dropped, 10 below year floor", line);
+    }
+
+    [Fact]
+    public void Format_SkippedOverMileageCap_IsNamedSeparatelyAfterBelowYearFloor()
+    {
+        string line = WalkPairSummaryLine.Format(
+            "carmax", "Toyota", "Camry Hybrid", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0),
+            skippedBelowYearFloor: 10, skippedOverMileageCap: 2);
+
+        Assert.Equal("carmax / Toyota Camry Hybrid: 1 pages, 0 known from cards, 1 saved, 0 dropped, 10 below year floor, 2 over mileage cap", line);
+    }
+
+    [Fact]
+    public void Format_SkippedBelowYearFloorAndOverMileageCap_FollowTheRadiusAndUnrenderedCounts()
+    {
+        string line = WalkPairSummaryLine.Format(
+            "carmax", "Toyota", "Camry Hybrid", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0),
+            skippedBeyondRadius: 5, skippedNoDistance: 1, skippedUnrendered: 1, skippedBelowYearFloor: 10, skippedOverMileageCap: 2);
+
+        Assert.Equal(
+            "carmax / Toyota Camry Hybrid: 1 pages, 0 known from cards, 1 saved, 0 dropped, 5 beyond radius, 1 no distance stated, 1 unrendered, 10 below year floor, 2 over mileage cap",
+            line);
+    }
+
+    [Fact]
+    public void Format_SkippedBelowYearFloorWithACappedPair_PutsCappedLast()
+    {
+        string line = WalkPairSummaryLine.Format("carmax", "Toyota", "Camry Hybrid", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0), skippedBelowYearFloor: 10, capped: true);
+
+        Assert.Equal("carmax / Toyota Camry Hybrid: 1 pages, 0 known from cards, 1 saved, 0 dropped, 10 below year floor, capped", line);
+    }
 }
