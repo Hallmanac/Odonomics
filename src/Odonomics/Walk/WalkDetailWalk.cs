@@ -1,3 +1,6 @@
+using Odonomics.Extraction;
+using Odonomics.Sources;
+
 namespace Odonomics.Walk;
 
 /// <summary>What happened when the walk actually opened one candidate detail link.</summary>
@@ -81,6 +84,35 @@ public static class WalkOutcomeWording
         DetailPageOutcome.NoPriceListed => "no price listed",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
+
+    /// <summary>The parenthetical an operator sees beside "wrong model" for a page
+    /// <see cref="ListingQuery.MatchesWalkedPage"/> rejected: the year a gas-only-before-year
+    /// model's page is gas-only before, when that is why it failed; "model missing from extraction" when the
+    /// extraction (and the page's own title line, see <see cref="WalkSites.ResolveModel"/>) left the model
+    /// blank, since there is then nothing meaningful to compare against <paramref name="query"/>'s model; or
+    /// what the page actually read otherwise, with the "no Hybrid in title, trim, or spec line" suffix left
+    /// off whenever the extraction's own fuel type already said Hybrid, since that would otherwise call the
+    /// page's fuel-type reading a lie about itself.</summary>
+    public static string NotMatchingDetail(ListingQuery query, ExtractionResult result)
+    {
+        int? gasOnlyBeforeYear = query.GasOnlyBeforeHybridYear(result.Make, result.Model, result.Trim, result.Year);
+        if (gasOnlyBeforeYear is int hybridYear)
+        {
+            return string.IsNullOrWhiteSpace(result.Trim)
+                ? $"{result.Year} {result.Model}, gas-only before {hybridYear}"
+                : $"{result.Year} {result.Model} {result.Trim}, gas-only before {hybridYear}";
+        }
+
+        if (string.IsNullOrWhiteSpace(result.Model))
+        {
+            return "model missing from extraction";
+        }
+
+        string suffix = query.IsHybridVariant && !string.Equals(result.FuelType, "Hybrid", StringComparison.OrdinalIgnoreCase)
+            ? "; no Hybrid in title, trim, or spec line"
+            : "";
+        return $"doesn't match {query.Make} {query.Model}: {result.Year} {result.Make} {result.Model} {result.Trim}{suffix}";
+    }
 }
 
 /// <summary>How many candidate detail pages were dropped for each reason. Total, plus whatever

@@ -377,15 +377,9 @@ public static class WalkCommand
                     return DetailPageOutcome.Repeat;
                 }
 
-                if (!query.MatchesWalkedPage(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year, bodyText))
+                if (!query.MatchesWalkedPage(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year, bodyText, outcome.Result.FuelType))
                 {
-                    int? gasOnlyBeforeYear = query.GasOnlyBeforeHybridYear(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year);
-                    string detail = gasOnlyBeforeYear is int hybridYear
-                        ? string.IsNullOrWhiteSpace(outcome.Result.Trim)
-                            ? $"{outcome.Result.Year} {outcome.Result.Model}, gas-only before {hybridYear}"
-                            : $"{outcome.Result.Year} {outcome.Result.Model} {outcome.Result.Trim}, gas-only before {hybridYear}"
-                        : $"doesn't match {make} {model}: {outcome.Result.Year} {outcome.Result.Make} {outcome.Result.Model} {outcome.Result.Trim}"
-                            + (query.IsHybridVariant ? "; no Hybrid in title, trim, or spec line" : "");
+                    string detail = WalkOutcomeWording.NotMatchingDetail(query, outcome.Result);
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NotMatching)} ({detail})[/]");
                     return DetailPageOutcome.NotMatching;
                 }

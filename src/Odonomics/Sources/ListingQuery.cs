@@ -61,20 +61,29 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
     }
 
     /// <summary>The walk's own version of <see cref="MatchesExtractedVehicle"/>, which also has the
-    /// page text to hand. A hybrid query accepts a page whose extraction split the title into a
-    /// base model plus trim (model "Corolla", trim "LE") when the page's own title line still reads
-    /// "&lt;year&gt; &lt;make&gt; &lt;base model&gt; Hybrid": the extraction model sometimes drops the
-    /// variant word even though the title prints it, and the page is a real Corolla Hybrid all the
-    /// same. A page also counts when its own spec block carries a fuel spec line that says hybrid
-    /// ("Hybrid: Gas/Electric" on Autotrader), which is how a page titled "Certified 2026 Toyota
-    /// Corolla SE FWD" says it is a Corolla Hybrid. Only the title line and a spec line above any
-    /// similar-vehicles heading count, so a gas page that merely mentions a hybrid elsewhere (a
-    /// similar-vehicles card, a review question) is still rejected. The API sources never call
-    /// this; they have no page text.</summary>
-    public bool MatchesWalkedPage(string? make, string? model, string? trim, int? year, string pageText) =>
+    /// page text and the extraction's own <paramref name="fuelType"/> to hand. A hybrid query accepts
+    /// a page whose extraction split the title into a base model plus trim (model "Corolla", trim
+    /// "LE") when the page's own title line still reads "&lt;year&gt; &lt;make&gt; &lt;base model&gt;
+    /// Hybrid": the extraction model sometimes drops the variant word even though the title prints
+    /// it, and the page is a real Corolla Hybrid all the same. A page also counts when its own spec
+    /// block carries a fuel spec line that says hybrid ("Hybrid: Gas/Electric" on Autotrader), which
+    /// is how a page titled "Certified 2026 Toyota Corolla SE FWD" says it is a Corolla Hybrid. A
+    /// fourth route is the extraction's own fuel type reading Hybrid for a page whose make and base
+    /// model otherwise match (a Carvana page the extraction reads as "2026 Toyota Camry SE, fuel type
+    /// Hybrid", with no "Hybrid" anywhere in the title, trim, or spec text at all): Carvana's fuel-type
+    /// search facet already filtered to real hybrids, so a match year short of
+    /// <see cref="HybridOnlyFromModelYear"/> is still accepted on the extraction's own word for it.
+    /// Only the title line, a spec line above any similar-vehicles heading, and the extracted fuel type
+    /// count, so a gas page that merely mentions a hybrid elsewhere (a similar-vehicles card, a review
+    /// question) is still rejected. The API sources never call this; they have no page text.</summary>
+    public bool MatchesWalkedPage(string? make, string? model, string? trim, int? year, string pageText, string? fuelType = null) =>
         MatchesExtractedVehicle(make, model, trim, year)
         || TitleNamesHybrid(make, model, trim, year, pageText)
-        || SpecLineNamesHybrid(make, model, trim, pageText);
+        || SpecLineNamesHybrid(make, model, trim, pageText)
+        || FuelTypeIsHybrid(make, model, trim, fuelType);
+
+    private bool FuelTypeIsHybrid(string? make, string? model, string? trim, string? fuelType) =>
+        IsHybridVariant && MatchesMakeAndBaseModel(make, model, trim) && string.Equals(fuelType, "Hybrid", StringComparison.OrdinalIgnoreCase);
 
     private bool SpecLineNamesHybrid(string? make, string? model, string? trim, string pageText)
     {
