@@ -144,7 +144,7 @@ public class CarMaxYearMileageFilterTests
     private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 
     [Fact]
-    public async Task CollectLinksAsync_BelowFloorCardsNeverEnterThePoolOrGetCheckedAsKnown()
+    public async Task CollectLinksAsync_BelowFloorCardsNeverEnterThePoolButAreStillCheckedAsKnown()
     {
         List<PageLink> cards = LoadCardsJson("carmax-camry-hybrid-below-floor-cards.json");
         ListingQuery query = CamryHybridQuery();
@@ -177,6 +177,10 @@ public class CarMaxYearMileageFilterTests
         Assert.Equal(10, belowFloor);
         Assert.Equal(20, pool.Count);
         Assert.All(BelowFloorHrefs, href => Assert.DoesNotContain(href, pool));
-        Assert.All(BelowFloorHrefs, href => Assert.DoesNotContain(href, checkedAsKnownOrNew));
+
+        // A below-floor card never earns a detail visit, but a known posting behind one is still touched
+        // from its card, the same as a passing card's, so it is never later read as gone for want of a
+        // visit this walk was never going to spend on it.
+        Assert.All(BelowFloorHrefs, href => Assert.Contains(WalkSites.CanonicalDetailUrl(href), checkedAsKnownOrNew));
     }
 }

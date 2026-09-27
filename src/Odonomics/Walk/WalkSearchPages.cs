@@ -65,9 +65,12 @@ public static class WalkSearchPages
     /// (carmax, whose search URL carries both facets already but does not actually honor the year range): a
     /// card whose stated year is under the floor (<paramref name="minYearFor"/> takes whether the card's own
     /// model text says "Hybrid", for a hybrid-only-from-year model's base-model card) or whose stated mileage
-    /// is over the cap never enters the pool and is never handed to <paramref name="touchKnownAsync"/>, and is
-    /// told to <paramref name="onBelowYearFloor"/> or <paramref name="onOverMileageCap"/> respectively (see
-    /// <see cref="WalkSite.CollectDetailCards"/>), the same as a beyond-radius or no-distance card.
+    /// is over the cap never enters the pool (see <see cref="WalkSite.CollectDetailCards"/>), unlike a
+    /// beyond-radius or no-distance card. Unlike one of those, though, it is still handed to
+    /// <paramref name="touchKnownAsync"/> first: a known posting is kept current from its card exactly as a
+    /// passing one would be, so this walk declining to spend a detail visit on it never reads, on a later
+    /// run, as the car having left the market. <paramref name="onBelowYearFloor"/> or
+    /// <paramref name="onOverMileageCap"/> is told about it once that touch is done.
     /// A link a page's <see cref="SearchPageContent.UnrenderedHrefs"/> names (see
     /// <see cref="SearchPageCardRenderWait"/>) is dropped from that page before any of that: its card never
     /// rendered within the bounded wait, so it is kept out of <see cref="WalkSite.CollectDetailCards"/> for
@@ -162,6 +165,8 @@ public static class WalkSearchPages
             }
 
             int added = 0;
+            List<PageLink> belowFloorCards = [];
+            List<PageLink> overMileageCards = [];
             foreach (PageLink card in site.CollectDetailCards(
                 renderedLinks,
                 int.MaxValue,
@@ -171,8 +176,8 @@ public static class WalkSearchPages
                 card => ReportOnce(card, onNoDistance, onNoDistanceWithdrawn),
                 minYearFor,
                 maxMileage,
-                _ => onBelowYearFloor?.Invoke(),
-                _ => onOverMileageCap?.Invoke()))
+                belowFloorCards.Add,
+                overMileageCards.Add))
             {
                 if (considered >= linkBound)
                 {
@@ -205,6 +210,22 @@ public static class WalkSearchPages
                 {
                     leftBehindForWantOfPoolRoom = true;
                 }
+            }
+
+            // A card the facet check dropped never enters the pool, but a known posting is still touched
+            // from it exactly as a passing card's would be, so its LastSeen moves with this run and the
+            // diff never reads it as having left the market just because this walk will not spend a detail
+            // visit on it.
+            foreach (PageLink card in belowFloorCards)
+            {
+                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                onBelowYearFloor?.Invoke();
+            }
+
+            foreach (PageLink card in overMileageCards)
+            {
+                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                onOverMileageCap?.Invoke();
             }
 
             // A page that adds nothing, or a stated count already reached, means the site's results are

@@ -109,8 +109,10 @@ namespace Odonomics.Walk;
 /// <paramref name="CardFacetsReader"/> reads a result card's own stated model year, mileage, and whether its model
 /// text says "Hybrid" (carmax, see <see cref="CarMaxCards.ReadVehicleFacets"/>), for a site whose search URL carries
 /// the scenario's minimum year and maximum mileage as facets but does not actually honor them: a card whose stated
-/// year or mileage already fails those facets is dropped before its link is ever pooled or checked against the
-/// ledger (see <see cref="CollectDetailCards"/>), the same as a beyond-radius or no-distance card. Null for a site
+/// year or mileage already fails those facets never enters the pool a detail visit could come from (see
+/// <see cref="CollectDetailCards"/>), the same as a beyond-radius or no-distance card, but unlike one of those a
+/// known posting behind it is still kept current from its card (see <see cref="WalkSearchPages.CollectLinksAsync"/>)
+/// rather than left to read as gone for want of a visit this walk was never going to spend on it. Null for a site
 /// whose own search facets are trusted as they come, whose cards are then never checked against them.</summary>
 public sealed record WalkSite(
     string Name,
@@ -185,10 +187,13 @@ public sealed record WalkSite(
     /// <see cref="SkippedCardTitlePattern"/> drops. When this site has a <see cref="CardFacetsReader"/>, a
     /// card whose own text states a model year under <paramref name="minYearFor"/> (given whether that
     /// card's own model text says "Hybrid", for a hybrid-only-from-year model's base-model card) is told to
-    /// <paramref name="onBelowYearFloor"/> instead of ever being pooled or checked against the ledger, and one
-    /// whose stated mileage is over <paramref name="maxMileage"/> is told to <paramref name="onOverMileageCap"/>
-    /// the same way; a card whose text states neither is unaffected. Checked ahead of the radius check above,
-    /// so a card dropped for its year or mileage is never also reported beyond radius or as stating none.</summary>
+    /// <paramref name="onBelowYearFloor"/> instead of ever being pooled, and one whose stated mileage is over
+    /// <paramref name="maxMileage"/> is told to <paramref name="onOverMileageCap"/> the same way; a card whose
+    /// text states neither is unaffected. Unlike a beyond-radius or no-distance card, though, this method does
+    /// not decide whether a known posting behind it gets touched from the card first: that is
+    /// <see cref="WalkSearchPages.CollectLinksAsync"/>'s own job, done before it counts the card as skipped for
+    /// its year or mileage. Checked ahead of the radius check above, so a card dropped for its year or mileage
+    /// is never also reported beyond radius or as stating none.</summary>
     public IReadOnlyList<PageLink> CollectDetailCards(
         IReadOnlyList<PageLink> links,
         int poolSize,

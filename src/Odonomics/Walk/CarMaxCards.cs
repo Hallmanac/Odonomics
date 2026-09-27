@@ -67,7 +67,9 @@ public static class CarMaxCards
     public static CardVehicleFacets ReadVehicleFacets(string cardText)
     {
         Match titleLine = TitleYearLine.Match(cardText);
-        int? year = titleLine.Success && int.TryParse(titleLine.Groups["year"].Value, out int parsedYear) ? parsedYear : null;
+        int? year = titleLine.Success && int.TryParse(titleLine.Groups["year"].Value, out int parsedYear)
+            ? parsedYear
+            : null;
         bool namesHybrid = titleLine.Success && titleLine.Value.Contains("Hybrid", StringComparison.OrdinalIgnoreCase);
 
         Match mileageLine = ThousandsMileageLine.Match(cardText);
