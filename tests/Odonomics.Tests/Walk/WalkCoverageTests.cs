@@ -286,6 +286,54 @@ public class WalkCoverageTests
     }
 
     [Fact]
+    public async Task RunAsync_PairSavesAPrimeVariant_StampsAnAlsoCoveredModelTokenBesideThePairsOwn()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight", "Toyota Prius"],
+            (_, model, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), AlsoCoveredModel: model == "Toyota Prius" ? "Prius Prime" : null)),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Equal("site-a:Insight,site-a:Prius,site-a:Prius Prime", run.Sources);
+        Assert.Equal(["site-a:Insight", "site-a:Prius", "site-a:Prius Prime"], RunSources.Split(run));
+    }
+
+    [Fact]
+    public async Task RunAsync_ACappedPairAlsoSavesAPrimeVariant_StampsAPartialTokenForBothItsOwnAndTheAlsoCoveredModel()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Toyota Prius"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), Capped: true, AlsoCoveredModel: "Prius Prime")),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Equal("site-a:Prius,capped:site-a:Prius,site-a:Prius Prime,capped:site-a:Prius Prime", run.Sources);
+        Assert.Equal(["site-a:Prius", "site-a:Prius Prime"], RunSources.PartialCoverage(run));
+    }
+
+    [Fact]
     public async Task RunAsync_PersistFailsForACappedPair_LeavesNeitherItsCoverageNorItsPartialToken()
     {
         using var testDb = new LedgerTestDatabase();

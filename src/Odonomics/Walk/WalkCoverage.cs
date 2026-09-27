@@ -12,8 +12,13 @@ namespace Odonomics.Walk;
 /// known links whose card never rendered within the site's bounded render wait (see
 /// <see cref="SearchPageCardRenderWait"/>) and so were never touched: they do not make the pair's own
 /// coverage partial (see <see cref="Cli.Commands.WalkCommand"/>), since each is instead exempted from the
-/// diff on its own.</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null);
+/// diff on its own. <see cref="AlsoCoveredModel"/> is the bare model of a second
+/// vehicle this pair's own search also mixes in and saves under its own scenario model (a Prius Prime
+/// candidate saved through the "Toyota Prius" pair's search, see PriusPrimeVariant), set only when the pair
+/// actually saved one this run; a "source:model" token gets stamped for it beside the pair's own (see
+/// WalkCoverage.RunAsync), with the same partial-coverage markers, since a model with no walk pair of its
+/// own otherwise has no run that ever covers it, leaving its postings unable to ever be reported gone.</summary>
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
 /// is false when the pair's own walk threw (a page that never loaded, a site that errored); the
@@ -83,6 +88,21 @@ public static class WalkCoverage
                     if (outcome.FailedPage is not null)
                     {
                         coveredTokens.Add(RunSources.UnreadKey(coverageKey));
+                    }
+
+                    if (outcome.AlsoCoveredModel is not null)
+                    {
+                        string alsoCoverageKey = RunSources.Key(site.Name, outcome.AlsoCoveredModel);
+                        coveredTokens.Add(alsoCoverageKey);
+                        if (outcome.Capped)
+                        {
+                            coveredTokens.Add(RunSources.PartialKey(alsoCoverageKey));
+                        }
+
+                        if (outcome.FailedPage is not null)
+                        {
+                            coveredTokens.Add(RunSources.UnreadKey(alsoCoverageKey));
+                        }
                     }
 
                     currentRun.Sources = RunSources.Join(coveredTokens);

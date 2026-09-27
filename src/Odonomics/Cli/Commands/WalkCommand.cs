@@ -359,6 +359,13 @@ public static class WalkCommand
         // second sighting is recorded as a repeat instead of spending another slot of the cap.
         var savedVinsThisPair = new HashSet<string>();
 
+        // Set when this pair saves at least one Prius Prime (see isPriusPrime below), so the pair's
+        // own coverage token gets a "site:Prius Prime" token stamped beside it (see WalkCoverage):
+        // without one, no run ever covers a Prime's (source, model) pair, so LedgerDiffService can
+        // never report one gone and VehiclePricing.ActivePostings treats its last price as active
+        // forever (RunSources' own coverage contract, see AlsoCoveredModel below).
+        bool savedPriusPrimeThisPair = false;
+
         async Task<DetailPageOutcome> VisitLinkAsync(string detailUrl, int i, CancellationToken ct)
         {
             IPage? detailPage = null;
@@ -512,6 +519,11 @@ public static class WalkCommand
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);
+                if (isPriusPrime)
+                {
+                    savedPriusPrimeThisPair = true;
+                }
+
                 return DetailPageOutcome.Upserted;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -555,7 +567,8 @@ public static class WalkCommand
         bool capped = linkCollectionCapped || tally.Capped;
         AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered)}");
 
-        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls);
+        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls,
+            AlsoCoveredModel: savedPriusPrimeThisPair ? PriusPrimeVariant.StoredModel : null);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
