@@ -13,6 +13,12 @@ namespace Odonomics.Walk;
 /// happens to lead it, not to this card's own car.</summary>
 public static class CarsComCards
 {
+    /// <summary>A distance line's own shape ("(28 mi)"), as a JavaScript regular expression source with
+    /// no capture group: <see cref="SearchPageLinks.CardScript"/> only needs to count how many a
+    /// wrapper's text names, not read one, to tell a multi-card wrapper from a single card's own text (see
+    /// <see cref="WalkSite.CardMultiCardPattern"/>).</summary>
+    public const string DistanceLinePattern = @"\(\d[\d,]*\s*mi\)";
+
     private static readonly Regex DistanceLine = new(@"\((?<mi>[\d,]+)\s*mi\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>The distance in miles <paramref name="cardText"/> states, or null when it states none or
