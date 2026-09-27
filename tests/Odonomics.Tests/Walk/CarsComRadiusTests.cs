@@ -9,13 +9,7 @@ namespace Odonomics.Tests.Walk;
 /// nationwide recommendation links, so the pre-fix walk saved seventeen Insights from all over the
 /// country before the unbounded pool finally read all eleven pages; and walk run 20260926-121057, whose
 /// page 1 mixed three in-radius cards (two of them CarMax's own "delivery to &lt;city&gt; (N mi)" form) in
-/// with the same four out-of-radius Florida cards. Page 1 of the 20260927-113258 run also carries two
-/// empty-anchor links, af6fb68e (Driver's Mart Sanford) and 80a6e699 (Toyota of Melbourne), whose card text
-/// SearchPageLinks.CardScript first bounds to a five-card wrapper spanning neighboring dealers before
-/// re-binding it to each link's own single card (see the fixture's history and lesson 9514dea8): both are
-/// real in-radius cars and belong in the pool, unlike the run's third empty-anchor link, 9ae48e6a, whose
-/// own single card is a genuinely different, out-of-radius nationwide recommendation with no distance of
-/// its own to state.</summary>
+/// with the same four out-of-radius Florida cards.</summary>
 public class CarsComRadiusTests
 {
     private static string FixturePath(string name) =>
@@ -101,29 +95,29 @@ public class CarsComRadiusTests
         // there: page 3 was never requested.
         Assert.Equal([1, 2], browser.Loads);
 
-        // None of the out-of-radius Florida hrefs, nor either page's genuinely-nationwide, no-single-card
-        // link, ever entered the pool. Page 2's two nationwide links, 49693b71 and 1200a372, carry a
-        // four-card wrapper of their own and no single card of their own to re-bind to.
+        // None of the out-of-radius Florida hrefs, nor any page's empty-anchor or nationwide links, ever
+        // entered the pool. Page 1 carries three empty-anchor links (af6fb68e, 80a6e699, and the
+        // attribution_type=ship nationwide link 9ae48e6a) whose CardText is the whole five-card wrapper
+        // blob: its first stated distance, 14 mi, belongs to the wrapper's leading CarMax card, not to any
+        // of these three, so a reader that measured them by that first distance would wrongly pool them
+        // (lesson 9514dea8). Page 2's two nationwide links, 49693b71 and 1200a372, carry a four-card
+        // wrapper of their own.
         string[] beyondRadiusVins = ["e42ccdc2-fd2d-4265-80a5-9c13488f83bb", "8ce9a8c9-8b86-4ca2-91fd-4ea639508de7", "a1a749e5-d29e-44cb-a4db-88a3b9770059", "7c3ad279-4633-4052-8809-63a67c278e9d"];
         Assert.All(beyondRadiusVins, vin => Assert.DoesNotContain(pool, href => href.Contains(vin, StringComparison.Ordinal)));
-        string[] noSingleCardHrefs = ["9ae48e6a-57ae-4da4-909b-11f95a171140", "49693b71-df19-4092-9e3f-81d408e93508", "1200a372-b8c9-4b72-b66e-4ae9c1d5b5eb"];
-        Assert.All(noSingleCardHrefs, id => Assert.DoesNotContain(pool, href => href.Contains(id, StringComparison.Ordinal)));
+        string[] multiCardWrapperHrefs = ["af6fb68e-25ea-4c9f-9459-4f6f20d97f1d", "80a6e699-f24c-40fc-9075-235a6d8133e1", "9ae48e6a-57ae-4da4-909b-11f95a171140", "49693b71-df19-4092-9e3f-81d408e93508", "1200a372-b8c9-4b72-b66e-4ae9c1d5b5eb"];
+        Assert.All(multiCardWrapperHrefs, id => Assert.DoesNotContain(pool, href => href.Contains(id, StringComparison.Ordinal)));
 
-        // Page 1 also carries two empty-anchor links, af6fb68e (Driver's Mart Sanford, 28 mi) and 80a6e699
-        // (Toyota of Melbourne, 39 mi), each re-bound to its own single card rather than read off the
-        // five-card wrapper CardScript's nearest-dollar-ancestor walk first lands on (lesson 9514dea8): both
-        // are in radius, so both join page 1's own-text 5616062b (14 mi) in the pool.
-        Assert.Equal(3, pool.Count);
+        // The only in-radius card on either page is page 1's own-text 5616062b (14 mi): the pool holds it
+        // and nothing else.
+        Assert.Single(pool);
         Assert.Contains(pool, href => href.Contains("5616062b-4439-4e07-badb-8240b99bcd83", StringComparison.Ordinal));
-        Assert.Contains(pool, href => href.Contains("af6fb68e-25ea-4c9f-9459-4f6f20d97f1d", StringComparison.Ordinal));
-        Assert.Contains(pool, href => href.Contains("80a6e699-f24c-40fc-9075-235a6d8133e1", StringComparison.Ordinal));
 
-        // Page 1 contributes its four out-of-radius Florida cards under "beyond radius" and its one
-        // genuinely nationwide link (9ae48e6a, no single card of its own) under "no distance stated". Page 2
-        // repeats the same four Florida cards, already reported once each from page 1, and adds its own two
-        // nationwide links as two more "no distance stated" reports.
+        // Page 1 contributes its four out-of-radius Florida cards under "beyond radius" and its three
+        // multi-card-wrapper links (a card text naming more than one distance states none) under "no
+        // distance stated". Page 2 repeats the same four Florida cards, already reported once each from
+        // page 1, and adds its own two wrapper links as two more "no distance stated" reports.
         Assert.Equal(4, beyondRadius);
-        Assert.Equal(3, noDistance);
+        Assert.Equal(5, noDistance);
     }
 
     [Fact]
