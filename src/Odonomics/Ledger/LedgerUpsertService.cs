@@ -324,6 +324,29 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         return postings.Count;
     }
 
+    /// <summary>Stamps <see cref="PostingEntity.CardUnrenderedSeenAt"/> with the run's own StartedAt for
+    /// every posting the ledger holds at <paramref name="source"/> and one of <paramref name="urls"/>: a
+    /// known posting whose search card the render wait gave up on this run, so it was never touched.
+    /// Nothing else about the posting changes: not <see cref="PostingEntity.LastSeen"/>, since the run
+    /// never actually measured the car, so the diff reports it gone with the reason "card never
+    /// rendered" rather than folding it into whatever the rest of its pair's untouched postings get, and
+    /// <see cref="VehiclePricing"/> keeps counting it active exactly as a posting "beyond the cap" stays,
+    /// even once the pair's own coverage advances past it. A URL that matches no posting is silently
+    /// skipped, the same as <see cref="MarkSoldAsync"/> does for one.</summary>
+    public async Task MarkCardsUnrenderedAsync(string source, IReadOnlyCollection<string> urls, RunEntity run, CancellationToken cancellationToken)
+    {
+        List<PostingEntity> postings = await db.Postings
+            .Where(p => p.Source == source && urls.Contains(p.Url))
+            .ToListAsync(cancellationToken);
+
+        foreach (PostingEntity posting in postings)
+        {
+            posting.CardUnrenderedSeenAt = run.StartedAt;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>The dealer a sighting whose source named none (<see cref="ListingCandidate.DealerNameIsFallback"/>,
     /// carvana's "Carvana", carmax's "CarMax") links its posting to, or null to leave the posting's link as it is. The
     /// VIN history the ledger already stores may name the hub the car sits in for this posting's
