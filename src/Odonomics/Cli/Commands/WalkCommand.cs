@@ -592,7 +592,11 @@ public static class WalkCommand
         LoadMoreResult result = await SearchPageLoadMore.RunAsync(statedCount, CountCardsAsync, PressControlAsync, PauseAsync, cancellationToken);
         string statedText = statedCount is int stated ? $"{stated} matches stated" : "no match count stated";
         AnsiConsole.MarkupLineInterpolated($"loaded {result.Cards} card(s) by pressing the show-more control {result.Presses} time(s) ({statedText})");
-        if (!result.LoadedAll(statedCount))
+        if (statedCount is int statedWithin && result.WithinTolerance(statedWithin))
+        {
+            AnsiConsole.MarkupLineInterpolated($"the show-more control stopped {statedWithin - result.Cards} card(s) short of the stated count, which is within the {SearchPageLoadMore.ToleranceFor(statedWithin)}-card tolerance, so the pair's coverage is complete");
+        }
+        else if (!result.LoadedAll(statedCount))
         {
             AnsiConsole.MarkupLineInterpolated($"[yellow]the show-more control stopped short of the stated count, so the results past those cards are not read and the pair's coverage is partial[/]");
         }

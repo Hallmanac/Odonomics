@@ -76,7 +76,7 @@ public class SearchPageLoadMoreTests
 
         LoadMoreResult result = await RunAsync(page, statedCount: 526);
 
-        Assert.Equal(new LoadMoreResult(2, 50), result);
+        Assert.Equal(new LoadMoreResult(2, 50, EndedOnStalledPress: true), result);
         // Each press pauses once, and the press that added nothing pauses a second time before giving up.
         Assert.Equal(3, page.Pauses);
     }
@@ -88,7 +88,7 @@ public class SearchPageLoadMoreTests
 
         LoadMoreResult result = await RunAsync(page, statedCount: 526);
 
-        Assert.Equal(new LoadMoreResult(2, 45), result);
+        Assert.Equal(new LoadMoreResult(2, 45, EndedOnStalledPress: true), result);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public class SearchPageLoadMoreTests
     {
         var page = new FakePage(25, 25, 25);
 
-        Assert.Equal(new LoadMoreResult(3, 75), await RunAsync(page, statedCount: null));
+        Assert.Equal(new LoadMoreResult(3, 75, EndedOnStalledPress: true), await RunAsync(page, statedCount: null));
     }
 
     [Fact]
@@ -132,5 +132,78 @@ public class SearchPageLoadMoreTests
     public void LoadedAll_WithNoStatedCount_MeansTheRunDidNotHitThePressLimit(int presses, bool expected)
     {
         Assert.Equal(expected, new LoadMoreResult(presses, 75).LoadedAll(null));
+    }
+
+    [Theory]
+    [InlineData(521, 522, true)]
+    [InlineData(520, 522, true)]
+    [InlineData(517, 522, true)]
+    [InlineData(516, 522, false)]
+    [InlineData(48, 50, true)]
+    [InlineData(47, 50, false)]
+    [InlineData(500, 526, false)]
+    [InlineData(521, 526, true)]
+    [InlineData(520, 526, false)]
+    public void LoadedAll_RunEndedOnAStalledPress_AllowsAShortfallOfTwoCardsOrOnePercent(int cards, int stated, bool expected)
+    {
+        var result = new LoadMoreResult(11, cards, EndedOnStalledPress: true);
+
+        Assert.Equal(expected, result.LoadedAll(stated));
+        Assert.Equal(expected, result.WithinTolerance(stated));
+    }
+
+    [Fact]
+    public void LoadedAll_ShortByOneWithoutAStalledPress_StaysPartial()
+    {
+        var result = new LoadMoreResult(0, 521);
+
+        Assert.False(result.LoadedAll(522));
+        Assert.False(result.WithinTolerance(522));
+    }
+
+    [Fact]
+    public void LoadedAll_ShortByOneAtThePressLimit_StaysPartial()
+    {
+        var result = new LoadMoreResult(SearchPageLoadMore.MaxPresses, 521, EndedOnStalledPress: true);
+
+        Assert.False(result.LoadedAll(522));
+    }
+
+    [Fact]
+    public void WithinTolerance_CardsReachedTheCount_IsFalse()
+    {
+        Assert.False(new LoadMoreResult(3, 522, EndedOnStalledPress: true).WithinTolerance(522));
+    }
+
+    [Fact]
+    public async Task RunAsync_APressAddsNothingOneCardShort_IsLoadedAllWithinTolerance()
+    {
+        var page = new FakePage(500, 21, 0);
+
+        LoadMoreResult result = await RunAsync(page, statedCount: 522);
+
+        Assert.Equal(new LoadMoreResult(2, 521, EndedOnStalledPress: true), result);
+        Assert.True(result.LoadedAll(522));
+        Assert.True(result.WithinTolerance(522));
+    }
+
+    [Fact]
+    public async Task RunAsync_APressAddsNothingFarShort_IsNotLoadedAll()
+    {
+        var page = new FakePage(25, 25, 0);
+
+        LoadMoreResult result = await RunAsync(page, statedCount: 526);
+
+        Assert.False(result.LoadedAll(526));
+    }
+
+    [Fact]
+    public async Task RunAsync_ControlGoneOneCardShort_IsNotLoadedAll()
+    {
+        var page = new FakePage(521) { ControlPresent = false };
+
+        LoadMoreResult result = await RunAsync(page, statedCount: 522);
+
+        Assert.False(result.LoadedAll(522));
     }
 }
