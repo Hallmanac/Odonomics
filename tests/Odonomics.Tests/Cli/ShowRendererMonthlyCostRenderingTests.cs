@@ -32,7 +32,7 @@ public class ShowRendererMonthlyCostRenderingTests
         Fees = Parameter.Pinned(500m),
         ResidualFraction = Parameter.Pinned(0.35m),
         InsuranceMonthlyByModel = new Dictionary<string, decimal?> { ["Toyota Prius"] = 90m, ["Honda Insight"] = null },
-        MpgByModel = new Dictionary<string, decimal> { ["Toyota Prius"] = 52m },
+        MpgByModel = new Dictionary<string, decimal?> { ["Toyota Prius"] = 52m },
         Filters = new HardFilters
         {
             MinModelYear = 2019,
@@ -157,12 +157,24 @@ public class ShowRendererMonthlyCostRenderingTests
     [Fact]
     public void MonthlyCostFor_ModelWithInsuranceButNoMpg_ExplainsInsteadOfThrowing()
     {
-        Scenario scenario = BuildScenario() with { MpgByModel = new Dictionary<string, decimal>() };
+        Scenario scenario = BuildScenario() with { MpgByModel = new Dictionary<string, decimal?>() };
 
         (CostBreakdown? cost, string? unavailable) = ShowCommand.MonthlyCostFor("Toyota Prius", 17950m, scenario);
 
         Assert.Null(cost);
         Assert.Contains("mpg", unavailable);
+    }
+
+    [Fact]
+    public void MonthlyCostFor_ModelWithMpgExplicitlyNull_ExplainsInsteadOfThrowing()
+    {
+        Scenario scenario = BuildScenario() with { MpgByModel = new Dictionary<string, decimal?> { ["Toyota Prius"] = null } };
+
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.MonthlyCostFor("Toyota Prius", 17950m, scenario);
+
+        Assert.Null(cost);
+        Assert.Contains("mpg", unavailable);
+        Assert.Contains("Toyota Prius", unavailable);
     }
 
     [Fact]

@@ -27,7 +27,7 @@ public class ResearchCommandSelectionTests
         Fees = Parameter.Pinned(0m),
         ResidualFraction = Parameter.Pinned(0.35m),
         InsuranceMonthlyByModel = new Dictionary<string, decimal?> { ["Honda Insight"] = 120m },
-        MpgByModel = new Dictionary<string, decimal> { ["Honda Insight"] = 52m },
+        MpgByModel = new Dictionary<string, decimal?> { ["Honda Insight"] = 52m },
         Filters = new HardFilters
         {
             MinModelYear = 2019,

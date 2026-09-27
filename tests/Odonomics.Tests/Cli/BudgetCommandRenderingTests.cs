@@ -29,7 +29,7 @@ public class BudgetCommandRenderingTests
         Fees = Parameter.Pinned(500m),
         ResidualFraction = Parameter.Pinned(0.35m),
         InsuranceMonthlyByModel = new Dictionary<string, decimal?> { ["Honda Insight"] = 90m, ["Toyota Prius"] = 100m },
-        MpgByModel = new Dictionary<string, decimal> { ["Honda Insight"] = 50m, ["Toyota Prius"] = 50m },
+        MpgByModel = new Dictionary<string, decimal?> { ["Honda Insight"] = 50m, ["Toyota Prius"] = 50m },
         Filters = new HardFilters
         {
             MinModelYear = 2019,

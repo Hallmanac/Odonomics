@@ -23,7 +23,7 @@ public class BudgetSolverTests
         Fees = Parameter.Pinned(500m),
         ResidualFraction = Parameter.Pinned(0.35m),
         InsuranceMonthlyByModel = new Dictionary<string, decimal?> { ["Toyota Prius"] = 120m },
-        MpgByModel = new Dictionary<string, decimal> { ["Toyota Prius"] = 40m },
+        MpgByModel = new Dictionary<string, decimal?> { ["Toyota Prius"] = 40m },
         Filters = new HardFilters
         {
             MinModelYear = 2019,

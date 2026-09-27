@@ -4,7 +4,7 @@ using Spectre.Console;
 
 namespace Odonomics.Cli;
 
-/// <summary>Prints `odo rank`'s sections: ranked, over-budget, insurance-unknown, excluded, and
+/// <summary>Prints `odo rank`'s sections: ranked, over-budget, missing-scenario-data, excluded, and
 /// F-graded-only. Takes an explicit <see cref="IAnsiConsole"/> (rather than writing through the
 /// static <c>AnsiConsole</c>) so a rendering test can capture the output the same way
 /// <c>ResearchSummaryRenderer</c>'s tests do. The ranked and over-budget sections print one or two
@@ -23,7 +23,7 @@ public static class RankRenderer
     {
         List<Score> ranked = [];
         List<Score> overBudget = [];
-        List<Score> insuranceUnknown = [];
+        List<Score> missingScenarioData = [];
         List<Score> excluded = [];
 
         foreach (Score score in scores)
@@ -34,9 +34,9 @@ public static class RankRenderer
                 continue;
             }
 
-            if (score.InsuranceUnknown)
+            if (score.InsuranceUnknown || score.MpgUnknown)
             {
-                insuranceUnknown.Add(score);
+                missingScenarioData.Add(score);
                 continue;
             }
 
@@ -67,7 +67,7 @@ public static class RankRenderer
             RenderRanked(console, $"Over the ${budgetValue:N0} budget ({overBudget.Count})", overBudget, research, detail);
         }
 
-        RenderInsuranceUnknown(console, insuranceUnknown);
+        RenderMissingScenarioData(console, missingScenarioData);
         RenderExcluded(console, excluded);
         RenderFGradedOnly(console, scores);
     }
@@ -279,12 +279,18 @@ public static class RankRenderer
     private const int GradeColumnWidth = 6;
     private const int ExcludedVehicleColumnWidth = 24;
 
+    /// <summary>Wider than <see cref="ExcludedVehicleColumnWidth"/>: the missing-scenario-data
+    /// table has a Price column the Excluded table doesn't, which leaves less width free overall, so
+    /// Vehicle needs its own, larger share to still tell two same-stem models (a "Corolla Hybrid LE"
+    /// from a "Corolla Hybrid XLE") apart rather than truncating them to the same text.</summary>
+    private const int MissingDataVehicleColumnWidth = 32;
+
     /// <summary>The Vehicle column takes whatever's left of 80 after the fixed columns and
     /// Border.Minimal's own per-column padding and separators (3 chars per column plus 1 for the
     /// table's own edges, the same math <c>WalkCommand</c>'s summary table uses): unlike the
-    /// Excluded table, neither the insurance-unknown nor the F-graded-only table has a flexible
-    /// column competing for width, so leaving Vehicle at a narrower fixed width than that would
-    /// truncate names for no reason.</summary>
+    /// Excluded and missing-scenario-data tables, the F-graded-only table has no flexible column
+    /// competing for width, so leaving Vehicle at a narrower fixed width than that would truncate
+    /// names for no reason.</summary>
     private static int VehicleColumnWidth(bool includeGrade)
     {
         int columnCount = includeGrade ? 4 : 3;
@@ -293,30 +299,52 @@ public static class RankRenderer
         return 80 - fixedWidth - overhead;
     }
 
-    private static void RenderInsuranceUnknown(IAnsiConsole console, IReadOnlyList<Score> scores)
+    /// <summary>The section for a vehicle that passed the hard filters but whose model is missing
+    /// an insurance or an mpg figure in the scenario (or both, a model with neither yet, such as a
+    /// freshly added Toyota Prius Prime): it is still listed, with a Missing column naming exactly
+    /// which figure the scenario needs for it, and never priced as though the missing figure were
+    /// known.</summary>
+    private static void RenderMissingScenarioData(IAnsiConsole console, IReadOnlyList<Score> scores)
     {
-        console.MarkupLine($"[bold yellow]Not ranked: insurance unknown ({scores.Count})[/]");
+        console.MarkupLine($"[bold yellow]Not ranked: scenario data missing ({scores.Count})[/]");
         if (scores.Count == 0)
         {
             console.MarkupLine("  none");
             return;
         }
 
-        console.MarkupLine("[yellow]No insurance figure for this model in the scenario; add one to insuranceMonthlyByModel to rank it.[/]");
+        console.MarkupLine("[yellow]The scenario is missing a figure this model needs to be ranked; add it to insuranceMonthlyByModel or mpgByModel.[/]");
 
-        bool anyGraded = scores.Any(s => s.Vehicle.DealerGrade is not null);
-        if (!anyGraded)
-        {
-            console.MarkupLine("  Grade: no vehicle here has a CarEdge grade yet.");
-        }
+        var table = new Table { Border = TableBorder.Minimal };
+        table.Width(80);
+        table.AddColumn(new TableColumn("VIN") { Width = VinColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Vehicle") { Width = MissingDataVehicleColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Price") { Width = PriceColumnWidth, NoWrap = true });
+        table.AddColumn("Missing");
 
-        Table table = VehiclePriceTable(anyGraded);
         foreach (Score score in scores)
         {
-            AddVehiclePriceRow(table, score, anyGraded, defaultGrade: "-");
+            table.AddRow(
+                Format.Cell(score.Vehicle.Vin),
+                Format.Cell(Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", MissingDataVehicleColumnWidth)),
+                Format.Cell(Format.Truncate(PriceText(score), PriceColumnWidth)),
+                Format.Cell(string.Join("; ", MissingScenarioDataReasons(score))));
         }
 
         console.Write(table);
+    }
+
+    private static IEnumerable<string> MissingScenarioDataReasons(Score score)
+    {
+        if (score.InsuranceUnknown)
+        {
+            yield return $"the scenario needs an insurance figure for {score.Vehicle.MakeModel}";
+        }
+
+        if (score.MpgUnknown)
+        {
+            yield return $"the scenario needs an mpg figure for {score.Vehicle.MakeModel}";
+        }
     }
 
     /// <summary>A vehicle whose every posting comes from an F-graded dealer, surfaced under its

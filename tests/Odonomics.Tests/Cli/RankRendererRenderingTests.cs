@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Odonomics.Cli;
 using Odonomics.Domain;
 using Odonomics.Ledger;
@@ -17,6 +18,7 @@ public class RankRendererRenderingTests
         decimal? price,
         bool passes = true,
         bool insuranceUnknown = false,
+        bool mpgUnknown = false,
         IReadOnlyList<string>? failureReasons = null,
         CostBreakdown? cost = null,
         string? dealerGrade = null,
@@ -50,6 +52,7 @@ public class RankRendererRenderingTests
             Passes = passes,
             FailureReasons = failureReasons ?? [],
             InsuranceUnknown = insuranceUnknown,
+            MpgUnknown = mpgUnknown,
             Cost = cost,
         };
     }
@@ -187,6 +190,26 @@ public class RankRendererRenderingTests
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.Contains(lines, line => line.Contains("4T1G11AK0LU123456"));
         Assert.Contains(lines, line => line.Contains("$22,000"));
+    }
+
+    [Fact]
+    public void Render_PriusPrimeWithBothLinesUnknown_NamesBothMissingFiguresForThatModel()
+    {
+        Score score = BuildScore("JTDACACU5T3062285", 2024, "Toyota", "Prius Prime", 28000m, insuranceUnknown: true, mpgUnknown: true);
+
+        string[] lines = Render([score], budget: null);
+        // The Missing column wraps a long reason across several output lines, each still carrying
+        // the table's box-drawing separators from the empty VIN/Vehicle/Price cells beside it, so
+        // the phrases are checked against the whole section with those separators blanked out and
+        // collapsed, rather than against one line.
+        string joined = Regex.Replace(string.Join(' ', lines).Replace('│', ' ').Replace('─', ' '), @"\s+", " ");
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Contains(lines, line => line.StartsWith("Not ranked: scenario data missing"));
+        Assert.Contains(lines, line => line.Contains("JTDACACU5T3062285"));
+        Assert.Contains("the scenario needs an insurance figure for Toyota Prius Prime", joined);
+        Assert.Contains("the scenario needs an mpg figure for Toyota Prius Prime", joined);
+        Assert.Contains("$28,000", joined);
     }
 
     [Fact]

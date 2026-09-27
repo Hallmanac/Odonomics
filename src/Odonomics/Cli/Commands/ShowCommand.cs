@@ -67,11 +67,11 @@ public static class ShowCommand
 
         if (scenario.InsuranceMonthlyByModel.GetValueOrDefault(makeModel) is not decimal insuranceMonthly)
         {
-            return (null, $"the scenario has no insurance figure for {makeModel}");
+            return (null, $"the scenario needs an insurance figure for {makeModel}");
         }
 
-        return scenario.MpgByModel.TryGetValue(makeModel, out decimal mpg)
+        return scenario.MpgByModel.GetValueOrDefault(makeModel) is decimal mpg
             ? (Scorer.ComputeCost(price, insuranceMonthly, mpg, scenario), null)
-            : (null, $"the scenario has no mpg figure for {makeModel}");
+            : (null, $"the scenario needs an mpg figure for {makeModel}");
     }
 }

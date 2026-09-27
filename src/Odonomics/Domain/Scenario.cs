@@ -47,9 +47,11 @@ public sealed record Scenario
     /// <summary>Keyed by "Make Model"; a missing key or a null value both mean unknown, never zero.</summary>
     public required IReadOnlyDictionary<string, decimal?> InsuranceMonthlyByModel { get; init; }
 
-    /// <summary>Keyed by "Make Model"; EPA combined mpg. The VIN decode would override this when
-    /// it knows better, but vPIC does not return fuel economy, so v0 always uses this table.</summary>
-    public required IReadOnlyDictionary<string, decimal> MpgByModel { get; init; }
+    /// <summary>Keyed by "Make Model"; EPA combined mpg. A missing key or a null value both mean
+    /// unknown, never zero, the same as <see cref="InsuranceMonthlyByModel"/>. The VIN decode would
+    /// override this when it knows better, but vPIC does not return fuel economy, so v0 always uses
+    /// this table.</summary>
+    public required IReadOnlyDictionary<string, decimal?> MpgByModel { get; init; }
 
     /// <summary>Keyed by "Make Model" (e.g. "Toyota Camry Hybrid"); the model year a base model
     /// went hybrid-only, so a candidate at or above that year matches this scenario's hybrid model

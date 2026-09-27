@@ -4,9 +4,9 @@ namespace Odonomics.Domain;
 
 /// <summary>
 /// Pure scoring: a vehicle plus a scenario in, a <see cref="Score"/> out. Hard filters always run
-/// first and are reported with reasons regardless of insurance availability; a vehicle without a
-/// current asking price (every posting gone) or without a known insurance figure for its model
-/// still gets a <see cref="Score"/>, just without a <see cref="CostBreakdown"/>.
+/// first and are reported with reasons regardless of insurance or mpg availability; a vehicle
+/// without a current asking price (every posting gone) or without a known insurance or mpg figure
+/// for its model still gets a <see cref="Score"/>, just without a <see cref="CostBreakdown"/>.
 /// </summary>
 public static class Scorer
 {
@@ -18,8 +18,11 @@ public static class Scorer
         decimal? insuranceMonthly = scenario.InsuranceMonthlyByModel.GetValueOrDefault(vehicle.MakeModel);
         bool insuranceUnknown = insuranceMonthly is null;
 
-        CostBreakdown? cost = passes && insuranceMonthly is decimal insurance && vehicle.PurchasePrice is PurchasePrice purchasePrice
-            ? ComputeCost(purchasePrice.Total, insurance, MpgFor(vehicle, scenario), scenario)
+        decimal? mpg = scenario.MpgByModel.GetValueOrDefault(vehicle.MakeModel);
+        bool mpgUnknown = mpg is null;
+
+        CostBreakdown? cost = passes && insuranceMonthly is decimal insurance && mpg is decimal mpgValue && vehicle.PurchasePrice is PurchasePrice purchasePrice
+            ? ComputeCost(purchasePrice.Total, insurance, mpgValue, scenario)
             : null;
 
         return new Score
@@ -28,6 +31,7 @@ public static class Scorer
             Passes = passes,
             FailureReasons = reasons,
             InsuranceUnknown = insuranceUnknown,
+            MpgUnknown = mpgUnknown,
             Cost = cost,
         };
     }
@@ -67,11 +71,6 @@ public static class Scorer
 
         return reasons;
     }
-
-    private static decimal MpgFor(VehicleForScoring vehicle, Scenario scenario) =>
-        scenario.MpgByModel.TryGetValue(vehicle.MakeModel, out decimal mpg)
-            ? mpg
-            : throw new InvalidOperationException($"no mpg entry for \"{vehicle.MakeModel}\" in the scenario's mpgByModel table");
 
     /// <summary>
     /// The parameters that can make any cost line a band: fees and down payment (purchase cost
