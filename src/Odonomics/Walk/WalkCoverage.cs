@@ -5,21 +5,25 @@ namespace Odonomics.Walk;
 /// <summary>What one (site, model) pair's walk actually visited, and how many of the ledger's known
 /// links it kept current from their search cards without visiting them. <see cref="Capped"/> is true when
 /// an explicit --max ended the pair before the site ran out of results (the link pool filled while more pages
-/// remained, a search was never opened, or with --revisit the cap left collected links unvisited), or when a
-/// known link's card never rendered within the site's bounded render wait (see
-/// <see cref="SearchPageCardRenderWait"/>) and so was never touched, so the pair's coverage is partial.
+/// remained, a search was never opened, or with --revisit the cap left collected links unvisited).
 /// <see cref="FailedPage"/> is the number of the first result page after the first that failed to load
 /// (null when none did), which ended that search's paging with the pages after it unread, so the pair's
-/// coverage is partial for that reason too.</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0);
+/// coverage is partial for that reason too. <see cref="UnrenderedKnownUrls"/> are the canonical URLs of
+/// known links whose card never rendered within the site's bounded render wait (see
+/// <see cref="SearchPageCardRenderWait"/>) and so were never touched: they do not make the pair's own
+/// coverage partial (see <see cref="Cli.Commands.WalkCommand"/>), since each is instead exempted from the
+/// diff on its own.</summary>
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
 /// is false when the pair's own walk threw (a page that never loaded, a site that errored); the
 /// walk moves on to the next pair rather than aborting the whole run. <see cref="KnownFromCards"/> is
 /// how many links the ledger already held that the pair touched from their cards. <see cref="Capped"/> is
 /// true when the pair stopped short of the site's results (see <see cref="WalkPairOutcome.Capped"/>), and
-/// <see cref="FailedPage"/> is the result page that failed to load, if one did.</summary>
-public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0);
+/// <see cref="FailedPage"/> is the result page that failed to load, if one did. <see cref="UnrenderedKnownUrls"/>
+/// carries forward <see cref="WalkPairOutcome.UnrenderedKnownUrls"/>, for the caller to hand every pair's
+/// list to the diff once the whole run is done.</summary>
+public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null);
 
 /// <summary>
 /// Walks every (site, model) pair in order, stamping the run's coverage token the moment each
@@ -93,7 +97,7 @@ public static class WalkCoverage
                         throw;
                     }
 
-                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage, outcome.SkippedBeyondRadius, outcome.SkippedNoDistance, outcome.SkippedUnrendered));
+                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage, outcome.SkippedBeyondRadius, outcome.SkippedNoDistance, outcome.SkippedUnrendered, outcome.UnrenderedKnownUrls));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

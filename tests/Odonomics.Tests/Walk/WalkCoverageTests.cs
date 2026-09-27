@@ -204,6 +204,36 @@ public class WalkCoverageTests
     }
 
     [Fact]
+    public async Task RunAsync_APairWithAnUnrenderedKnownUrlButNotCapped_LeavesNoPartialTokenAndCarriesTheUrlIntoItsSummary()
+    {
+        // WalkCommand no longer sets WalkPairOutcome.Capped for a known card that never rendered
+        // (see WalkPairAsync's onUnrendered handler); this proves the pipeline advances the pair's
+        // coverage in full when that is the only thing that happened, while still carrying the
+        // unrendered URL through to the summary for the caller to hand to the diff.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<WalkPairSummary> summaries = await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), Capped: false, UnrenderedKnownUrls: ["https://site-a/known-unrendered"])),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Equal(["https://site-a/known-unrendered"], Assert.Single(summaries).UnrenderedKnownUrls);
+        Assert.False(Assert.Single(summaries).Capped);
+        Assert.Equal("site-a:Insight", run.Sources);
+        Assert.Empty(RunSources.PartialCoverage(run));
+    }
+
+    [Fact]
     public async Task RunAsync_APairWhoseLaterPageFailed_StampsAnUnreadTokenBesideItsCoverageTokenAndCarriesThePageInItsSummary()
     {
         using var testDb = new LedgerTestDatabase();

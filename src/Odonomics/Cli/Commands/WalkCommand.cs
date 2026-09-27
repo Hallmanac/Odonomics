@@ -135,8 +135,9 @@ public static class WalkCommand
 
         RenderSummary(summaries);
 
+        HashSet<string> unrenderedKnownUrls = [.. summaries.SelectMany(s => s.UnrenderedKnownUrls ?? [])];
         var diffService = new LedgerDiffService(db);
-        SearchDiff diff = await diffService.ComputeAsync(currentRun, scenario, cancellationToken);
+        SearchDiff diff = await diffService.ComputeAsync(currentRun, scenario, unrenderedKnownUrls, cancellationToken);
         DiffRenderer.Render(diff);
 
         return summaries.Any(s => s.Completed) ? 0 : 1;
@@ -212,6 +213,12 @@ public static class WalkCommand
         // WalkSite.WaitsForRenderedCards): never rendered a dollar amount of its own, so never a
         // candidate either. Zero for a site with no such wait.
         int skippedUnrendered = 0;
+
+        // The canonical URLs, among those, that the ledger already held: never touched, so their
+        // LastSeen never moved. Exempted from the diff on their own (see LedgerDiffService.ComputeAsync)
+        // rather than marking the whole pair's coverage partial, so every other untouched posting in the
+        // pair is still compared against this run's own full coverage.
+        var unrenderedKnownUrls = new List<string>();
 
         // The result card text of every detail link the search pages showed, by canonical URL, for a site
         // that prints a fee on its cards (see WalkSite.CardFeeReader): the visit of a link has only its
@@ -313,11 +320,12 @@ public static class WalkCommand
                 {
                     skippedUnrendered++;
                     // A known posting whose card never rendered was never touched, so its LastSeen did not
-                    // move; recording the pair as capped keeps the diff from reading it as gone rather than
-                    // as a posting the walk simply never got to measure.
+                    // move; it is exempted from the diff on its own (see unrenderedKnownUrls above) rather
+                    // than marking the whole pair capped, so every other untouched posting in the pair is
+                    // still compared against this run's own full coverage.
                     if (knownTouches.IsKnown(canonicalUrl))
                     {
-                        linkCollectionCapped = true;
+                        unrenderedKnownUrls.Add(canonicalUrl);
                     }
                 });
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
@@ -509,11 +517,15 @@ public static class WalkCommand
             revisit);
 
         await knownTouches.CommitAsync(cancellationToken);
+        if (unrenderedKnownUrls.Count > 0)
+        {
+            await upsertService.MarkCardsUnrenderedAsync(site.Name, unrenderedKnownUrls, currentRun, cancellationToken);
+        }
 
         bool capped = linkCollectionCapped || tally.Capped;
         AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered)}");
 
-        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered);
+        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
