@@ -157,4 +157,44 @@ public class ListingQueryWalkedPageTests
         Assert.Contains("View similar vehicles", Fixture("autotrader-detail-corolla-hybrid-spec-1.txt"));
         Assert.True(query.MatchesWalkedPage("Toyota", "Corolla", "LE", 2026, Fixture("autotrader-detail-corolla-hybrid-spec-1.txt")));
     }
+
+    [Fact]
+    public void MatchesWalkedPage_FuelTypeHybrid_MatchesEvenWithNoHybridTextAnywhere()
+    {
+        // A carvana page the extraction read as "2026 Toyota Camry SE, fuel type Hybrid", with no
+        // "Hybrid" in the title, trim, or spec text at all: the fuel type carvana's own facet already
+        // confirmed is the fourth route to a match, alongside the title line and the spec line.
+        ListingQuery query = Query("Toyota", "Camry Hybrid");
+        string page = "2026 Toyota Camry\nSE\nFuel type\nHybrid\n";
+
+        Assert.False(query.MatchesWalkedPage("Toyota", "Camry", "SE", 2026, page));
+        Assert.True(query.MatchesWalkedPage("Toyota", "Camry", "SE", 2026, page, "Hybrid"));
+    }
+
+    [Fact]
+    public void MatchesWalkedPage_FuelTypeHybridButOtherBaseModel_Rejected()
+    {
+        ListingQuery query = Query("Toyota", "Camry Hybrid");
+
+        Assert.False(query.MatchesWalkedPage("Toyota", "Corolla", "SE", 2026, "2026 Toyota Corolla SE", "Hybrid"));
+    }
+
+    [Fact]
+    public void MatchesWalkedPage_FuelTypeHybridOnNonHybridQuery_DoesNotChangeTheMatch()
+    {
+        ListingQuery query = Query("Toyota", "Corolla");
+
+        Assert.True(query.MatchesWalkedPage("Toyota", "Corolla", "LE", 2020, "no title here", "Hybrid"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Gas")]
+    [InlineData("Plug-in Hybrid")]
+    public void MatchesWalkedPage_FuelTypeNotExactlyHybrid_DoesNotMatchOnItsOwn(string? fuelType)
+    {
+        ListingQuery query = Query("Toyota", "Camry Hybrid");
+
+        Assert.False(query.MatchesWalkedPage("Toyota", "Camry", "SE", 2026, "2026 Toyota Camry\nSE", fuelType));
+    }
 }
