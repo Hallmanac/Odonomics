@@ -208,6 +208,8 @@ public static class WalkCommand
         CancellationToken cancellationToken)
     {
         (string make, string model) = MakeModel.Split(makeModel);
+        bool isPriusPair = string.Equals(make, "Toyota", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(model, "Prius", StringComparison.OrdinalIgnoreCase);
         ListingQuery query = ListingQuery.For(scenario, makeModel);
         var recorder = new WalkRecorder(dataDirectory, site.Name, model, currentRun.StartedAt);
 
@@ -359,13 +361,6 @@ public static class WalkCommand
         // second sighting is recorded as a repeat instead of spending another slot of the cap.
         var savedVinsThisPair = new HashSet<string>();
 
-        // Set when this pair saves at least one Prius Prime (see isPriusPrime below), so the pair's
-        // own coverage token gets a "site:Prius Prime" token stamped beside it (see WalkCoverage):
-        // without one, no run ever covers a Prime's (source, model) pair, so LedgerDiffService can
-        // never report one gone and VehiclePricing.ActivePostings treats its last price as active
-        // forever (RunSources' own coverage contract, see AlsoCoveredModel below).
-        bool savedPriusPrimeThisPair = false;
-
         async Task<DetailPageOutcome> VisitLinkAsync(string detailUrl, int i, CancellationToken ct)
         {
             IPage? detailPage = null;
@@ -448,8 +443,7 @@ public static class WalkCommand
                 // MatchesMakeAndBaseModel rejects a "Prime" model by name), so it is checked for
                 // here first and, when it reads as one, saved and matched as Toyota Prius Prime
                 // instead of dropped as the wrong model.
-                bool isPriusPrime = string.Equals(make, "Toyota", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(model, "Prius", StringComparison.OrdinalIgnoreCase)
+                bool isPriusPrime = isPriusPair
                     && PriusPrimeVariant.ReadsAsPrime(outcome.Result.Make, outcome.Result.Model, outcome.Result.FuelType);
 
                 if (!isPriusPrime && !query.MatchesWalkedPage(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year, bodyText, outcome.Result.FuelType))
@@ -519,10 +513,6 @@ public static class WalkCommand
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);
-                if (isPriusPrime)
-                {
-                    savedPriusPrimeThisPair = true;
-                }
 
                 return DetailPageOutcome.Upserted;
             }
@@ -567,8 +557,16 @@ public static class WalkCommand
         bool capped = linkCollectionCapped || tally.Capped;
         AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered)}");
 
+        // The Prius pair's own search always mixes Prime candidates into its results (see
+        // isPriusPrime above), whether or not one happens to be new this run: a Prime already on
+        // the ledger is kept current from its search card the same as any other known link (see
+        // KnownCardTouches), never revisited, so gating this on a fresh save left every run after
+        // the first one that ever found a Prime unable to stamp its coverage token again, freezing
+        // LedgerDiffService's and VehiclePricing.ActivePostings' view of it at that first run
+        // forever. Stamping it whenever this pair's own search ran (successfully or partially, the
+        // same as its own coverage token) is what actually matches what the pair covered.
         return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls,
-            AlsoCoveredModel: savedPriusPrimeThisPair ? PriusPrimeVariant.StoredModel : null);
+            AlsoCoveredModel: isPriusPair ? PriusPrimeVariant.StoredModel : null);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
