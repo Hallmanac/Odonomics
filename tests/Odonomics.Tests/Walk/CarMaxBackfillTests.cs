@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Odonomics.Ledger;
 using Odonomics.Tests.Ledger;
 using Odonomics.Walk;
@@ -20,11 +21,19 @@ public class CarMaxBackfillTests
         File.WriteAllText(Path.Combine(pairDirectory, fileName), text);
     }
 
-    private static ListingCandidate BarePosting(string vin, int year, string model, string trim, int mileage, decimal price, string make = "Honda") => new()
+    private static void WriteCardsJson(string dataDirectory, string runFolder, string pair, string fileName, params (string Href, string Card)[] entries)
+    {
+        string pairDirectory = Path.Combine(dataDirectory, "walks", "carmax", runFolder, pair);
+        Directory.CreateDirectory(pairDirectory);
+        string json = JsonSerializer.Serialize(entries.Select(e => new { href = e.Href, text = "", card = e.Card }));
+        File.WriteAllText(Path.Combine(pairDirectory, fileName), json);
+    }
+
+    private static ListingCandidate BarePosting(string vin, int year, string model, string trim, int mileage, decimal price, string make = "Honda", string? url = null) => new()
     {
         Vin = vin,
         Source = "carmax",
-        Url = $"https://www.carmax.com/car/{vin}",
+        Url = url ?? $"https://www.carmax.com/car/{vin}",
         Year = year,
         Make = make,
         Model = model,
@@ -510,6 +519,82 @@ public class CarMaxBackfillTests
         await db.SaveChangesAsync(CancellationToken.None);
 
         await upsertService.UpsertAsync(BarePosting("4T1K61AK0RU000002", 2025, "Camry", "SE", 14000, 30998m, make: "Toyota"), seedRun, CancellationToken.None);
+
+        var backfillRun = new RunEntity { Command = "walk --backfill-carmax", Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        db.Runs.Add(backfillRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<PostingEntity> candidates = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+
+        CarMaxBackfillTally tally = await CarMaxBackfill.RunAsync(dataDirectory, candidates, upsertService, backfillRun, CancellationToken.None);
+
+        Assert.Equal(new CarMaxBackfillTally(Filled: 0, AlreadySet: 0, CouldNotMatch: 1), tally);
+    }
+
+    [Fact]
+    public async Task RunAsync_LedgerMileageDriftedPastTheTolerantRoundingWindow_StillMatchesViaItsOwnCardAndUrl()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        string dataDirectory = Path.GetDirectoryName(testDb.DatabasePath)!;
+
+        // The page itself still reads "25k miles"; a later, more exact source (auto.dev, cars.com) has
+        // since overwritten the shared vehicle row to 24,294, which rounds down to 24k rather than the
+        // page's 25k, so the plain tolerant match below can no longer see the two are the same car. The
+        // posting's own URL and its card in cards.json, both recorded by the very same walk that also
+        // recorded the detail page, still can.
+        WriteRecordedDetailPage(dataDirectory, "20260926-203954", "camry-hybrid", "detail-5.txt",
+            "2021 Toyota Camry Hybrid\nXSE\n25k miles\n\n$31,998\n\nOnly at CarMax Daytona, FL\n");
+        WriteCardsJson(dataDirectory, "20260926-203954", "camry-hybrid", "cards.json",
+            ("https://www.carmax.com/car/70206244",
+             "2021 Toyota Camry Hybrid\nXSE\n·\n25K mi\n$49 shipping·Get it by Tuesday\nEst. $522/mo\n·\n$31,998"));
+
+        var upsertService = new LedgerUpsertService(db);
+        var seedRun = new RunEntity { Command = "walk", Sources = "carmax:Camry Hybrid", StartedAt = new DateTimeOffset(2026, 9, 26, 20, 39, 54, TimeSpan.Zero) };
+        db.Runs.Add(seedRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsertService.UpsertAsync(
+            BarePosting("4T1K61AK0RU000005", 2021, "Camry Hybrid", "XSE", 24294, 31998m, make: "Toyota", url: "https://www.carmax.com/car/70206244"),
+            seedRun,
+            CancellationToken.None);
+
+        var backfillRun = new RunEntity { Command = "walk --backfill-carmax", Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        db.Runs.Add(backfillRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<PostingEntity> candidates = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+
+        CarMaxBackfillTally tally = await CarMaxBackfill.RunAsync(dataDirectory, candidates, upsertService, backfillRun, CancellationToken.None);
+
+        Assert.Equal(new CarMaxBackfillTally(Filled: 1, AlreadySet: 0, CouldNotMatch: 0), tally);
+
+        PostingEntity posting = (await upsertService.CarMaxPostingsAsync(CancellationToken.None)).Single(p => p.VehicleVin == "4T1K61AK0RU000005");
+        Assert.Equal("CarMax Daytona", posting.Dealer?.Name);
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordingsAcrossDifferentRunsDisagreeOnAvailability_LeavesTheCandidateUnmatched()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        string dataDirectory = Path.GetDirectoryName(testDb.DatabasePath)!;
+
+        // Same store both times, but the older run reads "Reserved at" and the newer reads "Only at":
+        // the class doc promises a candidate is left alone when any matching page disagrees about the
+        // availability, not only about the store, since a stale "Reserved" reading must never be
+        // written back onto a posting once a newer page shows the car free to buy.
+        WriteRecordedDetailPage(dataDirectory, "20260901-000000", "insight", "detail-1.txt",
+            "2019 Honda Insight\nEX\n42k miles\n\n$23,998\n\nReserved at CarMax Laurel, MD\n");
+        WriteRecordedDetailPage(dataDirectory, "20260927-192443", "insight", "detail-1.txt",
+            "2019 Honda Insight\nEX\n42k miles\n\n$23,998\n\nOnly at CarMax Laurel, MD\n");
+
+        var upsertService = new LedgerUpsertService(db);
+        var seedRun = new RunEntity { Command = "walk", Sources = "carmax:Insight", StartedAt = new DateTimeOffset(2026, 9, 27, 19, 24, 43, TimeSpan.Zero) };
+        db.Runs.Add(seedRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsertService.UpsertAsync(BarePosting("19XZE4F50KE000009", 2019, "Insight", "EX", 42000, 23998m), seedRun, CancellationToken.None);
 
         var backfillRun = new RunEntity { Command = "walk --backfill-carmax", Sources = "", StartedAt = DateTimeOffset.UtcNow };
         db.Runs.Add(backfillRun);
