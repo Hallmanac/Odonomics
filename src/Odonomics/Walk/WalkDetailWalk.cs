@@ -113,6 +113,32 @@ public static class WalkOutcomeWording
             : "";
         return $"doesn't match {query.Make} {query.Model}: {result.Year} {result.Make} {result.Model} {result.Trim}{suffix}";
     }
+
+    /// <summary>Which of a used car's three required fields were blank, comma-joined in the order year,
+    /// price, mileage ("mileage", or "year, mileage" when more than one is), so the operator's console
+    /// line for <see cref="DetailPageOutcome.MissingFields"/> names the actual gap instead of always
+    /// repeating the fixed "year/price/mileage" list regardless of which one the page left out. Shared by
+    /// every site, since the fields a used car's page has to state are the same everywhere.</summary>
+    public static string MissingFieldNames(int? year, decimal? price, int? mileage)
+    {
+        List<string> missing = [];
+        if (year is null)
+        {
+            missing.Add("year");
+        }
+
+        if (price is null)
+        {
+            missing.Add("price");
+        }
+
+        if (mileage is null)
+        {
+            missing.Add("mileage");
+        }
+
+        return string.Join(", ", missing);
+    }
 }
 
 /// <summary>How many candidate detail pages were dropped for each reason. Total, plus whatever
