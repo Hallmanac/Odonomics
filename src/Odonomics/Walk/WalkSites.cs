@@ -45,7 +45,12 @@ namespace Odonomics.Walk;
 /// page alone (see <see cref="ReadCardPrice"/>); null for a site whose card shape has not been confirmed
 /// from a recorded page, whose known listings are then seen again without a price. <paramref name="CardContainerSelector"/>
 /// is a CSS selector for the element that is one result card, for a site where the nearest ancestor holding
-/// a dollar amount (the default, see <see cref="SearchPageLinks"/>) is not the card. <paramref name="CardBadgeReader"/>
+/// a dollar amount (the default, see <see cref="SearchPageLinks"/>) is not the card. <paramref name="CardAmountPattern"/>
+/// overrides, as a JavaScript regular expression source, what counts as the card's own price marker during that
+/// ancestor climb, for a site whose card prints its price some other way than a dollar sign followed by a digit
+/// (autotrader, whose price is bare digits beside "See payment"; see <see cref="SearchPageLinks.CardAmountPattern"/>
+/// and <see cref="WalkSites.Autotrader"/>); null for a site whose card the default dollar-sign test already finds.
+/// <paramref name="CardBadgeReader"/>
 /// reads the site's own badges off a card's text as display-only posting attributes (see
 /// <see cref="ReadCardBadges"/>); null for a site whose card shape has not been confirmed.
 /// <paramref name="PickupReader"/>
@@ -107,6 +112,7 @@ public sealed record WalkSite(
     Regex? ExhaustedSearchPattern = null,
     Func<string, decimal?>? CardPriceReader = null,
     string? CardContainerSelector = null,
+    string? CardAmountPattern = null,
     Func<string, IReadOnlyDictionary<string, string>>? CardBadgeReader = null,
     Func<string, PickupOption?>? PickupReader = null,
     string? LazyDetailBlockMarker = null,
@@ -613,6 +619,13 @@ public static class WalkSites
     /// <see cref="PrivateSellerDealers"/>).</summary>
     public const string PrivateSellerDealerName = "Private seller";
 
+    /// <summary>autotrader's own override of <see cref="SearchPageLinks.CardAmountPattern"/>: the default
+    /// dollar sign, or bare digits immediately before "See payment" (its own price marker). Kept as an
+    /// alternative to the dollar sign rather than a replacement, since a "New ... MSRP$" recommendation
+    /// card still prints one; that card is never a candidate either way (its link carries no
+    /// clickType=listing, see <see cref="WalkSite.ResultCardLinkPattern"/>).</summary>
+    private const string AutotraderCardAmountPattern = SearchPageLinks.CardAmountPattern + @"|\d[\d,]*\s+See payment";
+
     /// <summary>autotrader's zip, radius, minimum year, maximum mileage, and hybrid facets. Both dealers and
     /// private sellers list there, so the URL carries no sellerTypes parameter (sellerTypes=d and
     /// sellerTypes=p narrow to one or the other). autotrader has one model per base model, so a hybrid
@@ -627,11 +640,15 @@ public static class WalkSites
     /// marks <c>clickType=listing</c>, not the sponsored top card (<c>clickType=alpha</c>), which ignores the
     /// search facets. A detail link is
     /// /cars-for-sale/vehicle/&lt;digits&gt;, sometimes followed by a query string and a fragment such as
-    /// #purchaseConfidence, both of which <see cref="CanonicalDetailUrl"/> strips. It has no
-    /// <see cref="WalkSite.CardPriceReader"/> yet: the recorded search page shows a card's price as bare
-    /// digits ("26,093", no dollar sign) and no recorded page carries a card's own markup, so its card
-    /// shape is not confirmed, and a known autotrader listing is seen again from its card without a
-    /// price until it is.</summary>
+    /// #purchaseConfidence, both of which <see cref="CanonicalDetailUrl"/> strips. Its card shows the price
+    /// as bare digits ("19,394", no dollar sign) immediately before "See payment" (recorded run
+    /// 20260927-162013, insight/search.txt lines 42-43), so <see cref="WalkSite.CardAmountPattern"/> tells
+    /// <see cref="SearchPageLinks.CardScript"/>'s ancestor climb to accept that beside the default dollar
+    /// sign, and <see cref="WalkSite.CardPriceReader"/> reads the same figure off the card
+    /// (see <see cref="CardPrices.AutotraderCardPrice"/>). Before this, every real card's own dollar-sign
+    /// test failed and read as no card at all; only a recommendation card, which prints a dollar sign
+    /// ("New ... MSRP$29,090"), ever carried card text, and neither kind is ever a candidate anyway (its
+    /// link carries no clickType=listing).</summary>
     public static readonly WalkSite Autotrader = new(
         "autotrader",
         query =>
@@ -657,6 +674,8 @@ public static class WalkSites
         NoPricePagePattern: new Regex(
             @"\A(?:(?!^\s*View similar vehicles\s*$)[\s\S])*^\s*Contact Dealer For Price\s*$",
             RegexOptions.IgnoreCase | RegexOptions.Multiline),
+        CardPriceReader: CardPrices.AutotraderCardPrice,
+        CardAmountPattern: AutotraderCardAmountPattern,
         CardBadgeReader: CardBadges.Autotrader,
         FeeStatementReader: FeeStatements.ReadAutotrader,
         DetailTitleModelReader: ReadTitleModel);

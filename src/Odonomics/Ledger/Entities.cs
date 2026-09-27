@@ -139,6 +139,12 @@ public static class PostingAttributeNames
 
     /// <summary>The "Free shipping" badge (carvana).</summary>
     public const string Shipping = "shipping";
+
+    /// <summary>The "Dealer Fees Included" badge (autotrader).</summary>
+    public const string FeesIncluded = "fees-included";
+
+    /// <summary>The "No Accidents" badge (autotrader).</summary>
+    public const string NoAccidents = "no-accidents";
 }
 
 /// <summary>A selling dealer, keyed by its normalized name and location (see

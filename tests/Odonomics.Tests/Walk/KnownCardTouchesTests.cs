@@ -347,15 +347,20 @@ public class KnownCardTouchesTests
         using OdonomicsDbContext db = testDb.CreateContext();
         var service = new LedgerUpsertService(db);
         RunEntity first = await StartRunAsync(db, FirstRunAt);
-        string url = "https://www.autotrader.com/cars-for-sale/vehicle/787014112";
-        await service.UpsertAsync(Candidate(1, 18000m) with { Source = "autotrader", Url = url }, first, CancellationToken.None);
+        string url = "https://www.cars.com/vehicledetail/787014112/";
+        await service.UpsertAsync(Candidate(1, 18000m) with { Source = "cars.com", Url = url }, first, CancellationToken.None);
         RunEntity second = await StartRunAsync(db, SecondRunAt);
-        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "autotrader", second, revisit: false, CancellationToken.None);
-        var page = new SearchPageContent([new PageLink(url + "?clickType=listing", "2022 Toyota Prius", "Used\n2022 Toyota Prius\n138K mi\n17,499\nSee payment")], "1 Match");
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "cars.com", second, revisit: false, CancellationToken.None);
+        // CarMax is the only site with no CardPriceReader in production (its cards never disclose which
+        // dollar amount is the asking price), but it collects through SearchPageLoadMore rather than this
+        // paged-URL routine, so a plain override on a site that does route through it (CollectLinksAsync)
+        // proves the same "no reader" path without borrowing a routine this site doesn't actually use.
+        WalkSite siteWithNoCardPriceReader = WalkSites.CarsCom with { CardPriceReader = null };
+        var page = new SearchPageContent([new PageLink(url, "Used 2022 Toyota Prius", "Used 2022 Toyota Prius\n$17,499")]);
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
-            WalkSites.Autotrader,
-            "https://www.autotrader.com/cars-for-sale/used-cars/toyota/prius",
+            siteWithNoCardPriceReader,
+            "https://www.cars.com/shopping/results/?makes[]=toyota&models[]=toyota-prius",
             60,
             touches.TryTouchAsync,
             (_, _, _) => Task.FromResult(page),
@@ -369,6 +374,58 @@ public class KnownCardTouchesTests
         Assert.Equal(1, touches.Count);
         Assert.Single(db.PriceObservations);
         Assert.Equal(SecondRunAt, (await db.Postings.SingleAsync()).LastSeen);
+    }
+
+    [Fact]
+    public async Task ARepeatWalk_AKnownAutotraderCardSeenAgainAtALowerPriceIsAPriceDropAndNotGone()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity first = await StartRunAsync(db, FirstRunAt);
+        // Vehicle id and card text are walks/autotrader/20260927-162013/insight/search.txt lines 37-50
+        // (Driver's Mart Sanford, 2021 Honda Insight EX), with an earlier, higher seeded price.
+        string url = "https://www.autotrader.com/cars-for-sale/vehicle/790827297";
+        await service.UpsertAsync(Candidate(1, 19999m) with { Source = "autotrader", Url = url }, first, CancellationToken.None);
+        RunEntity second = await StartRunAsync(db, SecondRunAt);
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "autotrader", second, revisit: false, CancellationToken.None);
+        const string cardText = """
+            Used
+            2021 Honda Insight
+            EX
+            69K mi
+             Hybrid
+            19,394
+            See payment
+            Great Price
+            Dealer Fees Included
+            No Accidents
+            Driver's Mart Sanford
+            25.69 mi. away
+            (407) 663-0156
+            Check Availability
+            """;
+        var page = new SearchPageContent([new PageLink(url + "?clickType=listing", "2021 Honda Insight", cardText)], "1 Match");
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.Autotrader,
+            "https://www.autotrader.com/cars-for-sale/used-cars/honda/insight",
+            60,
+            touches.TryTouchAsync,
+            (_, _, _) => Task.FromResult(page),
+            (_, _) => { },
+            _ => { },
+            () => { },
+            CancellationToken.None);
+        await touches.CommitAsync(CancellationToken.None);
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(second, DaughterScenario, CancellationToken.None);
+
+        Assert.Empty(pool);
+        PriceDropEntry drop = Assert.Single(diff.PriceDrops);
+        Assert.Equal((url, 19999m, 19394m), (drop.Url, drop.PreviousPrice, drop.CurrentPrice));
+        Assert.Empty(diff.Gone);
+        Dictionary<string, (string Value, int RunId)> attributes = await AttributesAtAsync(db, url);
+        Assert.Equal(("Great Price", second.Id), attributes[PostingAttributeNames.Deal]);
     }
 
     private static async Task<Dictionary<string, (string Value, int RunId)>> AttributesAtAsync(OdonomicsDbContext db, string url) =>

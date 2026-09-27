@@ -29,8 +29,9 @@ public static class CardBadges
         ],
         DealerRatingLine);
 
-    /// <summary>autotrader prints a price badge (Great Price or Good Price), "Price Drop", and
-    /// "Online Paperwork". It also prints "High Demand" and others that are not recorded.</summary>
+    /// <summary>autotrader prints a price badge (Great Price or Good Price), "Price Drop",
+    /// "Online Paperwork", "Dealer Fees Included", and "No Accidents". It also prints "High Demand"
+    /// and others that are not recorded.</summary>
     public static IReadOnlyDictionary<string, string> Autotrader(string cardText) => Read(
         cardText,
         [
@@ -38,6 +39,8 @@ public static class CardBadges
             ("Good Price", PostingAttributeNames.Deal),
             ("Price Drop", PostingAttributeNames.PriceDrop),
             ("Online Paperwork", PostingAttributeNames.Paperwork),
+            ("Dealer Fees Included", PostingAttributeNames.FeesIncluded),
+            ("No Accidents", PostingAttributeNames.NoAccidents),
         ]);
 
     /// <summary>carvana prints "Great Deal", "Price Drop", and "Free shipping". Its "Recent" tag is a sort

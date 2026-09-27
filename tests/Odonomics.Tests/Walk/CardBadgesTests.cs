@@ -5,7 +5,9 @@ namespace Odonomics.Tests.Walk;
 
 /// <summary>Card texts here are cut from the search pages the walk recorded on 2026-09-26
 /// (walks/cars.com/20260926-121057/, walks/autotrader/20260926-121057/ and walks/carvana/20260926-121057/,
-/// each under corolla-hybrid, prius or camry-hybrid). A carvana or autotrader badge prints ahead of the
+/// each under corolla-hybrid, prius or camry-hybrid), plus one cut from walks/autotrader/20260927-162013/insight/
+/// (<see cref="AutotraderRecordedListingCard"/>), the run whose cards.json first showed every real listing
+/// card reading back empty. A carvana or autotrader badge prints ahead of the
 /// card's title in the page text, so it sits at the top of its card.</summary>
 public class CardBadgesTests
 {
@@ -122,7 +124,26 @@ public class CardBadgesTests
         17K mi
          Hybrid
         29,524
+        See payment
+        """;
+
+    // Recorded run 20260927-162013, insight/search.txt lines 37-50 (Driver's Mart Sanford, 2021 Honda
+    // Insight EX).
+    private const string AutotraderRecordedListingCard = """
+        Used
+        2021 Honda Insight
+        EX
+        69K mi
+         Hybrid
+        19,394
+        See payment
+        Great Price
         Dealer Fees Included
+        No Accidents
+        Driver's Mart Sanford
+        25.69 mi. away
+        (407) 663-0156
+        Check Availability
         """;
 
     private const string AutotraderHighDemandCard = """
@@ -270,21 +291,24 @@ public class CardBadgesTests
     }
 
     [Fact]
-    public void Autotrader_ReadsAGreatPrice()
+    public void Autotrader_ReadsAGreatPriceAndDealerFeesIncluded()
     {
         AssertBadges(
             WalkSites.Autotrader.ReadCardBadges(AutotraderGreatPrice),
-            (PostingAttributeNames.Deal, "Great Price"));
+            (PostingAttributeNames.Deal, "Great Price"),
+            (PostingAttributeNames.FeesIncluded, "Dealer Fees Included"));
     }
 
     [Fact]
-    public void Autotrader_ReadsAGoodPriceAPriceDropAndOnlinePaperwork()
+    public void Autotrader_ReadsAGoodPriceAPriceDropOnlinePaperworkDealerFeesIncludedAndNoAccidents()
     {
         AssertBadges(
             WalkSites.Autotrader.ReadCardBadges(AutotraderGoodPriceOnlinePaperworkPriceDrop),
             (PostingAttributeNames.Deal, "Good Price"),
             (PostingAttributeNames.PriceDrop, "Price Drop"),
-            (PostingAttributeNames.Paperwork, "Online Paperwork"));
+            (PostingAttributeNames.Paperwork, "Online Paperwork"),
+            (PostingAttributeNames.FeesIncluded, "Dealer Fees Included"),
+            (PostingAttributeNames.NoAccidents, "No Accidents"));
     }
 
     [Fact]
@@ -292,13 +316,25 @@ public class CardBadgesTests
     {
         AssertBadges(
             WalkSites.Autotrader.ReadCardBadges(AutotraderHighDemandCard),
-            (PostingAttributeNames.Deal, "Great Price"));
+            (PostingAttributeNames.Deal, "Great Price"),
+            (PostingAttributeNames.FeesIncluded, "Dealer Fees Included"),
+            (PostingAttributeNames.NoAccidents, "No Accidents"));
     }
 
     [Fact]
     public void Autotrader_ACardWithNoBadgeRecordsNothing()
     {
         Assert.Empty(WalkSites.Autotrader.ReadCardBadges(AutotraderNoBadge));
+    }
+
+    [Fact]
+    public void Autotrader_ARecordedListingCard_ReadsGreatPriceDealerFeesIncludedAndNoAccidents()
+    {
+        AssertBadges(
+            WalkSites.Autotrader.ReadCardBadges(AutotraderRecordedListingCard),
+            (PostingAttributeNames.Deal, "Great Price"),
+            (PostingAttributeNames.FeesIncluded, "Dealer Fees Included"),
+            (PostingAttributeNames.NoAccidents, "No Accidents"));
     }
 
     [Fact]
