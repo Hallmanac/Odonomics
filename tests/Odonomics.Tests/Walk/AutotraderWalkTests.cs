@@ -92,6 +92,18 @@ public class AutotraderWalkTests
         Assert.Contains("zip=32114&searchRadius=75&startYear=2021&maxMileage=60000&", url);
     }
 
+    [Fact]
+    public void PagedSearchUrl_Page2_AppendsFirstRecordTwentyFive()
+    {
+        string first = WalkSites.Autotrader.BuildSearchUrls(Query("Toyota", "Corolla Hybrid")).Single();
+
+        // 25 clickType=listing cards per page, offset by record count: confirmed against a live
+        // autotrader.com search on 2026-09-27 (see the class remarks on WalkSites.Autotrader), whose
+        // &firstRecord=25 page returned a disjoint set of listing ids from the first page.
+        Assert.Equal(first + "&firstRecord=25", WalkSites.Autotrader.PagedSearchUrl!(first, 2, null));
+        Assert.Equal(first + "&firstRecord=50", WalkSites.Autotrader.PagedSearchUrl!(first, 3, null));
+    }
+
     [Theory]
     [InlineData("https://www.autotrader.com/cars-for-sale/vehicle/789050704", true)]
     [InlineData("https://www.autotrader.com/cars-for-sale/vehicle/789050704?listingType=USED&clickType=listing", true)]

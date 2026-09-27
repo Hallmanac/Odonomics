@@ -1188,6 +1188,77 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_AWalkWhoseSecondAutotraderPageFailed_ReportsPagesUnreadForAKnownPostingThatSortedOntoPageTwo()
+    {
+        // The gap from run session odonomics-cd, 2026-09-27: a 39-match search whose second page
+        // (firstRecord=25) was never opened at all before autotrader had a PagedSearchUrl, so a known
+        // posting that sorts onto that page was wrongly reported "not on search page" instead of
+        // "pages unread". This is the same failed-page path cars.com and carvana already prove above,
+        // now exercised with autotrader's own offset-by-record paging.
+        ListingCandidate onPageOne = Candidate("JTDKN3DU0A0000026", 15000m, "https://www.autotrader.com/cars-for-sale/vehicle/1000", "autotrader");
+        ListingCandidate onPageTwo = Candidate("JTDKN3DU0A0000027", 16000m, "https://www.autotrader.com/cars-for-sale/vehicle/2000", "autotrader");
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        RunEntity run1 = Run(FirstRunAt, "autotrader:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(onPageOne, run1, CancellationToken.None);
+        await upsert.UpsertAsync(onPageTwo, run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        int? failedPage = null;
+        await WalkCoverage.RunAsync(
+            run2,
+            [WalkSites.Autotrader],
+            ["Toyota Prius"],
+            async (site, _, ct) =>
+            {
+                await WalkSearchPages.CollectLinksAsync(
+                    site,
+                    "https://www.autotrader.com/cars-for-sale/used-cars/toyota/prius?zip=32833",
+                    WalkPairSearches.UnboundedPool,
+                    async (url, _, _, touchCt) =>
+                    {
+                        // The ledger holds page 1's posting, which the walk keeps current from its card.
+                        if (url != onPageOne.Url)
+                        {
+                            return false;
+                        }
+
+                        await upsert.UpsertAsync(onPageOne, run2, touchCt);
+                        return true;
+                    },
+                    (_, pageNumber, _) => pageNumber == 1
+                        ? Task.FromResult(new SearchPageContent(
+                            [.. Enumerable.Range(0, 25).Select(i => new PageLink($"https://www.autotrader.com/cars-for-sale/vehicle/{1000 + i}?clickType=listing", ""))],
+                            "39 Matches"))
+                        : throw new TimeoutException("page 2 timed out"),
+                    (pageNumber, _) => failedPage ??= pageNumber,
+                    _ => { },
+                    () => { },
+                    ct);
+                return new WalkPairOutcome(0, 0, new DroppedBreakdown(0, 0, 0, 0), FailedPage: failedPage);
+            },
+            (_, _) => { },
+            (_, _, ex) => throw ex,
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        Assert.Equal(2, failedPage);
+        Assert.Equal("autotrader:Prius,unread:autotrader:Prius", run2.Sources);
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal(onPageTwo.Vin, gone.Vin);
+        Assert.Equal(GoneReasons.PagesUnread, gone.Reason);
+    }
+
+    [Fact]
     public async Task ComputeAsync_AnotherPairCoveredPartially_LeavesThisPairsGoneAsNotOnSearchPage()
     {
         ListingCandidate prius = Candidate("JTDKN3DU0A0000007", 15000m, "https://cars.com/prius", "cars.com");

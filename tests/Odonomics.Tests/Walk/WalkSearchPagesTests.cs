@@ -359,6 +359,50 @@ public class WalkSearchPagesTests
         Assert.Single(browser.Loads);
     }
 
+    private static List<PageLink> AutotraderCards(int startingId, int count) =>
+        [.. Enumerable.Range(0, count).Select(i => new PageLink($"https://www.autotrader.com/cars-for-sale/vehicle/{startingId + i}?clickType=listing", ""))];
+
+    [Fact]
+    public async Task Autotrader_AStatedCountOverOnePageFollowsASecondPageByFirstRecordOffset()
+    {
+        // The shape reported from walk run 20260927-162013's corolla-hybrid search: 39 Matches, with
+        // only the first page's 25 cards ever read before WalkSite.Autotrader had a PagedSearchUrl.
+        const string search = "https://www.autotrader.com/cars-for-sale/used-cars/toyota/corolla?zip=32833";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>> { [1] = AutotraderCards(1000, 25), [2] = AutotraderCards(2000, 14) },
+            new Dictionary<int, string> { [1] = "39 Matches", [2] = "39 Matches" });
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(WalkSites.Autotrader, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { }, CancellationToken.None);
+
+        Assert.Equal(39, pool.Count);
+        Assert.Equal([search, $"{search}&firstRecord=25"], browser.Loads.Select(l => l.Url));
+        Assert.Contains("https://www.autotrader.com/cars-for-sale/vehicle/1000?clickType=listing", pool);
+        Assert.Contains("https://www.autotrader.com/cars-for-sale/vehicle/2013?clickType=listing", pool);
+    }
+
+    [Fact]
+    public async Task Autotrader_ASecondPageThatFailsEndsPagingAndKeepsTheFirstPagesLinks()
+    {
+        const string search = "https://www.autotrader.com/cars-for-sale/used-cars/toyota/corolla?zip=32833";
+        List<(int PageNumber, string Message)> failures = [];
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.Autotrader,
+            search,
+            WalkPairSearches.UnboundedPool,
+            NoneKnown,
+            (_, pageNumber, _) => pageNumber == 1
+                ? Task.FromResult(new SearchPageContent(AutotraderCards(1000, 25), "39 Matches"))
+                : throw new TimeoutException("page 2 timed out"),
+            (pageNumber, ex) => failures.Add((pageNumber, ex.Message)),
+            _ => { },
+            () => { },
+            CancellationToken.None);
+
+        Assert.Equal(25, pool.Count);
+        Assert.Equal([(2, "page 2 timed out")], failures);
+    }
+
     [Theory]
     [InlineData("16 cars\n\n16 cars", 16)]
     [InlineData("1 car\nChange Location", 1)]
