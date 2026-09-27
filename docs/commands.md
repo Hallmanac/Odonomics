@@ -7,8 +7,8 @@ The table below lists the commands in the order you'd run them. [running.md](run
 ```
 odo search                          run Auto.dev and Marketcheck, upsert the ledger, print the diff
 odo walk [cars.com|carvana|autotrader|carmax|cargurus] [--model "Make Model"] [--max N] [--revisit]
-odo walk --backfill-carmax          fill a bare CarMax dealer's store and availability from disk
                                     an operator-assisted browser walk of the shortlist
+odo walk --backfill-carmax          fill a bare CarMax dealer's store and availability from disk
 odo research [<vin> ...] [--refresh] [--quiet]
                                     safety ratings and VIN history, with a red-flags summary
 odo dealer grade (--all | <vin>) [--refresh]
