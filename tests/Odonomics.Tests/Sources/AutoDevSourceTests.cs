@@ -203,11 +203,12 @@ public class AutoDevSourceTests
     }
 
     [Fact]
-    public async Task RunAsync_ApiReturnsAPriusPrimeForAPlainPriusQuery_StoredAsPriusPrimeNotRejected()
+    public async Task RunAsync_ApiReturnsAPriusPrimeForAPlainPriusQuery_RejectedAsNotACandidate()
     {
         // auto.dev's Prius search can mix a Prius Prime in with the plain trims, the same way it
-        // mixes a base gas model into a hybrid query; unlike that case, a Prime is not an unknown
-        // model to reject, it's the scenario's own Toyota Prius Prime, stored as such.
+        // mixes a base gas model into a hybrid query; unlike that case, a Prime isn't a mismatched
+        // model that "doesn't match the query", it's Toyota's plug-in variant, rejected by its own
+        // name and never stored as a Prius.
         ListingQuery query = new("Toyota", "Prius", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
                      $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
@@ -232,18 +233,18 @@ public class AutoDevSourceTests
 
         SourceResult result = await source.RunAsync([query], CancellationToken.None);
 
-        ListingCandidate candidate = Assert.Single(result.Candidates);
-        Assert.Equal("Prius Prime", candidate.Model);
-        Assert.Empty(result.Rejections);
+        Assert.Empty(result.Candidates);
+        string rejection = Assert.Single(result.Rejections);
+        Assert.Contains("candidate rejected, Prius Prime, not a candidate", rejection);
+        Assert.Contains("JTDACACU5T3062285", rejection);
     }
 
     [Fact]
-    public async Task RunAsync_ApiReturnsAPriusPlugInHybridModelForAPlainPriusQuery_StoredAsPriusPrimeNotRejected()
+    public async Task RunAsync_ApiReturnsAPriusPlugInHybridModelForAPlainPriusQuery_RejectedAsNotACandidate()
     {
-        // auto.dev carries no fuel-type or trim-level field beyond "model" and "trim", so Toyota's
-        // 2025-and-later naming ("2025 Toyota Prius Plug In Hybrid SE") has nothing to identify the
-        // variant by except the model text itself; this must still be stored as Toyota Prius Prime
-        // rather than rejected as an unknown model.
+        // auto.dev carries no fuel-type field beyond "model" and "trim", so Toyota's 2025-and-later
+        // naming ("2025 Toyota Prius Plug In Hybrid SE") has nothing to identify the variant by
+        // except the model text itself; this must still be rejected rather than stored as a Prius.
         ListingQuery query = new("Toyota", "Prius", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
                      $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
@@ -268,9 +269,45 @@ public class AutoDevSourceTests
 
         SourceResult result = await source.RunAsync([query], CancellationToken.None);
 
-        ListingCandidate candidate = Assert.Single(result.Candidates);
-        Assert.Equal("Prius Prime", candidate.Model);
-        Assert.Empty(result.Rejections);
+        Assert.Empty(result.Candidates);
+        string rejection = Assert.Single(result.Rejections);
+        Assert.Contains("candidate rejected, Prius Prime, not a candidate", rejection);
+        Assert.Contains("JTDACACU8S3046841", rejection);
+    }
+
+    [Fact]
+    public async Task RunAsync_ApiReturnsPlainPriusModelWithAPrimeTrimForAPlainPriusQuery_RejectedAsNotACandidate()
+    {
+        // Some record could carry the variant only in "trim" rather than folded into "model"; the
+        // rejection has to catch that shape too, not just a model field that already says Prime.
+        ListingQuery query = new("Toyota", "Prius", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
+        const string body = """
+            {
+              "records": [
+                {
+                  "vin": "JTDACACU1T3099999",
+                  "vdpUrl": "https://auto.dev/listing/6",
+                  "year": 2024,
+                  "make": "Toyota",
+                  "model": "Prius",
+                  "trim": "Prime XSE",
+                  "priceUnformatted": 28000,
+                  "mileageUnformatted": 4155
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Empty(result.Candidates);
+        string rejection = Assert.Single(result.Rejections);
+        Assert.Contains("candidate rejected, Prius Prime, not a candidate", rejection);
+        Assert.Contains("JTDACACU1T3099999", rejection);
     }
 
     [Fact]

@@ -167,15 +167,15 @@ public class MarketcheckSourceTests
     }
 
     [Fact]
-    public async Task RunAsync_ApiReturnsAPriusPrimeForAPlainPriusQuery_StoredAsPriusPrimeNotRejected()
+    public async Task RunAsync_ApiReturnsAPriusPrimeForAPlainPriusQuery_RejectedAsNotACandidate()
     {
         // Marketcheck's Prius search can mix a Prius Prime in with the plain trims, the same way it
-        // mixes a base gas model into a hybrid query; unlike that case, a Prime is not an unknown
-        // model to reject, it's the scenario's own Toyota Prius Prime, stored as such. The shape here
-        // is the actual recorded Prime (spike/recorded/marketcheck/day1/Toyota-Prius.json,
-        // JTDACACU8S3046841): build.model stays the bare "Prius", with no hint of the variant in it
-        // at all; "SE Plug-in Hybrid" is in build.version, and build.powertrain_type reads "PHEV"
-        // where a plain Prius's own reads "HEV".
+        // mixes a base gas model into a hybrid query; unlike that case, a Prime isn't a mismatched
+        // model that "doesn't match the query", it's Toyota's plug-in variant, rejected by its own
+        // name and never stored as a Prius. The shape here is the actual recorded Prime
+        // (spike/recorded/marketcheck/day1/Toyota-Prius.json, JTDACACU8S3046841): build.model stays
+        // the bare "Prius", with no hint of the variant in it at all; "SE Plug-in Hybrid" is in
+        // build.version, and build.powertrain_type reads "PHEV" where a plain Prius's own reads "HEV".
         ListingQuery query = new("Toyota", "Prius", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         int yearMax = DateTime.UtcNow.Year + 1;
         string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
@@ -199,9 +199,44 @@ public class MarketcheckSourceTests
 
         SourceResult result = await source.RunAsync([query], CancellationToken.None);
 
-        ListingCandidate candidate = Assert.Single(result.Candidates);
-        Assert.Equal("Prius Prime", candidate.Model);
-        Assert.Empty(result.Rejections);
+        Assert.Empty(result.Candidates);
+        string rejection = Assert.Single(result.Rejections);
+        Assert.Contains("candidate rejected, Prius Prime, not a candidate", rejection);
+        Assert.Contains("JTDACACU8S3046841", rejection);
+    }
+
+    [Fact]
+    public async Task RunAsync_ApiReturnsPlainPriusModelWithAPrimeTrimForAPlainPriusQuery_RejectedAsNotACandidate()
+    {
+        // Some record could carry the variant only in build.trim, with no version or
+        // powertrain_type field at all; the rejection has to catch that shape too.
+        ListingQuery query = new("Toyota", "Prius", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        int yearMax = DateTime.UtcNow.Year + 1;
+        string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
+                     $"?api_key=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_range={query.YearMin}-{yearMax}&miles_range=0-{query.MaxMileage}&car_type=used";
+        const string body = """
+            {
+              "listings": [
+                {
+                  "vin": "JTDACACU1T3099999",
+                  "vdp_url": "https://marketcheck.com/listing/6",
+                  "price": 28000,
+                  "miles": 4155,
+                  "build": { "year": 2024, "make": "Toyota", "model": "Prius", "trim": "Prime XSE" }
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new MarketcheckSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        Assert.Empty(result.Candidates);
+        string rejection = Assert.Single(result.Rejections);
+        Assert.Contains("candidate rejected, Prius Prime, not a candidate", rejection);
+        Assert.Contains("JTDACACU1T3099999", rejection);
     }
 
     [Fact]
