@@ -485,6 +485,17 @@ public static class WalkCommand
 
                 CardFee? cardFee = cardText is null ? null : site.ReadCardFee(cardText);
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
+                if (site.DetailDealerReader is not null && dealer.IsFallback && site.DetailDealerReader(bodyText) is null)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: {WalkOutcomeWording.StoreLineNotRecognised(dealer.Name ?? WalkSites.CarMaxDealerName)}[/]");
+                }
+
+                Dictionary<string, string> attributes = new(knownTouches.BadgesOfNewLink(canonicalUrl));
+                if (site.ReadDetailAvailability(bodyText) is string availability)
+                {
+                    attributes[PostingAttributeNames.Availability] = availability;
+                }
+
                 var candidate = new ListingCandidate
                 {
                     Vin = vin,
@@ -516,7 +527,7 @@ public static class WalkCommand
                     DealerLocation = dealer.Location,
                     DealerNameIsFallback = dealer.IsFallback,
                     ShippingFee = cardFee?.ShippingFee ?? site.ReadShippingFee(bodyText),
-                    Attributes = knownTouches.BadgesOfNewLink(canonicalUrl),
+                    Attributes = attributes,
                     PickupFee = pickup?.Fee,
                     PickupLocation = cardFee?.PickupLocation ?? pickup?.Location,
                     FeePosture = feeStatement?.Posture,

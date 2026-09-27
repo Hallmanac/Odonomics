@@ -27,6 +27,16 @@ public class CarMaxStoresTests
     [InlineData("Ships from CarMax Jacksonville West, FL", "CarMax Jacksonville West", "Jacksonville West, FL")]
     [InlineData("Ships from CarMax Ft. Lauderdale, FL", "CarMax Ft. Lauderdale", "Ft. Lauderdale, FL")]
     [InlineData("Available at CarMax Daytona", "CarMax Daytona", "Daytona")]
+    // The lines below are copied verbatim from walks/carmax/20260927-192443's recorded detail pages
+    // (insight/detail-4.txt, insight/detail-22.txt, insight/detail-31.txt, insight/detail-8.txt,
+    // corolla-hybrid/detail-6.txt, insight/detail-26.txt), one for each header shape a gap analysis
+    // of that run found CarMaxStores did not yet recognize.
+    [InlineData("Only at CarMax Laurel, MD", "CarMax Laurel", "Laurel, MD")]
+    [InlineData("Reserved at CarMax North Houston, TX", "CarMax North Houston", "North Houston, TX")]
+    [InlineData("Coming to CarMax Mobile, AL", "CarMax Mobile", "Mobile, AL")]
+    [InlineData("Ships from CarMax Arlington/Ft. Worth, TX", "CarMax Arlington/Ft. Worth", "Arlington/Ft. Worth, TX")]
+    [InlineData("Ships from CarMax Jackson (MS), MS", "CarMax Jackson (MS)", "Jackson (MS), MS")]
+    [InlineData("Reserved at CarMax Boise (Meridian), ID", "CarMax Boise (Meridian)", "Boise (Meridian), ID")]
     public void Read_StoreLine_ReturnsTheStoreAndItsCity(string line, string expectedName, string expectedLocation)
     {
         string page = $"2025 Toyota Camry\nSE\n14k miles\n\n$30,998\nAvailable today\n\n{line}\n\nDetailed history report\n";
@@ -34,6 +44,29 @@ public class CarMaxStoresTests
         ResolvedDealer? store = CarMaxStores.Read(page);
 
         Assert.Equal(new ResolvedDealer(expectedName, expectedLocation, IsFallback: false), store);
+    }
+
+    [Theory]
+    [InlineData("Test drive at CarMax Orlando, FL", null)]
+    [InlineData("Ships from CarMax Sanford, FL", null)]
+    [InlineData("Available at CarMax Daytona", null)]
+    [InlineData("Only at CarMax Laurel, MD", null)]
+    [InlineData("Reserved at CarMax North Houston, TX", CarMaxStores.Reserved)]
+    [InlineData("Coming to CarMax Mobile, AL", CarMaxStores.ComingSoon)]
+    [InlineData("Reserved at CarMax Boise (Meridian), ID", CarMaxStores.Reserved)]
+    public void ReadAvailability_StoreLine_ReturnsReservedOrComingSoonOnlyForThoseHeaders(string line, string? expected)
+    {
+        string page = $"2025 Toyota Camry\nSE\n14k miles\n\n$30,998\n\n{line}\n\nDetailed history report\n";
+
+        Assert.Equal(expected, CarMaxStores.ReadAvailability(page));
+    }
+
+    [Fact]
+    public void ReadAvailability_PageNamingNoStore_ReturnsNull()
+    {
+        const string page = "CarMax\n2022 Toyota Prius LE\n$24,998\n";
+
+        Assert.Null(CarMaxStores.ReadAvailability(page));
     }
 
     [Fact]
@@ -97,6 +130,18 @@ public class CarMaxStoresTests
         ResolvedDealer dealer = WalkSites.Carvana.ResolveDealer(null, null, "Test drive at CarMax Orlando, FL");
 
         Assert.Equal(new ResolvedDealer("Carvana", null, IsFallback: true), dealer);
+    }
+
+    [Fact]
+    public void ReadDetailAvailability_CarMaxReservedPage_ReadsTheReservedNote()
+    {
+        Assert.Equal(CarMaxStores.Reserved, WalkSites.CarMax.ReadDetailAvailability("Reserved at CarMax North Houston, TX"));
+    }
+
+    [Fact]
+    public void ReadDetailAvailability_OnASiteWithNoAvailabilityReader_ReturnsNull()
+    {
+        Assert.Null(WalkSites.Carvana.ReadDetailAvailability("Coming to CarMax Mobile, AL"));
     }
 
     [Fact]

@@ -94,4 +94,10 @@ public class WalkOutcomeWordingTests
     {
         Assert.Equal("", WalkOutcomeWording.MissingFieldNames(2026, 33990m, 12066));
     }
+
+    [Fact]
+    public void StoreLineNotRecognised_NamesTheFallbackDealer()
+    {
+        Assert.Equal("store line not recognised, saved under bare CarMax", WalkOutcomeWording.StoreLineNotRecognised("CarMax"));
+    }
 }

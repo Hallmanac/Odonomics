@@ -127,6 +127,18 @@ public class ShowRendererPostingsTableRenderingTests
         Assert.Empty(ShowRenderer.PostingAttributeLines([CarvanaPosting(null)]));
     }
 
+    [Fact]
+    public void PostingAttributeLines_CarMaxPostingReservedForAnotherBuyer_ShowsItBesideThePosting()
+    {
+        PostingEntity posting = CarvanaPosting(null);
+        posting.Source = "carmax";
+        posting.Attributes = [new PostingAttributeEntity { PostingId = 1, Name = PostingAttributeNames.Availability, Value = CarMaxStores.Reserved, ObservedRunId = 1 }];
+
+        IReadOnlyList<string> lines = ShowRenderer.PostingAttributeLines([posting]);
+
+        Assert.Equal(["  carmax availability: Reserved for another buyer"], lines);
+    }
+
     private static string[] Render(PostingEntity posting)
     {
         var console = new TestConsole();
