@@ -12,15 +12,19 @@ namespace Odonomics.Tests.Walk;
 public class SearchPageCardRenderWaitTests
 {
     /// <summary>A card whose own text is empty until <paramref name="rendersOnScan"/> (1-based): the scan
-    /// that number and every one after it sees <paramref name="renderedText"/> instead.</summary>
-    private sealed class FakeCard(string href, string renderedText, int rendersOnScan)
+    /// that number and every one after it sees <paramref name="renderedText"/> instead. When
+    /// <paramref name="requiresScroll"/> is set, the card renders no earlier than that scan and only once
+    /// it has actually been scrolled, the same as a lazily hydrated cars.com card.</summary>
+    private sealed class FakeCard(string href, string renderedText, int rendersOnScan, bool requiresScroll = false)
     {
         public string Href { get; } = href;
         private readonly string _renderedText = renderedText;
         private readonly int _rendersOnScan = rendersOnScan;
+        private readonly bool _requiresScroll = requiresScroll;
         public bool Scrolled { get; private set; }
 
-        public string TextAsOf(int scanNumber) => scanNumber >= _rendersOnScan ? _renderedText : "";
+        public string TextAsOf(int scanNumber) =>
+            scanNumber >= _rendersOnScan && (!_requiresScroll || Scrolled) ? _renderedText : "";
 
         public void Scroll() => Scrolled = true;
     }
@@ -36,15 +40,17 @@ public class SearchPageCardRenderWaitTests
             JsonElement options = JsonSerializer.SerializeToElement(arg);
             var hasAmount = new Regex(options.GetProperty("amount").GetString()!);
 
-            // Mirrors RenderScanScript's own guard: only the first still-unrendered card of the scan
-            // is scrolled, since the browser only ever realizes one scroll position per script call.
+            // Mirrors RenderScanScript's own guard: only the first still-unrendered, not-yet-scrolled
+            // card of the scan is scrolled, since the browser only ever realizes one scroll position per
+            // script call, and a card's own Scrolled flag persists between calls the same way the script's
+            // data attribute survives between calls against the same live page.
             List<string> hrefs = [];
             bool scrolled = false;
             foreach (FakeCard card in cards)
             {
                 if (!hasAmount.IsMatch(card.TextAsOf(ScanCount)))
                 {
-                    if (!scrolled)
+                    if (!scrolled && !card.Scrolled)
                     {
                         card.Scroll();
                         scrolled = true;
@@ -116,6 +122,21 @@ public class SearchPageCardRenderWaitTests
         Assert.False(rendersFirstScan.Scrolled);
         Assert.True(rendersLater.Scrolled);
         Assert.True(neverCard.Scrolled);
+    }
+
+    [Fact]
+    public async Task RunAsync_ACardThatNeverRendersComesFirst_StillScrollsAndRendersTheCardAfterIt()
+    {
+        const string neverRenders = "https://www.cars.com/vehicledetail/never/?sid=1";
+        var neverCard = new FakeCard(neverRenders, "$20,000 Used 2020 Honda Insight EX", rendersOnScan: SearchPageCardRenderWait.MaxScans + 10);
+        var rendersOnceScrolled = new FakeCard("https://www.cars.com/vehicledetail/later/?sid=1", "$19,201 Used 2019 Honda Insight Touring", rendersOnScan: 1, requiresScroll: true);
+        var page = new FakePage(neverCard, rendersOnceScrolled);
+
+        IReadOnlyList<string> unrendered = await RunAsync(page);
+
+        Assert.Equal([neverRenders], unrendered);
+        Assert.True(neverCard.Scrolled);
+        Assert.True(rendersOnceScrolled.Scrolled);
     }
 
     [Fact]
