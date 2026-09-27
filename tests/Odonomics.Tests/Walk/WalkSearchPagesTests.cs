@@ -602,6 +602,31 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
+    public async Task CarsCom_ALinkAlreadyPooled_IsNeverReportedAsOutOfRadiusWhenALaterPageMisreadsItsDistance()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = [new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+            // The same link, already in the pool, reappears carrying a neighboring card's wrapper text
+            // (the same heuristic behind lesson 9514dea8); it must not be counted as skipped just because
+            // this page's card text reads it as beyond radius.
+            [2] = [new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Tampa, FL (95 mi)")],
+        });
+        int beyondRadius = 0;
+        int noDistance = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onBeyondRadius: () => beyondRadius++, onNoDistance: () => noDistance++);
+
+        Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
+        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal(0, beyondRadius);
+        Assert.Equal(0, noDistance);
+    }
+
+    [Fact]
     public async Task PagedSearchWithNoCap_VisitsEveryLinkOfEveryPage()
     {
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
