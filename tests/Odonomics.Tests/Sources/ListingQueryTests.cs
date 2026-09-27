@@ -141,6 +141,16 @@ public class ListingQueryTests
     }
 
     [Fact]
+    public void MatchesExtractedVehicle_PriusQuery_PriusPlugInHybridModelNoHyphen_RejectedBySubstring()
+    {
+        // Marketcheck's own recorded Prime headline spells it with no hyphen at all ("2025 Toyota
+        // Prius Plug In Hybrid SE"); that spelling must be rejected here too.
+        ListingQuery query = Query("Toyota", "Prius");
+
+        Assert.False(query.MatchesExtractedVehicle("Toyota", "Prius Plug In Hybrid", "SE", 2025));
+    }
+
+    [Fact]
     public void MatchesExtractedVehicle_PriusQuery_PlainPrius_StillMatches()
     {
         ListingQuery query = Query("Toyota", "Prius");
