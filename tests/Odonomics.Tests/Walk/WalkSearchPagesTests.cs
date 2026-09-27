@@ -627,6 +627,56 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
+    public async Task CarsCom_ALinkReportedSkippedOnAnEarlierPage_IsWithdrawnWhenALaterPagePoolsItFromItsOwnText()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            // Page 1 misreads two links off a neighboring card's wrapper text (the same heuristic behind
+            // lesson 9514dea8): one reads as beyond radius, the other as stating no distance at all
+            // (its wrapper names more than one). A third, ordinary in-radius card keeps this page from
+            // adding nothing, so paging continues to page 2.
+            [1] =
+            [
+                new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)"),
+                new PageLink("https://www.cars.com/vehicledetail/beyond/?sid=x", "", "Tampa, FL (95 mi)"),
+                new PageLink("https://www.cars.com/vehicledetail/nodistance/?sid=x", "", "Tampa, FL (95 mi)\nLakeland, FL (65 mi)"),
+            ],
+            // Page 2 carries the beyond-radius and no-distance links re-bound to their own single card,
+            // both in radius.
+            [2] =
+            [
+                new PageLink("https://www.cars.com/vehicledetail/beyond/?sid=y", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)"),
+                new PageLink("https://www.cars.com/vehicledetail/nodistance/?sid=y", "Used 2020 Honda Insight EX", "Melbourne, FL (39 mi)"),
+            ],
+        });
+        int beyondRadius = 0;
+        int noDistance = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50,
+            onBeyondRadius: () => beyondRadius++, onNoDistance: () => noDistance++,
+            onBeyondRadiusWithdrawn: () => beyondRadius--, onNoDistanceWithdrawn: () => noDistance--);
+
+        Assert.Equal(
+            [
+                "https://www.cars.com/vehicledetail/near/?sid=x",
+                "https://www.cars.com/vehicledetail/beyond/?sid=y",
+                "https://www.cars.com/vehicledetail/nodistance/?sid=y",
+            ],
+            pool);
+        // Page 2 added two links the pool didn't already hold, so paging continued to page 3, which
+        // (being unfixtured) added nothing and ended it there.
+        Assert.Equal([1, 2, 3], browser.Loads.Select(l => l.PageNumber));
+
+        // Both links were pooled from their own in-radius text on page 2, so neither earlier report
+        // survives: the pair line must never count a car the walk kept as skipped.
+        Assert.Equal(0, beyondRadius);
+        Assert.Equal(0, noDistance);
+    }
+
+    [Fact]
     public async Task PagedSearchWithNoCap_VisitsEveryLinkOfEveryPage()
     {
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
