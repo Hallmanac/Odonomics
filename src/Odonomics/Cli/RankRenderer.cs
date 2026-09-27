@@ -315,20 +315,40 @@ public static class RankRenderer
 
         console.MarkupLine("[yellow]The scenario is missing a figure this model needs to be ranked; add it to insuranceMonthlyByModel or mpgByModel.[/]");
 
+        bool anyGraded = scores.Any(s => s.Vehicle.DealerGrade is not null);
+        if (!anyGraded)
+        {
+            console.MarkupLine("  Grade: no vehicle here has a CarEdge grade yet.");
+        }
+
         var table = new Table { Border = TableBorder.Minimal };
         table.Width(80);
         table.AddColumn(new TableColumn("VIN") { Width = VinColumnWidth, NoWrap = true });
         table.AddColumn(new TableColumn("Vehicle") { Width = MissingDataVehicleColumnWidth, NoWrap = true });
         table.AddColumn(new TableColumn("Price") { Width = PriceColumnWidth, NoWrap = true });
+        if (anyGraded)
+        {
+            table.AddColumn(new TableColumn("Grade") { Width = GradeColumnWidth, NoWrap = true });
+        }
+
         table.AddColumn("Missing");
 
         foreach (Score score in scores)
         {
-            table.AddRow(
+            List<string> cells =
+            [
                 Format.Cell(score.Vehicle.Vin),
                 Format.Cell(Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", MissingDataVehicleColumnWidth)),
                 Format.Cell(Format.Truncate(PriceText(score), PriceColumnWidth)),
-                Format.Cell(string.Join("; ", MissingScenarioDataReasons(score))));
+            ];
+
+            if (anyGraded)
+            {
+                cells.Add(Format.Cell(Format.Truncate(score.Vehicle.DealerGrade ?? "-", GradeColumnWidth)));
+            }
+
+            cells.Add(Format.Cell(string.Join("; ", MissingScenarioDataReasons(score))));
+            table.AddRow([.. cells]);
         }
 
         console.Write(table);
