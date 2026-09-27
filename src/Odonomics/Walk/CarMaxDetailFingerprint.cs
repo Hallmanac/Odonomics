@@ -78,10 +78,14 @@ public static class CarMaxDetailFingerprints
         }
 
         int mileageNumber = int.Parse(mileage.Groups["num"].Value.Replace(",", ""));
-        int mileageValue = mileage.Groups["k"].Success ? mileageNumber * 1000 : mileageNumber;
+        int mileageValue = mileage.Groups["k"].Success
+            ? mileageNumber * 1000
+            : mileageNumber;
 
         Match price = BarePriceLine.Match(text);
-        decimal? priceValue = price.Success ? decimal.Parse(price.Groups["amount"].Value.Replace(",", "")) : null;
+        decimal? priceValue = price.Success
+            ? decimal.Parse(price.Groups["amount"].Value.Replace(",", ""))
+            : null;
 
         return new CarMaxDetailFingerprint(
             int.Parse(title.Groups["year"].Value),
