@@ -13,9 +13,12 @@ namespace Odonomics.Walk;
 /// <see cref="SearchPageCardRenderWait"/>) and so were never touched: they do not make the pair's own
 /// coverage partial (see <see cref="Cli.Commands.WalkCommand"/>), since each is instead exempted from the
 /// diff on its own. <see cref="AlsoCoveredModel"/> is the bare model of a second
-/// vehicle this pair's own search also mixes in and saves under its own scenario model (a Prius Prime
-/// candidate saved through the "Toyota Prius" pair's search, see PriusPrimeVariant), set only when the pair
-/// actually saved one this run; a "source:model" token gets stamped for it beside the pair's own (see
+/// vehicle this pair's own search always mixes in and saves under its own scenario model (a Prius Prime
+/// candidate mixed into the "Toyota Prius" pair's own search, see PriusPrimeVariant), set whenever the
+/// pair's own search ran, whether or not it happened to save one this run: a Prime already on the ledger
+/// is kept current from its search card like any other known link and never revisited, so gating this on
+/// a fresh save would leave every run after the first one that ever found a Prime unable to stamp its
+/// coverage again. A "source:model" token gets stamped for it beside the pair's own (see
 /// WalkCoverage.RunAsync), with the same partial-coverage markers, since a model with no walk pair of its
 /// own otherwise has no run that ever covers it, leaving its postings unable to ever be reported gone.</summary>
 public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null);
