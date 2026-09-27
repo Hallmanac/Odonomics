@@ -2,15 +2,15 @@ using System.Text.RegularExpressions;
 
 namespace Odonomics.Walk;
 
-/// <summary>The year, make, model, trim, mileage, and asking price a CarMax detail page's own text
-/// states about its car, read directly off the page's visible text rather than through
-/// <see cref="Extraction.ExtractionClient"/>'s LLM call. <see cref="CarMaxBackfill"/> needs this because
-/// a recorded CarMax detail page carries no VIN and no URL of its own to match it back to a ledger
-/// posting by (the happy path, where the VIN read off the page's HTML actually succeeds, never keeps
-/// that HTML on disk, and the page's visible text never states the page's own URL either): the only
-/// thing a recorded page and a posting can be matched on is what they both say about the car itself,
-/// and every one of these figures is exactly what the original walk read off the same page to store
-/// the posting in the first place.</summary>
+/// <summary>The year, make, model, trim, mileage, and asking price a CarMax detail page's own text (or
+/// a search card's own text, see <see cref="CarMaxDetailFingerprints.Read"/>) states about its car,
+/// read directly off the visible text rather than through <see cref="Extraction.ExtractionClient"/>'s
+/// LLM call. A detail page's own visible text never states its VIN or its own URL (the happy path,
+/// where the VIN read off the page's HTML actually succeeds, never keeps that HTML on disk), and
+/// <see cref="CarMaxBackfill"/> needs a way to match a recorded page back to a ledger posting without
+/// either: the same figures a search card's own text states about a car are exactly what the original
+/// walk read off its detail page to store the posting in the first place, so comparing what a page and
+/// a posting each say about the car itself is what stands in for a VIN or URL.</summary>
 public sealed record CarMaxDetailFingerprint(int Year, string Make, string Model, string? Trim, int Mileage, decimal? Price);
 
 public static class CarMaxDetailFingerprints
@@ -18,16 +18,18 @@ public static class CarMaxDetailFingerprints
     /// <summary>"2022 Toyota Corolla Hybrid": a four-digit year, a capitalized make word, then the
     /// rest of the line as the model. Only the first such line in the page counts, the same
     /// convention <c>WalkSites.DetailTitleLine</c> follows, since a "similar vehicles" card further
-    /// down the page can repeat the shape for an unrelated car.</summary>
+    /// down the page can repeat the shape for an unrelated car. A search card's own title line takes
+    /// the identical shape ("2021 Toyota Camry Hybrid"), so this also reads a card's text.</summary>
     private static readonly Regex TitleLine = new(
         @"^[ \t]*(?<year>\d{4})[ \t]+(?<make>[A-Z][A-Za-z]*)[ \t]+(?<model>\S.*?)[ \t]*$",
         RegexOptions.Multiline | RegexOptions.Compiled);
 
-    /// <summary>"33k miles" or "630 miles": CarMax rounds anything at or above 1,000 miles to the
-    /// nearest thousand on both its cards and its detail pages, so the figure here is exactly what
-    /// the original extraction would also have read off the same page.</summary>
+    /// <summary>"33k miles", "630 miles", or a search card's own "25K mi" shorthand: CarMax rounds
+    /// anything at or above 1,000 miles to the nearest thousand on both its cards and its detail
+    /// pages, so the figure here is exactly what the original extraction would also have read off the
+    /// same page.</summary>
     private static readonly Regex MileageLine = new(
-        @"^[ \t]*(?<num>[\d,]+)(?<k>[kK])?[ \t]+miles?[ \t]*$",
+        @"^[ \t]*(?<num>[\d,]+)(?<k>[kK])?[ \t]+mi(?:les?)?[ \t]*$",
         RegexOptions.Multiline | RegexOptions.Compiled);
 
     /// <summary>A lone "$26,998" line is the asking price; "$649 shipping" and "$799 shipping" carry
