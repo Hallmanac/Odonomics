@@ -106,6 +106,28 @@ public class WalkPairSummaryLineTests
     }
 
     [Fact]
+    public void DroppedCell_PriusPrimeReason_IsWordedAsNotACandidate()
+    {
+        var dropped = new DroppedBreakdown(0, 0, 0, 0, PriusPrime: 2);
+
+        Assert.Equal("Prius Prime, not a candidate", WalkPairSummaryLine.DroppedCell(dropped));
+        Assert.Equal("Prius Prime, not a candidate", WalkOutcomeWording.DroppedReason(DetailPageOutcome.PriusPrime));
+    }
+
+    [Fact]
+    public void Format_PriusPrimeAlongsideTheOtherReasons_SitsRightAfterWrongModel()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 1, NotMatching: 3, Failed: 0, NewCar: 1, PriusPrime: 4);
+        int saved = 5;
+
+        string line = WalkPairSummaryLine.Format("autotrader", "Toyota", "Prius", pages: saved + dropped.Total, known: 0, saved, dropped);
+
+        Assert.Equal(
+            "autotrader / Toyota Prius: 16 pages, 0 known from cards, 5 saved, 11 dropped (3 wrong model, 4 Prius Prime, not a candidate, 1 new-car listing, 2 missing fields, 1 no VIN)",
+            line);
+    }
+
+    [Fact]
     public void DroppedCell_SoldAndNoPriceReasons_AreWordedForWhatHappened()
     {
         Assert.Equal("listing sold", WalkPairSummaryLine.DroppedCell(new DroppedBreakdown(0, 0, 0, 0, Sold: 2)));

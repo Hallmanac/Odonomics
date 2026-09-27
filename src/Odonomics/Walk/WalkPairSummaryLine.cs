@@ -21,6 +21,7 @@ public static class WalkPairSummaryLine
     private static readonly DetailPageOutcome[] DroppedReasonOrder =
     [
         DetailPageOutcome.NotMatching,
+        DetailPageOutcome.PriusPrime,
         DetailPageOutcome.NewCar,
         DetailPageOutcome.Sold,
         DetailPageOutcome.NoPriceListed,

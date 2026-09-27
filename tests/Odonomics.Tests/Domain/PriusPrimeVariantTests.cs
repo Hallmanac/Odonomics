@@ -50,4 +50,36 @@ public class PriusPrimeVariantTests
     {
         Assert.False(PriusPrimeVariant.ReadsAsPrime("Toyota", null, "Plug-in Hybrid"));
     }
+
+    [Fact]
+    public void DecideOutcome_PlainPrius_IsNotAPrimeRegardlessOfWhetherItsKnown()
+    {
+        Assert.Equal(PrimeOutcome.NotAPrime, PriusPrimeVariant.DecideOutcome("Toyota", "Prius", "Hybrid", isKnownOnLedger: false));
+        Assert.Equal(PrimeOutcome.NotAPrime, PriusPrimeVariant.DecideOutcome("Toyota", "Prius", "Hybrid", isKnownOnLedger: true));
+    }
+
+    [Fact]
+    public void DecideOutcome_BrandNewPrime_IsDroppedAsNotACandidate()
+    {
+        // A Prime the ledger has never seen: the walk's own search just turned it up for the first
+        // time, and it's dropped rather than saved, since it isn't a candidate the scenario ranks.
+        Assert.Equal(PrimeOutcome.DropAsNotACandidate, PriusPrimeVariant.DecideOutcome("Toyota", "Prius Prime", null, isKnownOnLedger: false));
+    }
+
+    [Fact]
+    public void DecideOutcome_PrimeAlreadyOnTheLedger_IsRelabelledRatherThanDropped()
+    {
+        // A Prime row already on the ledger (stored under the plain "Prius" model before this pair's
+        // page was ever read as one) is only reached again under --revisit; it's relabelled Prius
+        // Prime and kept on the ledger rather than dropped, so it excludes by name from then on
+        // instead of continuing to pass as a plain Prius.
+        Assert.Equal(PrimeOutcome.RelabelKnown, PriusPrimeVariant.DecideOutcome("Toyota", "Prius Prime", null, isKnownOnLedger: true));
+    }
+
+    [Fact]
+    public void DecideOutcome_PlugInHybridWordingEitherRoute_MatchesReadsAsPrime()
+    {
+        Assert.Equal(PrimeOutcome.DropAsNotACandidate, PriusPrimeVariant.DecideOutcome("Toyota", "Prius", "Plug In Hybrid", isKnownOnLedger: false));
+        Assert.Equal(PrimeOutcome.RelabelKnown, PriusPrimeVariant.DecideOutcome("Toyota", "Prius Plug-in Hybrid", null, isKnownOnLedger: true));
+    }
 }
