@@ -53,6 +53,13 @@ public sealed record VehicleForScoring
     /// ranking or any cost figure.</summary>
     public string? SiteBadge { get; init; }
 
+    /// <summary>What the cheapest posting's own site said about whether the car can actually be
+    /// bought right now (CarMax's "Reserved for another buyer" or "In transit, not yet
+    /// purchasable"), for `odo rank` to show beside the row; null when the ledger holds none.
+    /// Display only: the scorer never reads it, so a reserved or in-transit car is still ranked
+    /// exactly as any other.</summary>
+    public string? Availability { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>
