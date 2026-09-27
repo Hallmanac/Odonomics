@@ -7,6 +7,12 @@ namespace Odonomics.Walk;
 /// and for a car already at a store the city it can be picked up in (see <see cref="CarMaxCards"/>).</summary>
 public readonly record struct CardFee(decimal ShippingFee, string? PickupLocation = null);
 
+/// <summary>The model year and mileage a search card states, and whether its own model text says
+/// "Hybrid", read off a card such as "View more\nCompare\n2016 Toyota Camry Hybrid\nXLE\n·\n74K mi\n..."
+/// (see <see cref="CarMaxCards.ReadVehicleFacets"/>). Either figure is null when the card's text doesn't
+/// state it.</summary>
+public readonly record struct CardVehicleFacets(int? Year, int? Mileage, bool ModelNamesHybrid);
+
 /// <summary>Reads the availability line of a CarMax search card. CarMax prints what taking the car
 /// home costs on the card itself: "Available today·Orlando" for a car in stock at a nearby store, and
 /// "$49 shipping·Get it by Monday" or "$149 shipping·Get it by Sep 28 - Oct 2" for a car transferred
@@ -39,5 +45,38 @@ public static class CarMaxCards
         return availableToday.Success && availableToday.Groups["city"].Value.Trim() is { Length: > 0 } city
             ? new CardFee(0m, city)
             : null;
+    }
+
+    // The first line of a card that opens a vehicle title: a run of exactly four digits (the model
+    // year) followed by more text ("2016 Toyota Camry Hybrid"). CarMax's card carries no condition word
+    // or trim on this line (the trim is the line below), unlike a detail page's own title line.
+    private static readonly Regex TitleYearLine = new(@"^(?<year>\d{4})[ \t]+\S.*$", RegexOptions.Multiline | RegexOptions.Compiled);
+
+    // A mileage a card rounds to thousands ("40K mi", "74K mi"), the same shorthand CarMax's detail page
+    // uses (see ExtractionClient's own thousands-mileage reader), read here as a point estimate for the
+    // pre-filter rather than the extraction's own rounding-tolerant ground check.
+    private static readonly Regex ThousandsMileageLine = new(@"\b(?<thousands>\d{1,3}(?:\.\d+)?)[ \t]?K[ \t]+mi(?:les)?\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>The model year, mileage, and whether the card's own model text says "Hybrid" (see
+    /// <see cref="CardVehicleFacets"/>), read off <paramref name="cardText"/> before its link is ever a
+    /// detail-visit candidate. CarMax's search URL carries the scenario's minimum year and maximum
+    /// mileage already, but the site does not actually honor the year range (a walk on 2026-09-27 pooled
+    /// ten 2014-2017 Camry Hybrid cards from a search whose own URL started at 2018), so this is what
+    /// lets the walk drop such a card before spending a detail visit on it (see
+    /// <see cref="WalkSite.CollectDetailCards"/>).</summary>
+    public static CardVehicleFacets ReadVehicleFacets(string cardText)
+    {
+        Match titleLine = TitleYearLine.Match(cardText);
+        int? year = titleLine.Success && int.TryParse(titleLine.Groups["year"].Value, out int parsedYear) ? parsedYear : null;
+        bool namesHybrid = titleLine.Success && titleLine.Value.Contains("Hybrid", StringComparison.OrdinalIgnoreCase);
+
+        Match mileageLine = ThousandsMileageLine.Match(cardText);
+        int? mileage = mileageLine.Success
+            ? (int)Math.Round(
+                decimal.Parse(mileageLine.Groups["thousands"].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture) * 1000m,
+                MidpointRounding.AwayFromZero)
+            : null;
+
+        return new CardVehicleFacets(year, mileage, namesHybrid);
     }
 }

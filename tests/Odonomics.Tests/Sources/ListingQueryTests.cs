@@ -4,8 +4,8 @@ namespace Odonomics.Tests.Sources;
 
 public class ListingQueryTests
 {
-    private static ListingQuery Query(string make, string model, int? hybridOnlyFromModelYear = null) =>
-        new(make, model, YearMin: 2019, "32114", 50, MaxMileage: 100000, hybridOnlyFromModelYear);
+    private static ListingQuery Query(string make, string model, int? hybridOnlyFromModelYear = null, int yearMin = 2019) =>
+        new(make, model, yearMin, "32114", 50, MaxMileage: 100000, hybridOnlyFromModelYear);
 
     [Fact]
     public void MatchesExtractedVehicle_SameBaseModel_NoHybridTargeted_Matches()
@@ -116,6 +116,52 @@ public class ListingQueryTests
         ListingQuery query = Query("Toyota", "Corolla Hybrid");
 
         Assert.Null(query.GasOnlyBeforeHybridYear("Toyota", "Corolla", "SE", 2020));
+    }
+
+    [Fact]
+    public void CardYearFloor_NoHybridOnlyFromModelYearRule_IsAlwaysTheScenarioMinimum()
+    {
+        ListingQuery query = Query("Toyota", "Corolla Hybrid");
+
+        Assert.Equal(2019, query.CardYearFloor(cardNamesHybrid: true));
+        Assert.Equal(2019, query.CardYearFloor(cardNamesHybrid: false));
+    }
+
+    [Fact]
+    public void CardYearFloor_NonHybridQuery_IsAlwaysTheScenarioMinimum()
+    {
+        ListingQuery query = Query("Honda", "Insight");
+
+        Assert.Equal(2019, query.CardYearFloor(cardNamesHybrid: false));
+    }
+
+    [Fact]
+    public void CardYearFloor_HybridOnlyFromModelYearRule_CardNamingHybrid_IsTheScenarioMinimum()
+    {
+        ListingQuery query = Query("Toyota", "Camry Hybrid", hybridOnlyFromModelYear: 2025, yearMin: 2018);
+
+        // A card whose own title already says "Hybrid" (a 2016 Camry Hybrid) is checked against the
+        // scenario's own floor, not the hybrid-only-from-year cutover, since it can never be mistaken
+        // for a gas trim CarMax's search mixed in.
+        Assert.Equal(2018, query.CardYearFloor(cardNamesHybrid: true));
+    }
+
+    [Fact]
+    public void CardYearFloor_HybridOnlyFromModelYearRule_BaseModelCard_IsTheLaterOfTheTwoYears()
+    {
+        ListingQuery query = Query("Toyota", "Camry Hybrid", hybridOnlyFromModelYear: 2025, yearMin: 2018);
+
+        // A card titled just "Camry" (no "Hybrid") can only be a real candidate at or after the
+        // cutover year, even though the scenario's own floor is earlier.
+        Assert.Equal(2025, query.CardYearFloor(cardNamesHybrid: false));
+    }
+
+    [Fact]
+    public void CardYearFloor_HybridOnlyFromModelYearRule_BaseModelCard_ScenarioFloorAboveTheCutover_IsTheScenarioFloor()
+    {
+        ListingQuery query = Query("Toyota", "Camry Hybrid", hybridOnlyFromModelYear: 2020, yearMin: 2019);
+
+        Assert.Equal(2020, query.CardYearFloor(cardNamesHybrid: false));
     }
 
     [Fact]
