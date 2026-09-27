@@ -56,8 +56,11 @@ public static class ShowCommand
     /// without the hard filters: `odo show` is asked about any VIN in the ledger, including one the
     /// scenario would exclude, and its monthly cost is still worth seeing. What it cannot price it
     /// explains instead of throwing: a vehicle with no current price, or a model the scenario has no
-    /// insurance or mpg figure for. <paramref name="purchasePrice"/> is what the car costs to take
-    /// home, its asking price plus the fee for the scenario's fulfillment and any itemized fees (see <see cref="PurchasePrice.Total"/>).</summary>
+    /// insurance or mpg figure for. A Toyota Prius Prime lands here too, once <c>--revisit</c> has
+    /// relabelled it: the scenario carries no insurance or mpg line for it at all now that it's
+    /// excluded, so its monthly cost is never computed, the same as any other model missing that
+    /// data. <paramref name="purchasePrice"/> is what the car costs to take home, its asking price
+    /// plus the fee for the scenario's fulfillment and any itemized fees (see <see cref="PurchasePrice.Total"/>).</summary>
     public static (CostBreakdown? Cost, string? Unavailable) MonthlyCostFor(string makeModel, decimal? purchasePrice, Scenario scenario)
     {
         if (purchasePrice is not decimal price)

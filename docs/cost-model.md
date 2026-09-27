@@ -58,4 +58,4 @@ When no rankable vehicle's expected during-loan cost meets one or more of the sc
 
 The itemized lines are rounded to whole dollars once, so their low ends, and their high ends, add up to the during-loan total printed beneath them. `odo rank --detail` takes its loan payment from that same rounding, so the two commands print the identical payment for a vehicle.
 
-`show` prices a vehicle the scenario's filters would exclude too. A vehicle with no current price, or a model the scenario needs an insurance or an mpg figure for, gets a line saying why nothing was computed instead.
+`show` prices a vehicle the scenario's filters would exclude too. A vehicle with no current price, or a model the scenario needs an insurance or an mpg figure for, gets a line saying why nothing was computed instead. A Toyota Prius Prime lands in that second case: it carries no insurance or mpg line at all, since it isn't a candidate, so `show` explains it the same way it would any other model missing that data, and computes no monthly cost for it.
