@@ -642,8 +642,8 @@ public class WalkSearchPagesTests
                 new PageLink("https://www.cars.com/vehicledetail/beyond/?sid=x", "", "Tampa, FL (95 mi)"),
                 new PageLink("https://www.cars.com/vehicledetail/nodistance/?sid=x", "", "Tampa, FL (95 mi)\nLakeland, FL (65 mi)"),
             ],
-            // Page 2 carries the beyond-radius and no-distance links re-bound to their own single card,
-            // both in radius.
+            // Page 2 carries the same two links again, this time under their own single-card text, both
+            // in radius.
             [2] =
             [
                 new PageLink("https://www.cars.com/vehicledetail/beyond/?sid=y", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)"),

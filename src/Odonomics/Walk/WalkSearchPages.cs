@@ -53,9 +53,9 @@ public static class WalkSearchPages
     /// <paramref name="touchKnownAsync"/>, and is told to <paramref name="onBeyondRadius"/> or
     /// <paramref name="onNoDistance"/> respectively (see <see cref="WalkSite.CollectDetailCards"/>), once per
     /// canonical URL for the whole search: a padded site that keeps repeating the same out-of-radius car
-    /// on every later page is counted for it once, not once per page. A card's own wrapper-bound text can
-    /// misread it as beyond radius or as stating none on one page and then, re-bound to its own single card's
-    /// text on a later page, read as in radius: when that happens the earlier report is withdrawn through
+    /// on every later page is counted for it once, not once per page. A link reported beyond radius or as
+    /// stating no distance on one page can still turn up in radius on a later page, off that page's own
+    /// text for it: when that happens the earlier report is withdrawn through
     /// <paramref name="onBeyondRadiusWithdrawn"/> or <paramref name="onNoDistanceWithdrawn"/> (whichever one
     /// fired for it) the moment the link is pooled or handed to <paramref name="touchKnownAsync"/>, so a car
     /// the walk ends up keeping is never left counted as skipped. A page made only of such cards, or of
