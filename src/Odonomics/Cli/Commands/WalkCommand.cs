@@ -252,7 +252,8 @@ public static class WalkCommand
 
             IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync((script, arg) => page.EvaluateAsync<string[][]>(script, arg), site);
             await recorder.WriteAsync(WalkPairSearches.CardsFileName(searchIndex, pageNumber, searchUrls.Count), SearchPageLinks.CardsJson(site, links), ct);
-            foreach (PageLink link in links.Where(l => site.DetailUrlPattern.IsMatch(l.Href) && l.CardText.Length > 0))
+            HashSet<string> unrenderedCanonicalUrls = [.. unrenderedHrefs.Select(WalkSites.CanonicalDetailUrl)];
+            foreach (PageLink link in links.Where(l => site.DetailUrlPattern.IsMatch(l.Href) && l.CardText.Length > 0 && !unrenderedCanonicalUrls.Contains(WalkSites.CanonicalDetailUrl(l.Href))))
             {
                 cardTextByUrl.TryAdd(WalkSites.CanonicalDetailUrl(link.Href), link.CardText);
             }

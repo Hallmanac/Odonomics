@@ -61,10 +61,17 @@ public static class WalkSearchPages
     /// the walk ends up keeping is never left counted as skipped. A page made only of such cards, or of
     /// links this pool already holds, adds nothing and ends the paging exactly as an empty page does.
     /// A link a page's <see cref="SearchPageContent.UnrenderedHrefs"/> names (see
-    /// <see cref="SearchPageCardRenderWait"/>) is dropped before any of that: its card never rendered within
-    /// the bounded wait, so it is kept out of <see cref="WalkSite.CollectDetailCards"/> entirely rather than
-    /// let the ambiguous wrapper-text walk decide its distance, and it is told to <paramref name="onUnrendered"/>
-    /// instead, deduplicated the same way.</summary>
+    /// <see cref="SearchPageCardRenderWait"/>) is dropped from that page before any of that: its card never
+    /// rendered within the bounded wait, so it is kept out of <see cref="WalkSite.CollectDetailCards"/> for
+    /// that page entirely rather than let the ambiguous wrapper-text walk decide its distance. cars.com's
+    /// padded later pages can repeat the same car, so a link named unrendered on one page but read normally
+    /// (pooled, touched as known, beyond radius, or no distance) on another is not unrendered at all; only a
+    /// link that stays unrendered on every page it appears on, across the whole search, is told to
+    /// <paramref name="onUnrendered"/>, once per canonical URL. A link the ledger already holds that stays
+    /// unrendered this way is never handed to <paramref name="touchKnownAsync"/>: its card was never actually
+    /// read, so touching it would keep it current for rank without ever measuring it, and would double-count
+    /// it as both known from cards and unrendered. Its posting's LastSeen does not move, so the diff may
+    /// report such a car as gone from the search until a later walk's page renders its card.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -88,7 +95,7 @@ public static class WalkSearchPages
         List<string> pool = [];
         HashSet<string> canonicalUrls = [];
         Dictionary<string, Action?> reportedOutOfRadius = [];
-        HashSet<string> reportedUnrendered = [];
+        HashSet<string> everUnrenderedCanonicalUrls = [];
         int linkBound = int.MaxValue;
         int considered = 0;
         bool leftBehindForWantOfPoolRoom = false;
@@ -100,15 +107,6 @@ public static class WalkSearchPages
             {
                 reportedOutOfRadius[canonicalUrl] = withdraw;
                 report?.Invoke();
-            }
-        }
-
-        void ReportUnrenderedOnce(string href)
-        {
-            string canonicalUrl = WalkSites.CanonicalDetailUrl(href);
-            if (!canonicalUrls.Contains(canonicalUrl) && reportedUnrendered.Add(canonicalUrl))
-            {
-                onUnrendered?.Invoke();
             }
         }
 
@@ -145,11 +143,8 @@ public static class WalkSearchPages
             if (content.UnrenderedHrefs is { Count: > 0 } unrenderedHrefs)
             {
                 HashSet<string> unrenderedCanonicalUrls = [.. unrenderedHrefs.Select(WalkSites.CanonicalDetailUrl)];
-                renderedLinks = [.. content.Links.Where(l => !unrenderedCanonicalUrls.Contains(WalkSites.CanonicalDetailUrl(l.Href)))];
-                foreach (string href in unrenderedHrefs)
-                {
-                    ReportUnrenderedOnce(href);
-                }
+                renderedLinks = [.. content.Links.Where(l => !site.DetailUrlPattern.IsMatch(l.Href) || !unrenderedCanonicalUrls.Contains(WalkSites.CanonicalDetailUrl(l.Href)))];
+                everUnrenderedCanonicalUrls.UnionWith(unrenderedCanonicalUrls);
             }
 
             int added = 0;
@@ -206,6 +201,18 @@ public static class WalkSearchPages
                 leftBehindForWantOfPoolRoom = true;
                 break;
             }
+        }
+
+        foreach (string canonicalUrl in everUnrenderedCanonicalUrls)
+        {
+            if (canonicalUrls.Contains(canonicalUrl) || reportedOutOfRadius.ContainsKey(canonicalUrl))
+            {
+                // Rendered normally on some other page of this search: pooled, touched as known, beyond
+                // radius, or no distance already accounts for it, so it is not unrendered after all.
+                continue;
+            }
+
+            onUnrendered?.Invoke();
         }
 
         if (leftBehindForWantOfPoolRoom)
