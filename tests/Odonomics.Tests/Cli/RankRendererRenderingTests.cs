@@ -193,23 +193,27 @@ public class RankRendererRenderingTests
     }
 
     [Fact]
-    public void Render_PriusPrimeWithBothLinesUnknown_NamesBothMissingFiguresForThatModel()
+    public void Render_PriusPrimeIsADisallowedModel_ListedAsExcludedNotMissingScenarioData()
     {
-        Score score = BuildScore("JTDACACU5T3062285", 2024, "Toyota", "Prius Prime", 28000m, insuranceUnknown: true, mpgUnknown: true);
+        // Toyota Prius Prime is not a candidate: a ledger row for one fails the scenario's
+        // allowedModels filter, so it lands under Excluded with that reason, never under "Not
+        // ranked: scenario data missing" (which is for a model that passes the filters but is
+        // simply missing an insurance or mpg figure).
+        Score score = BuildScore(
+            "JTDACACU5T3062285", 2024, "Toyota", "Prius Prime", 28000m,
+            passes: false,
+            failureReasons: ["Toyota Prius Prime is not one of the scenario's target models"]);
 
         string[] lines = Render([score], budget: null);
-        // The Missing column wraps a long reason across several output lines, each still carrying
-        // the table's box-drawing separators from the empty VIN/Vehicle/Price cells beside it, so
-        // the phrases are checked against the whole section with those separators blanked out and
-        // collapsed, rather than against one line.
         string joined = Regex.Replace(string.Join(' ', lines).Replace('│', ' ').Replace('─', ' '), @"\s+", " ");
 
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
-        Assert.Contains(lines, line => line.StartsWith("Not ranked: scenario data missing"));
+        Assert.Contains(lines, line => line.StartsWith("Excluded"));
         Assert.Contains(lines, line => line.Contains("JTDACACU5T3062285"));
-        Assert.Contains("the scenario needs an insurance figure for Toyota Prius Prime", joined);
-        Assert.Contains("the scenario needs an mpg figure for Toyota Prius Prime", joined);
-        Assert.Contains("$28,000", joined);
+        Assert.Contains("Toyota Prius Prime is not one of the scenario's target models", joined);
+        Assert.Contains(lines, line => line.StartsWith("Not ranked: scenario data missing (0)"));
+        Assert.DoesNotContain("needs an insurance figure for Toyota Prius Prime", joined);
+        Assert.DoesNotContain("needs an mpg figure for Toyota Prius Prime", joined);
     }
 
     [Fact]

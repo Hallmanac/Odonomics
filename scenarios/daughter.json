@@ -20,15 +20,13 @@
     "Honda Insight": null,
     "Toyota Corolla Hybrid": 95,
     "Toyota Camry Hybrid": 100,
-    "Toyota Prius": 90,
-    "Toyota Prius Prime": 100
+    "Toyota Prius": 90
   },
   "mpgByModel": {
     "Honda Insight": 52,
     "Toyota Corolla Hybrid": 52,
     "Toyota Camry Hybrid": 52,
-    "Toyota Prius": 52,
-    "Toyota Prius Prime": 52
+    "Toyota Prius": 52
   },
   "filters": {
     "minModelYear": 2019,
@@ -40,8 +38,7 @@
       "Honda Insight",
       "Toyota Corolla Hybrid",
       "Toyota Camry Hybrid",
-      "Toyota Prius",
-      "Toyota Prius Prime"
+      "Toyota Prius"
     ]
   },
   "hybridOnlyFromModelYear": {

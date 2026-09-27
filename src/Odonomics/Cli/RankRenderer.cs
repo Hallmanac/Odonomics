@@ -300,10 +300,11 @@ public static class RankRenderer
     }
 
     /// <summary>The section for a vehicle that passed the hard filters but whose model is missing
-    /// an insurance or an mpg figure in the scenario (or both, a model with neither yet, such as a
-    /// freshly added Toyota Prius Prime): it is still listed, with a Missing column naming exactly
-    /// which figure the scenario needs for it, and never priced as though the missing figure were
-    /// known.</summary>
+    /// an insurance or an mpg figure in the scenario (or both, a freshly added target model with
+    /// neither supplied yet): it is still listed, with a Missing column naming exactly which figure
+    /// the scenario needs for it, and never priced as though the missing figure were known. A
+    /// disallowed model (a Toyota Prius Prime, say) never lands here: it fails the hard filters
+    /// instead, so it's listed under Excluded, not this section.</summary>
     private static void RenderMissingScenarioData(IAnsiConsole console, IReadOnlyList<Score> scores)
     {
         console.MarkupLine($"[bold yellow]Not ranked: scenario data missing ({scores.Count})[/]");
