@@ -943,9 +943,14 @@ public class LedgerDiffServiceTests
     public async Task ComputeAsync_ReplayedPairWithOneUnrenderedKnownPostingAndOneThatTrulyLeft_ReportsEachItsOwnReasonAndKeepsThePairsCoverageFull()
     {
         // The shape of a real repeat walk: A's card never renders (still there, just unmeasured
-        // this run) and B has genuinely dropped off the search. Neither is touched by run2, and
-        // run2's token carries no capped: or unread: marker, so the pair's own coverage advances
-        // to run2 in full.
+        // this run) and B has genuinely dropped off the search. Neither is touched by run2. Run2's
+        // own Sources token is not hand-authored here: WalkCoverage.RunAsync, the same function
+        // WalkCommand drives its walk through, is handed the pair's outcome (Capped: false,
+        // UnrenderedKnownUrls naming A) and decides the coverage token from it, so this proves the
+        // pair's own coverage really does advance to run2 in full rather than assuming a walk would
+        // have left it that way. If WalkCommand ever went back to capping the pair for a known
+        // unrendered card, this test would drive that same regressed Capped: true through
+        // WalkCoverage and start failing.
         using var testDb = new LedgerTestDatabase();
         using OdonomicsDbContext db = testDb.CreateContext();
         var upsert = new LedgerUpsertService(db);
@@ -957,11 +962,26 @@ public class LedgerDiffServiceTests
         await upsert.UpsertAsync(Candidate("JTDKN3DU0A0000026", 15000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
         await upsert.UpsertAsync(Candidate("JTDKN3DU0A0000027", 16000m, "https://cars.com/b", "cars.com"), run1, CancellationToken.None);
 
-        RunEntity run2 = Run(SecondRunAt, "cars.com:Prius", "32833", 50);
+        RunEntity run2 = Run(SecondRunAt, "", "32833", 50);
         db.Runs.Add(run2);
         await db.SaveChangesAsync(CancellationToken.None);
 
-        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, ["https://cars.com/a"], CancellationToken.None);
+        WalkSite carsDotCom = new("cars.com", _ => [""], new System.Text.RegularExpressions.Regex(".*"));
+        List<WalkPairSummary> summaries = await WalkCoverage.RunAsync(
+            run2,
+            [carsDotCom],
+            ["Toyota Prius"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(0, 0, new DroppedBreakdown(0, 0, 0, 0), Capped: false, UnrenderedKnownUrls: ["https://cars.com/a"])),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+        WalkPairSummary pairSummary = Assert.Single(summaries);
+        Assert.False(pairSummary.Capped);
+
+        HashSet<string> unrenderedKnownUrls = [.. summaries.SelectMany(s => s.UnrenderedKnownUrls ?? [])];
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, unrenderedKnownUrls, CancellationToken.None);
 
         Assert.Equal(2, diff.Gone.Count);
         Assert.Equal(GoneReasons.CardNeverRendered, Assert.Single(diff.Gone, g => g.Vin == "JTDKN3DU0A0000026").Reason);

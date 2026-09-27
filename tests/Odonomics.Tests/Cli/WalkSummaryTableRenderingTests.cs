@@ -170,4 +170,18 @@ public class WalkSummaryTableRenderingTests
         Assert.Contains("unread", Assert.Single(lines, l => l.Contains("Camry Hybrid")));
         Assert.DoesNotContain("unread", Assert.Single(lines, l => l.Contains("Prius")));
     }
+
+    [Fact]
+    public void BuildSummaryTable_APairWithAnUnrenderedKnownUrlButNotCapped_ShowsOkNotCappedInItsStatusColumn()
+    {
+        List<WalkPairSummary> summaries =
+        [
+            new("cars.com", "Toyota Prius", 5, 5, new DroppedBreakdown(0, 0, 0, 0), Completed: true, Capped: false, UnrenderedKnownUrls: ["https://cars.com/prius"]),
+        ];
+        string[] lines = Render(summaries);
+
+        string row = Assert.Single(lines, l => l.Contains("Prius"));
+        Assert.Contains("ok", row);
+        Assert.DoesNotContain("capped", row);
+    }
 }
