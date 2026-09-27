@@ -44,4 +44,44 @@ public class CarMaxCardsTests
     {
         Assert.Null(CarMaxCards.ReadFee(cardText));
     }
+
+    [Fact]
+    public void ReadVehicleFacets_RecordedBelowFloorCard_ReadsTheYearMileageAndHybridTitle()
+    {
+        const string card = "View more\nCompare\n2016 Toyota Camry Hybrid\nXLE\n·\n74K mi\n$499 shipping·Get it by Oct 4 - Oct 10\nEst. $311/mo\n·\n$19,998";
+
+        CardVehicleFacets facets = CarMaxCards.ReadVehicleFacets(card);
+
+        Assert.Equal(new CardVehicleFacets(2016, 74000, ModelNamesHybrid: true), facets);
+    }
+
+    [Fact]
+    public void ReadVehicleFacets_RecordedPostCutoverBaseModelCard_ReadsTheYearAndMileageWithNoHybridTitle()
+    {
+        const string card = "View more\nCompare\n2025 Toyota Camry\nXSE\n·\n40K mi\nAvailable today·Orlando\nEst. $539/mo\n·\n$32,998";
+
+        CardVehicleFacets facets = CarMaxCards.ReadVehicleFacets(card);
+
+        Assert.Equal(new CardVehicleFacets(2025, 40000, ModelNamesHybrid: false), facets);
+    }
+
+    [Theory]
+    [InlineData("9K mi", 9000)]
+    [InlineData("9k mi", 9000)]
+    [InlineData("9K miles", 9000)]
+    [InlineData("9.5K mi", 9500)]
+    public void ReadVehicleFacets_MileageShorthand_RoundsToWholeMiles(string mileageLine, int expected)
+    {
+        CardVehicleFacets facets = CarMaxCards.ReadVehicleFacets($"View more\nCompare\n2024 Toyota Camry Hybrid\nLE\n·\n{mileageLine}\n$29,998");
+
+        Assert.Equal(expected, facets.Mileage);
+    }
+
+    [Fact]
+    public void ReadVehicleFacets_CardWithNoTitleLineOrMileage_ReadsNeitherFigure()
+    {
+        CardVehicleFacets facets = CarMaxCards.ReadVehicleFacets("Save\n$24,998");
+
+        Assert.Equal(new CardVehicleFacets(null, null, ModelNamesHybrid: false), facets);
+    }
 }

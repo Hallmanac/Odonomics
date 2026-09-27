@@ -160,6 +160,20 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
     /// "Similar vehicles" card further down never decides it.</summary>
     private static readonly Regex TitleLine = new(@"^(?:(?:New|Used|Certified|Price Drop)\s+)*\d{4}\s", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>The minimum model year a search result card has to state to stay a candidate for this
+    /// query, before its link is ever pooled or checked against the ledger: this query's own
+    /// <see cref="YearMin"/>, or, when this is a hybrid-only-from-year model and
+    /// <paramref name="cardNamesHybrid"/> is false (a CarMax card titled "2025 Toyota Camry" with no
+    /// "Hybrid" in it, reached through the "camry/hybrid" search path's post-cutover cars), whichever of
+    /// that year and <see cref="HybridOnlyFromModelYear"/> is later. Such a card can only ever be a real
+    /// candidate at or after the cutover: a card below it that doesn't say "Hybrid" names a genuine gas
+    /// trim this query can never match (the same rule <see cref="GasOnlyBeforeHybridYear"/> applies once a
+    /// page has actually been visited), so there's no reason to spend a detail visit finding that out.</summary>
+    public int CardYearFloor(bool cardNamesHybrid) =>
+        IsHybridVariant && !cardNamesHybrid && HybridOnlyFromModelYear is int hybridYear
+            ? Math.Max(YearMin, hybridYear)
+            : YearMin;
+
     /// <summary>The year this query's hybrid-only rule takes effect, when a candidate otherwise
     /// matches this query's make and base model but falls below it: lets the walk explain a
     /// rejection as a known gas-only-before-year gap (e.g. "2024 Camry SE, gas-only before 2025")
