@@ -36,12 +36,20 @@ public class SearchPageCardRenderWaitTests
             JsonElement options = JsonSerializer.SerializeToElement(arg);
             var hasAmount = new Regex(options.GetProperty("amount").GetString()!);
 
+            // Mirrors RenderScanScript's own guard: only the first still-unrendered card of the scan
+            // is scrolled, since the browser only ever realizes one scroll position per script call.
             List<string> hrefs = [];
+            bool scrolled = false;
             foreach (FakeCard card in cards)
             {
                 if (!hasAmount.IsMatch(card.TextAsOf(ScanCount)))
                 {
-                    card.Scroll();
+                    if (!scrolled)
+                    {
+                        card.Scroll();
+                        scrolled = true;
+                    }
+
                     hrefs.Add(card.Href);
                 }
             }
@@ -108,6 +116,30 @@ public class SearchPageCardRenderWaitTests
         Assert.False(rendersFirstScan.Scrolled);
         Assert.True(rendersLater.Scrolled);
         Assert.True(neverCard.Scrolled);
+    }
+
+    [Fact]
+    public async Task RunAsync_TwoCardsUnrenderedOnTheSameScan_ScrollsOnlyTheFirstThatScanAndTheSecondOnceItBecomesFirst()
+    {
+        var first = new FakeCard("https://www.cars.com/vehicledetail/first/?sid=1", "$21,202 Used 2023 Honda Insight EX", rendersOnScan: 2);
+        var second = new FakeCard("https://www.cars.com/vehicledetail/second/?sid=1", "$19,393 Used 2021 Honda Insight EX", rendersOnScan: 3);
+        var page = new FakePage(first, second);
+
+        IReadOnlyList<string> unrendered = await RunAsync(page);
+
+        Assert.Empty(unrendered);
+        Assert.Equal(3, page.ScanCount);
+        Assert.True(first.Scrolled);
+        Assert.True(second.Scrolled);
+    }
+
+    [Fact]
+    public void RenderScanScript_ScrollsAtMostOneCardPerScan()
+    {
+        string script = SearchPageCardRenderWait.RenderScanScript;
+
+        Assert.Single(Regex.Matches(script, "scrollIntoView"));
+        Assert.Contains("scrolled", script);
     }
 
     [Fact]
