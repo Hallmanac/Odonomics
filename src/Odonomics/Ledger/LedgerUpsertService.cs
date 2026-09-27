@@ -257,6 +257,35 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     public async Task<HashSet<string>> KnownUrlsAsync(string source, CancellationToken cancellationToken) =>
         [.. await db.Postings.Where(p => p.Source == source).Select(p => p.Url).ToListAsync(cancellationToken)];
 
+    /// <summary>Every posting the ledger holds from carmax, with its vehicle, dealer, attributes, and
+    /// price history loaded, for <see cref="Walk.CarMaxBackfill"/> to classify and match against
+    /// recorded detail pages without a separate round trip per posting.</summary>
+    public async Task<List<PostingEntity>> CarMaxPostingsAsync(CancellationToken cancellationToken) =>
+        await db.Postings
+            .Include(p => p.Vehicle)
+            .Include(p => p.Dealer)
+            .Include(p => p.Attributes)
+            .Include(p => p.PriceObservations)
+            .Where(p => p.Source == "carmax")
+            .ToListAsync(cancellationToken);
+
+    /// <summary>Links one posting directly to <paramref name="dealerName"/> and
+    /// <paramref name="dealerLocation"/>, for a caller (<see cref="Walk.CarMaxBackfill"/>) that already
+    /// knows exactly which store a recorded page named and has already confirmed the posting needs it:
+    /// unlike <see cref="UpsertAsync"/>'s fallback handling, this always replaces whatever dealer the
+    /// posting had. A posting id that matches nothing does nothing.</summary>
+    public async Task SetPostingDealerAsync(int postingId, string dealerName, string? dealerLocation, CancellationToken cancellationToken)
+    {
+        PostingEntity? posting = await db.Postings.FindAsync([postingId], cancellationToken);
+        if (posting is null)
+        {
+            return;
+        }
+
+        posting.Dealer = await FindOrCreateDealerAsync(dealerName, dealerLocation, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>How many postings the ledger holds for each source and model, keyed by the source name
     /// and the model as the vehicle row stores it (the bare model, without its make), so the start of a
     /// walk can say how much of each pair the ledger already covers.</summary>
