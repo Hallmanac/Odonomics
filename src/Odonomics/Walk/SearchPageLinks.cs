@@ -8,19 +8,10 @@ namespace Odonomics.Walk;
 /// nearest ancestor element of the anchor (the anchor itself counts, since a site may make the whole
 /// card one link) whose text contains a dollar amount, or the element <see cref="WalkSite.CardContainerSelector"/>
 /// names when the site has one. Both cars.com and carvana print a card's price inside the card, so
-/// the nearest ancestor that shows a dollar amount is the card and not a container of several. An
-/// anchor with no text of its own (a photo-only link, or one of cars.com's recommendation links) can
-/// sit outside every card's own element, so that nearest-ancestor walk instead lands on a wrapper
-/// spanning several cards. A site with <see cref="WalkSite.CardMultiCardPattern"/> set names a shape
-/// that repeats once per card (cars.com's own distance line): when such an empty-text anchor's wrapper
-/// matches it more than once, the wrapper is re-bound to the single child of it that actually holds the
-/// anchor, so the card text is this link's own card and not its neighbors'. A site with no such pattern
-/// leaves an empty-text anchor's card exactly as the nearest-dollar-ancestor walk finds it, since a
-/// dollar amount alone (a card's own price and its own estimated payment both match it) says nothing
-/// about how many cards a wrapper spans. A card whose text (after any such re-bounding) still runs past
-/// <see cref="MaxCardTextLength"/> is a container of many cards, not one, so it reads as no card at all.
-/// Only links matching the site's detail pattern are asked for a card, since the rest of a page's
-/// anchors (navigation, filters) have none.
+/// the nearest ancestor that shows a dollar amount is the card and not a container of several. A
+/// card whose text runs past <see cref="MaxCardTextLength"/> is a container of many cards, not one, so
+/// it reads as no card at all. Only links matching the site's detail pattern are asked for a card,
+/// since the rest of a page's anchors (navigation, filters) have none.
 /// </summary>
 public static class SearchPageLinks
 {
@@ -37,12 +28,9 @@ public static class SearchPageLinks
     /// <summary>Given the positions of anchors in document order, reads each as [href, card text],
     /// where the card text is empty when no card was found.</summary>
     public const string CardScript = """
-        ({ indices, amount, container, multiCardPattern }) => {
+        ({ indices, amount, container }) => {
             const anchors = document.querySelectorAll('a');
             const hasAmount = new RegExp(amount);
-            const namesMoreThanOneCard = multiCardPattern
-                ? text => (text.match(new RegExp(multiCardPattern, 'g')) || []).length > 1
-                : () => false;
             return indices.map(i => {
                 const anchor = anchors[i];
                 if (!anchor) {
@@ -61,18 +49,7 @@ public static class SearchPageLinks
                     }
                 }
 
-                let cardText = card ? (card.innerText || '') : '';
-                if (card && anchor.innerText === '' && namesMoreThanOneCard(cardText)) {
-                    let child = anchor;
-                    while (child.parentElement && child.parentElement !== card) {
-                        child = child.parentElement;
-                    }
-                    if (child.parentElement === card) {
-                        cardText = child.innerText || '';
-                    }
-                }
-
-                return [anchor.href, cardText];
+                return [anchor.href, card ? (card.innerText || '') : ''];
             });
         }
         """;
@@ -92,7 +69,7 @@ public static class SearchPageLinks
         ];
         string[][] cards = detailIndices.Count == 0
             ? []
-            : await evaluateAsync(CardScript, new { indices = detailIndices, amount = CardAmountPattern, container = site.CardContainerSelector, multiCardPattern = site.CardMultiCardPattern });
+            : await evaluateAsync(CardScript, new { indices = detailIndices, amount = CardAmountPattern, container = site.CardContainerSelector });
 
         var cardTextByIndex = new Dictionary<int, string>();
         foreach ((int anchorIndex, string[] card) in detailIndices.Zip(cards))
