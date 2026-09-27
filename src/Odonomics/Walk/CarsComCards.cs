@@ -7,15 +7,21 @@ namespace Odonomics.Walk;
 /// listing carried on cars.com's own search prints it the same way after its delivery fee ("$249 delivery
 /// to Orlando, FL (14 mi)"), so one pattern reads both. A card with no such line, whether it shows nothing
 /// at all (the site's own nationwide recommendation links padding a later page) or some other text
-/// entirely, states no distance.</summary>
+/// entirely, states no distance. So does a card whose text names more than one: the site's bounding
+/// heuristic sometimes hands a link the whole multi-card wrapper as its "own" text (an empty-text
+/// nationwide link included), and that text's first distance belongs to whichever neighboring card
+/// happens to lead it, not to this card's own car.</summary>
 public static class CarsComCards
 {
-    private static readonly Regex DistanceLine = new(@"\((?<mi>\d+)\s*mi\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex DistanceLine = new(@"\((?<mi>[\d,]+)\s*mi\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    /// <summary>The distance in miles <paramref name="cardText"/> states, or null when it states none.</summary>
+    /// <summary>The distance in miles <paramref name="cardText"/> states, or null when it states none or
+    /// states more than one.</summary>
     public static int? ReadDistanceMiles(string cardText)
     {
-        Match match = DistanceLine.Match(cardText);
-        return match.Success ? int.Parse(match.Groups["mi"].Value) : null;
+        MatchCollection matches = DistanceLine.Matches(cardText);
+        return matches.Count == 1 && int.TryParse(matches[0].Groups["mi"].Value.Replace(",", ""), out int miles)
+            ? miles
+            : null;
     }
 }

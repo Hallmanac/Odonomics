@@ -95,20 +95,29 @@ public class CarsComRadiusTests
         // there: page 3 was never requested.
         Assert.Equal([1, 2], browser.Loads);
 
-        // None of the out-of-radius Florida hrefs, nor either page's nationwide links, ever entered the pool.
+        // None of the out-of-radius Florida hrefs, nor any page's empty-anchor or nationwide links, ever
+        // entered the pool. Page 1 carries three empty-anchor links (af6fb68e, 80a6e699, and the
+        // attribution_type=ship nationwide link 9ae48e6a) whose CardText is the whole five-card wrapper
+        // blob: its first stated distance, 14 mi, belongs to the wrapper's leading CarMax card, not to any
+        // of these three, so a reader that measured them by that first distance would wrongly pool them
+        // (lesson 9514dea8). Page 2's two nationwide links, 49693b71 and 1200a372, carry a four-card
+        // wrapper of their own.
         string[] beyondRadiusVins = ["e42ccdc2-fd2d-4265-80a5-9c13488f83bb", "8ce9a8c9-8b86-4ca2-91fd-4ea639508de7", "a1a749e5-d29e-44cb-a4db-88a3b9770059", "7c3ad279-4633-4052-8809-63a67c278e9d"];
         Assert.All(beyondRadiusVins, vin => Assert.DoesNotContain(pool, href => href.Contains(vin, StringComparison.Ordinal)));
-        string[] nationwideHrefs = ["49693b71-df19-4092-9e3f-81d408e93508", "1200a372-b8c9-4b72-b66e-4ae9c1d5b5eb"];
-        Assert.All(nationwideHrefs, id => Assert.DoesNotContain(pool, href => href.Contains(id, StringComparison.Ordinal)));
+        string[] multiCardWrapperHrefs = ["af6fb68e-25ea-4c9f-9459-4f6f20d97f1d", "80a6e699-f24c-40fc-9075-235a6d8133e1", "9ae48e6a-57ae-4da4-909b-11f95a171140", "49693b71-df19-4092-9e3f-81d408e93508", "1200a372-b8c9-4b72-b66e-4ae9c1d5b5eb"];
+        Assert.All(multiCardWrapperHrefs, id => Assert.DoesNotContain(pool, href => href.Contains(id, StringComparison.Ordinal)));
 
-        // Page 1 contributes its four out-of-radius Florida cards, and page 2 contributes two more distinct
-        // ones (the site's own bounding heuristic hands its two nationwide links the wrapping container's
-        // text, which still starts with an out-of-radius neighbor's distance): six distinct cars in total,
-        // not sixty, since the four Florida cards repeating across pages are counted once each rather than
-        // once per page they reappear on. Nothing was left for the "no distance" count here; that path is
-        // covered directly against a genuinely empty card in WalkSitesTests.
-        Assert.Equal(6, beyondRadius);
-        Assert.Equal(0, noDistance);
+        // The only in-radius card on either page is page 1's own-text 5616062b (14 mi): the pool holds it
+        // and nothing else.
+        Assert.Single(pool);
+        Assert.Contains(pool, href => href.Contains("5616062b-4439-4e07-badb-8240b99bcd83", StringComparison.Ordinal));
+
+        // Page 1 contributes its four out-of-radius Florida cards under "beyond radius" and its three
+        // multi-card-wrapper links (a card text naming more than one distance states none) under "no
+        // distance stated". Page 2 repeats the same four Florida cards, already reported once each from
+        // page 1, and adds its own two wrapper links as two more "no distance stated" reports.
+        Assert.Equal(4, beyondRadius);
+        Assert.Equal(5, noDistance);
     }
 
     [Fact]

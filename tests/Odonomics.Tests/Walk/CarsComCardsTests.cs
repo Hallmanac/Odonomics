@@ -23,13 +23,22 @@ public class CarsComCardsTests
     }
 
     [Fact]
-    public void ReadDistanceMiles_MultipleCardsConcatenated_ReadsTheFirstOne()
+    public void ReadDistanceMiles_MultipleCardsConcatenated_ReadsAsNull()
     {
         // The site's own "nearest ancestor with a dollar amount" heuristic sometimes hands a link a
-        // wrapper spanning more than one card; the first distance in the text is still this card's own,
-        // since every card prints its price before its distance.
+        // wrapper spanning more than one card (lesson 9514dea8): the first distance in that text belongs
+        // to whichever neighboring card happens to lead it, not to this card's own car, so a blob naming
+        // more than one distance is read as stating none rather than measured by the first.
         string blob = "$20,494\n\n87,613 mi.\nUsed 2020 Honda Insight EX\n\nBeaver Toyota\n\n4.9\nAugustine, FL (95 mi)\nCheck Availability\n\n$22,985\n\nBuick Lakeland\n\nLakeland, FL (65 mi)";
 
-        Assert.Equal(95, CarsComCards.ReadDistanceMiles(blob));
+        Assert.Null(CarsComCards.ReadDistanceMiles(blob));
+    }
+
+    [Theory]
+    [InlineData("Denver, CO (1,742 mi)", 1742)]
+    [InlineData("$249 delivery to Orlando, FL (1,014 mi)", 1014)]
+    public void ReadDistanceMiles_ThousandsSeparator_ReadsTheParentheticalMiles(string cardText, int expected)
+    {
+        Assert.Equal(expected, CarsComCards.ReadDistanceMiles(cardText));
     }
 }

@@ -146,9 +146,11 @@ public sealed record WalkSite(
     /// reader finds a distance over that bound never enters the pool either, and
     /// <paramref name="onBeyondRadius"/> is told it (cars.com's search URL carries a radius the site does
     /// not itself enforce, so a card far outside it still turns up). A card whose text states no distance
-    /// at all (empty text, or one of the site's own nationwide recommendation links padding a later page)
-    /// is kept out the same way, but is told to <paramref name="onNoDistance"/> instead, so a reader can
-    /// tell "measured and too far" from "never measured" apart. Neither ever counts against
+    /// at all, or states more than one (empty text, a neighboring card's own text mistaken for this card's,
+    /// or one of the site's own nationwide recommendation links padding a later page, any of which can end
+    /// up carrying a multi-card wrapper's text rather than a single card's), is kept out the same way, but
+    /// is told to <paramref name="onNoDistance"/> instead, so a reader can tell "measured and too far" from
+    /// "never measured" apart. Neither ever counts against
     /// <paramref name="poolSize"/> or enters the pool, the same as a title
     /// <see cref="SkippedCardTitlePattern"/> drops.</summary>
     public IReadOnlyList<PageLink> CollectDetailCards(
