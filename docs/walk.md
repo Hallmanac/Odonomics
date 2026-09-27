@@ -84,12 +84,14 @@ A badge is a line of the card that is exactly the badge's text. A card with no b
 | Autotrader | `deal` | Great Price, Good Price |
 | Autotrader | `price-drop` | Price Drop |
 | Autotrader | `paperwork` | Online Paperwork |
+| Autotrader | `fees-included` | Dealer Fees Included |
+| Autotrader | `no-accidents` | No Accidents |
 | Carvana | `deal` | Great Deal |
 | Carvana | `price-drop` | Price Drop |
 | Carvana | `shipping` | Free shipping |
 | CarGurus | `deal` | Great Deal, Good Deal, Fair Deal, High Priced, Overpriced |
 
-A cars.com card shows a dealer rating whether or not it has a badge, so a card with a rating and no badge records the rating alone. Carvana's "Recent" tag is a sort label the page repeats, not a badge, and the walk doesn't read it. Autotrader also prints badges such as High Demand and Newly Listed that aren't recorded. Autotrader's card shape hasn't been confirmed (see below), so until a walk shows that its card text holds the badges, an Autotrader posting may get none. CarGurus also prints "Uncertain" where it could not rate a car, which says nothing about the price and is not recorded, and `odo rank` abbreviates only the Great, Good, and Fair deals, so a High Priced or Overpriced CarGurus car shows its badge in `odo show` and nothing in `odo rank`.
+A cars.com card shows a dealer rating whether or not it has a badge, so a card with a rating and no badge records the rating alone. Carvana's "Recent" tag is a sort label the page repeats, not a badge, and the walk doesn't read it. Autotrader also prints badges such as High Demand and Newly Listed that aren't recorded. CarGurus also prints "Uncertain" where it could not rate a car, which says nothing about the price and is not recorded, and `odo rank` abbreviates only the Great, Good, and Fair deals, so a High Priced or Overpriced CarGurus car shows its badge in `odo show` and nothing in `odo rank`.
 
 ### Length and the cap
 
@@ -222,7 +224,7 @@ A detail link matches `/cars-for-sale/vehicle/<digits>`, and the walk stores it 
 
 A private seller's detail page marks the seller with a "(Private Seller)" line. The walk stores that posting with the dealer "Private seller" and no location, and not the person's name and city. Every other rule applies to it unchanged: the model check, the cap, the pacing, and the bot-challenge pause.
 
-Autotrader's card shape hasn't been confirmed from a recorded page (its cards show the price as bare digits, with no dollar sign), so it reads no card price yet. A known Autotrader listing is still kept listed from its card, but a change in its price is only seen once `--revisit` opens its detail page.
+Autotrader's card shows the price as bare digits ("19,394"), with no dollar sign, immediately before "See payment". `SearchPageLinks`' ancestor climb otherwise looks for a dollar sign followed by a digit, which a bare-digit price never has, so before this was read every real card's own dollar-ancestor test failed and its card came back empty; only a "New ... MSRP$" recommendation card, which does print a dollar sign, ever carried card text, and it is never a candidate anyway (its link carries no `clickType=listing`). Autotrader overrides that ancestor test to also accept the bare digits beside "See payment", and reads the same figure as the card's price. A known Autotrader listing is kept current from its card the same way cars.com's and Carvana's are, with no detail visit needed to see a price drop.
 
 ### Fee statements
 
