@@ -26,6 +26,7 @@ public static class GoneReasons
     public const string NotOnSearchPage = "not on search page";
     public const string BeyondTheCap = "beyond the cap";
     public const string PagesUnread = "pages unread";
+    public const string CardNeverRendered = "card never rendered";
 }
 
 public sealed record SearchDiff(
@@ -59,21 +60,34 @@ public sealed record SearchDiff(
 /// keeps a run that only covered one model from marking every other model on that same source as
 /// checked too. Every "gone" entry carries a reason, checked in order: this run's detail page for it
 /// said the car sold, the vehicle's year is below the scenario's minimum for its model, its mileage
-/// is over the scenario's maximum, the run that last saw it searched a different zip or radius than this one, this run covered its pair only
+/// is over the scenario's maximum, the run that last saw it searched a different zip or radius than this one,
+/// this run's render wait gave up on this exact posting's own search card while the ledger already held it
+/// (see <paramref name="unrenderedKnownUrls"/> on the overload below), this run covered its pair only
 /// partially (an explicit --max stopped the link collection before the site ran out of results, see
 /// <see cref="RunSources.PartialKey"/>) so the walk never reached it, this run covered its pair only
 /// partially because a result page after the first failed to load (see <see cref="RunSources.UnreadKey"/>),
-/// or otherwise it simply is not on the search page any more. The three after "sold" are cars the search no
+/// or otherwise it simply is not on the search page any more. The four after "sold" are cars the search no
 /// longer asks for, and "beyond the cap" and "pages unread" are cars this run did not look for; "sold" and
-/// the last are the cars that have likely left the market, and "sold" is the one a page confirmed. "Search
+/// the last are the cars that have likely left the market, and "sold" is the one a page confirmed. "Card
+/// never rendered" is its own case: the walk saw the link but never actually measured it, so it is reported
+/// apart from the pair's own coverage, which is never marked partial for it (see WalkCommand). "Search
 /// moved" compares the zip and radius each run
 /// recorded (see <see cref="RunEntity.Zip"/>), so a run recorded before the ledger kept them never
 /// yields it.
 /// </summary>
 public sealed class LedgerDiffService(OdonomicsDbContext db)
 {
-    public async Task<SearchDiff> ComputeAsync(RunEntity currentRun, Scenario scenario, CancellationToken cancellationToken)
+    public Task<SearchDiff> ComputeAsync(RunEntity currentRun, Scenario scenario, CancellationToken cancellationToken) =>
+        ComputeAsync(currentRun, scenario, [], cancellationToken);
+
+    /// <summary><paramref name="unrenderedKnownUrls"/> is every canonical URL, across every pair this
+    /// run walked, whose search card the render wait gave up on while the ledger already held it (see
+    /// <see cref="Walk.SearchPageCardRenderWait"/> and <see cref="Walk.KnownCardTouches.IsKnown"/>): each
+    /// one is reported gone under "card never rendered" instead of whatever reason the rest of its
+    /// pair's untouched postings get, since the walk never actually measured it.</summary>
+    public async Task<SearchDiff> ComputeAsync(RunEntity currentRun, Scenario scenario, IReadOnlyCollection<string> unrenderedKnownUrls, CancellationToken cancellationToken)
     {
+        HashSet<string> unrenderedKnownUrlSet = [.. unrenderedKnownUrls];
         List<PostingEntity> touchedThisRun = await db.Postings
             .Include(p => p.Vehicle)
             .Include(p => p.PriceObservations)
@@ -266,7 +280,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
 
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
                 RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == posting.LastSeen);
-                var entry = new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(posting, vehicle, lastSeenRun, currentRun, scenario, cappedTokens.Contains(token), unreadTokens.Contains(token)));
+                var entry = new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(posting, vehicle, lastSeenRun, currentRun, scenario, cappedTokens.Contains(token), unreadTokens.Contains(token), unrenderedKnownUrlSet.Contains(posting.Url)));
                 if (alreadyGone)
                 {
                     gone[goneIndex] = entry;
@@ -285,7 +299,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         return new SearchDiff(newEntries, alsoListed, moved, priceDrops, gone);
     }
 
-    private static string GoneReason(PostingEntity posting, VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario, bool pairCapped, bool pairHadUnreadPages)
+    private static string GoneReason(PostingEntity posting, VehicleEntity vehicle, RunEntity? lastSeenRun, RunEntity currentRun, Scenario scenario, bool pairCapped, bool pairHadUnreadPages, bool cardNeverRendered)
     {
         if (posting.SoldSeenAt == currentRun.StartedAt)
         {
@@ -305,6 +319,11 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         if (SearchAreaChanged(lastSeenRun, currentRun))
         {
             return GoneReasons.SearchMoved;
+        }
+
+        if (cardNeverRendered)
+        {
+            return GoneReasons.CardNeverRendered;
         }
 
         return (pairCapped, pairHadUnreadPages) switch

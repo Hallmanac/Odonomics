@@ -108,7 +108,8 @@ public static class DiffRenderer
     private const int GoneVinColumnWidth = 17;
     private const int GonePriceColumnWidth = 10;
     private const int GoneSourceColumnWidth = 11;
-    private const int GoneReasonColumnWidth = 18;
+    // 19 columns, the width of "card never rendered", the widest reason.
+    private const int GoneReasonColumnWidth = 19;
 
     private static void RenderGone(IReadOnlyList<GonePostingEntry> entries)
     {
@@ -122,15 +123,15 @@ public static class DiffRenderer
         AnsiConsole.Write(BuildGoneTable(entries));
     }
 
-    /// <summary>The "Gone (N)" line, with how many of the rows are beyond the cap and how many had pages
-    /// unread appended when any are: those are cars an explicit --max or a result page that failed to load
-    /// kept the walk from reaching, not cars that left the market, so the counts say how many of the total
-    /// to set aside.</summary>
+    /// <summary>The "Gone (N)" line, with how many of the rows are beyond the cap, had pages unread, or
+    /// had a card that never rendered appended when any are: those are cars an explicit --max, a result
+    /// page that failed to load, or a render wait that gave up kept the walk from actually measuring, not
+    /// cars that left the market, so the counts say how many of the total to set aside.</summary>
     public static string GoneHeading(IReadOnlyList<GonePostingEntry> entries)
     {
         List<string> unreached =
         [
-            .. new[] { GoneReasons.BeyondTheCap, GoneReasons.PagesUnread }
+            .. new[] { GoneReasons.BeyondTheCap, GoneReasons.PagesUnread, GoneReasons.CardNeverRendered }
                 .Select(reason => (Count: entries.Count(entry => entry.Reason == reason), Reason: reason))
                 .Where(r => r.Count > 0)
                 .Select(r => $"{r.Count} {r.Reason}")

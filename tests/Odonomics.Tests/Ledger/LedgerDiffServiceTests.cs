@@ -41,6 +41,23 @@ public class LedgerDiffServiceTests
         return Assert.Single(diff.Gone);
     }
 
+    private static async Task<GonePostingEntry> GoneAfterTwoRunsAsync(ListingCandidate candidate, RunEntity run1, RunEntity run2, Scenario scenario, IReadOnlyCollection<string> unrenderedKnownUrls)
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(candidate, run1, CancellationToken.None);
+
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, scenario, unrenderedKnownUrls, CancellationToken.None);
+        return Assert.Single(diff.Gone);
+    }
+
     /// <summary>Two runs over one posting where the second run's detail visit found the page saying the car
     /// sold (<paramref name="soldInSecondRun"/>), or an earlier run did (false, stamping the first run).</summary>
     private static async Task<GonePostingEntry> GoneAfterSoldVisitAsync(ListingCandidate candidate, RunEntity run1, RunEntity run2, Scenario scenario, bool soldInSecondRun = true)
@@ -887,6 +904,71 @@ public class LedgerDiffServiceTests
             DaughterScenario);
 
         Assert.Equal(GoneReasons.PagesUnread, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_UnrenderedKnownUrlOnAFullyCoveredPair_ReportsCardNeverRendered()
+    {
+        // No capped: or unread: marker on run2's token: the pair read every page, so its own
+        // coverage is recorded full, and only this one posting is exempted from it.
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000024", 15000m, "https://cars.com/prius", "cars.com");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, "cars.com:Prius", "32833", 50),
+            DaughterScenario,
+            unrenderedKnownUrls: ["https://cars.com/prius"]);
+
+        Assert.Equal(GoneReasons.CardNeverRendered, gone.Reason);
+        Assert.Equal("card never rendered", gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_UnrenderedKnownUrlOnAPairThatIsAlsoCapped_StillReportsCardNeverRenderedNotBeyondTheCap()
+    {
+        ListingCandidate prius = Candidate("JTDKN3DU0A0000025", 15000m, "https://cars.com/prius", "cars.com");
+
+        GonePostingEntry gone = await GoneAfterTwoRunsAsync(
+            prius,
+            Run(FirstRunAt, "cars.com:Prius", "32833", 50),
+            Run(SecondRunAt, $"cars.com:Prius,{RunSources.PartialKey("cars.com:Prius")}", "32833", 50),
+            DaughterScenario,
+            unrenderedKnownUrls: ["https://cars.com/prius"]);
+
+        Assert.Equal(GoneReasons.CardNeverRendered, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_ReplayedPairWithOneUnrenderedKnownPostingAndOneThatTrulyLeft_ReportsEachItsOwnReasonAndKeepsThePairsCoverageFull()
+    {
+        // The shape of a real repeat walk: A's card never renders (still there, just unmeasured
+        // this run) and B has genuinely dropped off the search. Neither is touched by run2, and
+        // run2's token carries no capped: or unread: marker, so the pair's own coverage advances
+        // to run2 in full.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(FirstRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDKN3DU0A0000026", 15000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDKN3DU0A0000027", 16000m, "https://cars.com/b", "cars.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run2, DaughterScenario, ["https://cars.com/a"], CancellationToken.None);
+
+        Assert.Equal(2, diff.Gone.Count);
+        Assert.Equal(GoneReasons.CardNeverRendered, Assert.Single(diff.Gone, g => g.Vin == "JTDKN3DU0A0000026").Reason);
+        Assert.Equal(GoneReasons.NotOnSearchPage, Assert.Single(diff.Gone, g => g.Vin == "JTDKN3DU0A0000027").Reason);
+
+        Assert.False(RunSources.IsPartial(run2, "cars.com:Prius"));
+        Assert.Equal([run2], RunSources.CoverageChain("cars.com:Prius", [run1, run2]));
     }
 
     [Fact]
