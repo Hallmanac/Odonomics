@@ -369,4 +369,75 @@ public class WalkSitesTests
     {
         Assert.Null(WalkSites.Find("edmunds"));
     }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_ACardBeyondTheRadius_NeverEntersThePoolAndIsReportedBeyondRadius()
+    {
+        var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "Used 2020 Honda Insight EX", "Tampa, FL (95 mi)") };
+        List<PageLink> beyondRadius = [];
+        List<PageLink> noDistance = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50, onBeyondRadius: beyondRadius.Add, onNoDistance: noDistance.Add);
+
+        Assert.Empty(kept);
+        Assert.Empty(noDistance);
+        PageLink card = Assert.Single(beyondRadius);
+        Assert.Equal("Tampa, FL (95 mi)", card.CardText);
+    }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_ACardAtExactlyTheRadius_IsKept()
+    {
+        var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "Used 2020 Honda Insight EX", "Sanford, FL (50 mi)") };
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50);
+
+        Assert.Single(kept);
+    }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_ACarMaxDeliveryCardWithinRadius_IsMeasuredByItsOwnStatedDistance()
+    {
+        var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "Used 2020 Honda Insight EX", "$249 delivery to Orlando, FL (14 mi)") };
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50);
+
+        Assert.Single(kept);
+    }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_ACardWithEmptyText_NeverEntersThePoolAndIsReportedNoDistance()
+    {
+        var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "", "") };
+        List<PageLink> beyondRadius = [];
+        List<PageLink> noDistance = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50, onBeyondRadius: beyondRadius.Add, onNoDistance: noDistance.Add);
+
+        Assert.Empty(kept);
+        Assert.Empty(beyondRadius);
+        Assert.Single(noDistance);
+    }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_WithNoMaxDistanceGiven_KeepsEveryCardEvenAFarOne()
+    {
+        // A caller with no scenario radius in hand (poolSize-only test call sites elsewhere) gets the
+        // pre-fix behavior: nothing is checked against a radius that was never given.
+        var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "Used 2020 Honda Insight EX", "Tampa, FL (95 mi)") };
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10);
+
+        Assert.Single(kept);
+    }
+
+    [Fact]
+    public void Carvana_CollectDetailCards_HasNoCardDistanceReaderSoAMaxDistanceIsIgnored()
+    {
+        var links = new List<PageLink> { new("https://www.carvana.com/vehicle/1", "", "Tampa, FL (500 mi)") };
+
+        IReadOnlyList<PageLink> kept = WalkSites.Carvana.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50);
+
+        Assert.Single(kept);
+    }
 }

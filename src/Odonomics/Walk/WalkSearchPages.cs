@@ -46,7 +46,15 @@ public static class WalkSearchPages
     /// ran out of exact matches, <paramref name="onSearchExhausted"/> is told its number. When the
     /// collection stops with the site's results not all read because <paramref name="poolSize"/> was
     /// reached, <paramref name="onCapped"/> is told once. <paramref name="revisit"/> says the pool holds
-    /// links the ledger already knows, so a link left out for want of room is a posting the walk did not touch.</summary>
+    /// links the ledger already knows, so a link left out for want of room is a posting the walk did not touch.
+    /// <paramref name="maxDistanceMiles"/> is the scenario's own radius, checked against a card's stated
+    /// distance for a site with a <see cref="WalkSite.CardDistanceReader"/> (cars.com): a card beyond it, or
+    /// one whose text states no distance at all, never enters the pool and is never handed to
+    /// <paramref name="touchKnownAsync"/>, and is told to <paramref name="onBeyondRadius"/> or
+    /// <paramref name="onNoDistance"/> respectively (see <see cref="WalkSite.CollectDetailCards"/>), once per
+    /// canonical URL for the whole search: a padded site that keeps repeating the same out-of-radius car
+    /// on every later page is counted for it once, not once per page. A page made only of such cards, or of
+    /// links this pool already holds, adds nothing and ends the paging exactly as an empty page does.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -57,15 +65,27 @@ public static class WalkSearchPages
         Action<int> onSearchExhausted,
         Action onCapped,
         CancellationToken cancellationToken,
-        bool revisit = false)
+        bool revisit = false,
+        int? maxDistanceMiles = null,
+        Action? onBeyondRadius = null,
+        Action? onNoDistance = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
         List<string> pool = [];
         HashSet<string> canonicalUrls = [];
+        HashSet<string> reportedOutOfRadius = [];
         int linkBound = int.MaxValue;
         int considered = 0;
         bool leftBehindForWantOfPoolRoom = false;
+
+        void ReportOnce(PageLink card, Action? report)
+        {
+            if (reportedOutOfRadius.Add(WalkSites.CanonicalDetailUrl(card.Href)))
+            {
+                report?.Invoke();
+            }
+        }
 
         for (int pageNumber = 1; ; pageNumber++)
         {
@@ -97,7 +117,13 @@ public static class WalkSearchPages
             }
 
             int added = 0;
-            foreach (PageLink card in site.CollectDetailCards(content.Links, int.MaxValue, content.Text))
+            foreach (PageLink card in site.CollectDetailCards(
+                content.Links,
+                int.MaxValue,
+                content.Text,
+                maxDistanceMiles,
+                card => ReportOnce(card, onBeyondRadius),
+                card => ReportOnce(card, onNoDistance)))
             {
                 if (considered >= linkBound)
                 {

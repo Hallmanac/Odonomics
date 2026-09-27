@@ -536,6 +536,72 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
+    public async Task CarsCom_APageOfOnlyBeyondRadiusCards_AddsNothingAndStopsPagingLikeAnEmptyPage()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = [new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+            [2] = [new PageLink("https://www.cars.com/vehicledetail/far/?sid=x", "Used 2020 Honda Insight EX", "Tampa, FL (95 mi)")],
+            [3] = [new PageLink("https://www.cars.com/vehicledetail/never-read/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+        });
+        int beyondRadius = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onBeyondRadius: () => beyondRadius++);
+
+        Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
+        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal(1, beyondRadius);
+    }
+
+    [Fact]
+    public async Task CarsCom_TheSameOutOfRadiusCarRepeatingAcrossPages_IsReportedOnlyOnce()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        List<PageLink> repeatingFarCard = [new("https://www.cars.com/vehicledetail/far/?sid=page-varies", "Used 2020 Honda Insight EX", "Tampa, FL (95 mi)")];
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = [.. repeatingFarCard, new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+            [2] = [.. repeatingFarCard, new PageLink("https://www.cars.com/vehicledetail/another-far/?sid=x", "Used 2020 Honda Insight EX", "Lakeland, FL (65 mi)"), new PageLink("https://www.cars.com/vehicledetail/fresh-near/?sid=x", "Used 2020 Honda Insight EX", "Orlando, FL (10 mi)")],
+            [3] = repeatingFarCard,
+        });
+        int beyondRadius = 0;
+
+        await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onBeyondRadius: () => beyondRadius++);
+
+        // Page 1 adds the real Sanford link, so paging continues past it; page 2's fresh Orlando link
+        // also keeps it going. The repeating "far" card is beyond radius on every page it appears on, but
+        // is counted once, not three times; page 2's distinct "another-far" card is a genuinely different
+        // out-of-radius car and is counted on its own. Page 3 (only the repeat) adds nothing new and ends paging.
+        Assert.Equal([1, 2, 3], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal(2, beyondRadius);
+    }
+
+    [Fact]
+    public async Task CarsCom_ACardWithNoStatedDistance_IsReportedSeparatelyFromBeyondRadius()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = [new PageLink("https://www.cars.com/vehicledetail/nationwide/?sid=x", "", "")],
+        });
+        int beyondRadius = 0;
+        int noDistance = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onBeyondRadius: () => beyondRadius++, onNoDistance: () => noDistance++);
+
+        Assert.Empty(pool);
+        Assert.Equal(0, beyondRadius);
+        Assert.Equal(1, noDistance);
+    }
+
+    [Fact]
     public async Task PagedSearchWithNoCap_VisitsEveryLinkOfEveryPage()
     {
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
