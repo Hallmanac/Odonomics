@@ -77,7 +77,7 @@ public static class WalkCommand
         string? unwalkable = models.FirstOrDefault(ModelsWalkedOnlyThroughAnotherPair.Contains);
         if (unwalkable is not null)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{unwalkable} has no site search of its own yet; it's reached only through another pair's own search (see docs/walk.md)[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{unwalkable} is not a candidate; it has no site search of its own and is only ever recognized, to exclude it, through another pair's own search (see docs/walk.md)[/]");
             return 1;
         }
 
@@ -151,13 +151,12 @@ public static class WalkCommand
     }
 
     /// <summary>Scenario models the walk never gets its own site-and-model pair for, on a bare
-    /// `odo walk` or an explicit `--model`: they're reached today only through another pair's own
-    /// search (a Toyota Prius Prime candidate turns up on the "Toyota Prius" pair's own searches,
-    /// see <see cref="PriusPrimeVariant"/> and <see cref="WalkPairAsync"/>), and no site's search
-    /// facets for one have been built, so a pair for it here would either search every site for it
-    /// twice or fail outright. `RunAsync` refuses an explicit `--model` naming one of these with a
-    /// clear message instead of attempting it. Revisit once Brian supplies its mpg and insurance
-    /// figures and a pair is worth adding for it.</summary>
+    /// `odo walk` or an explicit `--model`: today that's only the Toyota Prius Prime, which isn't a
+    /// candidate at all (see <see cref="PriusPrimeVariant"/>) and is recognized only through the
+    /// "Toyota Prius" pair's own search, to drop a page or a record that reads as one (see
+    /// <see cref="WalkPairAsync"/>). No site's search facets for it have been built, and none ever
+    /// will be while it stays excluded, so `RunAsync` refuses an explicit `--model` naming it with a
+    /// clear message instead of attempting it.</summary>
     private static readonly HashSet<string> ModelsWalkedOnlyThroughAnotherPair = new(StringComparer.OrdinalIgnoreCase)
     {
         PriusPrimeVariant.ScenarioMakeModel,
@@ -437,14 +436,26 @@ public static class WalkCommand
                     return DetailPageOutcome.Repeat;
                 }
 
+                // The card's own text for this link, when the search pages showed it: for a site whose card is what
+                // says the price and its fees (see WalkSite.AskingPriceFromCard), the walk's figures come from it.
+                string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
+
                 // The Toyota Prius pair's own search mixes Prius Prime candidates in with plain
                 // ones, the same way a hybrid pair's search mixes in gas trims. A Prime page never
                 // passes query.MatchesWalkedPage for the plain "Toyota Prius" query (ListingQuery.
                 // MatchesMakeAndBaseModel rejects a "Prime" model by name), so it is checked for
-                // here first and, when it reads as one, saved and matched as Toyota Prius Prime
-                // instead of dropped as the wrong model.
-                bool isPriusPrime = isPriusPair
-                    && PriusPrimeVariant.ReadsAsPrime(outcome.Result.Make, outcome.Result.Model, outcome.Result.FuelType);
+                // here first (see PriusPrimeVariant.DecideOutcome for what each result means).
+                PrimeOutcome primeOutcome = isPriusPair
+                    ? PriusPrimeVariant.DecideOutcome(outcome.Result.Make, outcome.Result.Model, outcome.Result.FuelType, knownTouches.IsKnown(canonicalUrl))
+                    : PrimeOutcome.NotAPrime;
+
+                if (primeOutcome == PrimeOutcome.DropAsNotACandidate)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.PriusPrime)}[/]");
+                    return DetailPageOutcome.PriusPrime;
+                }
+
+                bool isPriusPrime = primeOutcome == PrimeOutcome.RelabelKnown;
 
                 if (!isPriusPrime && !query.MatchesWalkedPage(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year, bodyText, outcome.Result.FuelType))
                 {
@@ -453,9 +464,6 @@ public static class WalkCommand
                     return DetailPageOutcome.NotMatching;
                 }
 
-                // The card's own text for this link, when the search pages showed it: for a site whose card is what
-                // says the price and its fees (see WalkSite.AskingPriceFromCard), the walk's figures come from it.
-                string canonicalUrl = WalkSites.CanonicalDetailUrl(detailUrl);
                 cardTextByUrl.TryGetValue(canonicalUrl, out string? cardText);
                 decimal? listedPrice = site.AskingPriceOf(outcome.Result.Price, cardText);
 
@@ -495,9 +503,11 @@ public static class WalkCommand
                     // isn't actually this pair's model (e.g. a gas Camry on a Camry Hybrid walk),
                     // so stamping the canonical model here never mislabels a vehicle the page
                     // showed for a different reason (its own text reading as a trimmed variant like
-                    // "Insight EX"). The one exception is a Prius Prime page reached through the
-                    // Prius pair (see isPriusPrime above), stored as "Prius Prime" and matched
-                    // against the scenario as Toyota Prius Prime instead.
+                    // "Insight EX"). The one exception is a Prius Prime already on the ledger,
+                    // reached again under --revisit (see isPriusPrime above): relabelled "Prius
+                    // Prime" so it excludes by name as the scenario's disallowed Toyota Prius Prime
+                    // rather than continuing to pass as a plain Prius. A brand-new Prime is dropped
+                    // before it ever reaches here, so this branch never stores one fresh.
                     Model = isPriusPrime ? PriusPrimeVariant.StoredModel : model,
                     Trim = outcome.Result.Trim,
                     Price = askingPrice,
