@@ -219,6 +219,40 @@ public class SearchPageLinksTests
         Assert.Equal(3, candidates.Count);
     }
 
+    // Cut from walks/autotrader/20260926-121057/prius/search.txt (lines 373-400): a real listing card
+    // with no price ("Contact Dealer For Price" / "See payment", no digits and no dollar sign anywhere
+    // near it) sitting between two priced cards. A marker that required digits before "See payment"
+    // never matched this card's own text, so the ancestor climb passed it by and landed on a container
+    // holding all three cards, handing the no-price card a neighbor's price and badges.
+    private static FakeElement AutotraderPriusNoPriceResults() =>
+        Div("6 Matches",
+            AutotraderInsightListingCard(
+                "1", "2024 Toyota Prius", "LE\n44K mi\n Hybrid",
+                "26,093\nSee payment\nGood Price\nDealer Fees Included",
+                "Seminole Toyota\n24.79 mi. away\n(407) 853-2979\nCheck Availability"),
+            AutotraderInsightListingCard(
+                "2", "2022 Toyota Prius", "Limited\n296K mi\n Hybrid",
+                "Contact Dealer For Price\nSee payment",
+                "Seminole Toyota\n24.79 mi. away\n(407) 853-2979\nCheck Availability"),
+            AutotraderInsightListingCard(
+                "3", "2019 Toyota Prius", "LE\n24K mi\n Hybrid",
+                "22,643\nSee payment\nGreat Price\nDealer Fees Included",
+                "Harbor City Auto Sales Inc.\n38.28 mi. away\n(321) 373-8610\nCheck Availability"));
+
+    [Fact]
+    public async Task ReadAsync_ANoPriceCardBetweenPricedCardsGetsItsOwnCardAndNotANeighbors()
+    {
+        var page = new FakePage(AutotraderPriusNoPriceResults());
+
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.Autotrader);
+
+        PageLink noPriceCard = links.Single(l => l.Href.Contains("/vehicle/2?") && l.Href.Contains("clickType=listing"));
+        Assert.Contains("Contact Dealer For Price", noPriceCard.CardText);
+        Assert.DoesNotContain("26,093", noPriceCard.CardText);
+        Assert.DoesNotContain("22,643", noPriceCard.CardText);
+        Assert.Null(WalkSites.Autotrader.ReadCardPrice(noPriceCard.CardText));
+    }
+
     [Fact]
     public async Task ReadAsync_ACardLongerThanOneCardCouldBeReadsAsNoCard()
     {

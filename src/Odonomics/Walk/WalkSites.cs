@@ -620,11 +620,16 @@ public static class WalkSites
     public const string PrivateSellerDealerName = "Private seller";
 
     /// <summary>autotrader's own override of <see cref="SearchPageLinks.CardAmountPattern"/>: the default
-    /// dollar sign, or bare digits immediately before "See payment" (its own price marker). Kept as an
-    /// alternative to the dollar sign rather than a replacement, since a "New ... MSRP$" recommendation
+    /// dollar sign, or "See payment" on its own (every real listing card's price marker, priced or not).
+    /// Matching on "See payment" alone, rather than requiring digits before it, is what lets the climb
+    /// stop at an unpriced card ("Contact Dealer For Price" / "See payment", no digits and no dollar
+    /// sign anywhere near it, recorded walk run 20260926-121057, prius/search.txt lines 388-400): a
+    /// marker that required digits first never matched that card's own text, so the climb passed it by
+    /// and landed on the results list, picking up a neighboring card's price and badges instead. Kept as
+    /// an alternative to the dollar sign rather than a replacement, since a "New ... MSRP$" recommendation
     /// card still prints one; that card is never a candidate either way (its link carries no
     /// clickType=listing, see <see cref="WalkSite.ResultCardLinkPattern"/>).</summary>
-    private const string AutotraderCardAmountPattern = SearchPageLinks.CardAmountPattern + @"|\d[\d,]*\s+See payment";
+    private const string AutotraderCardAmountPattern = SearchPageLinks.CardAmountPattern + @"|See payment";
 
     /// <summary>autotrader's zip, radius, minimum year, maximum mileage, and hybrid facets. Both dealers and
     /// private sellers list there, so the URL carries no sellerTypes parameter (sellerTypes=d and
@@ -642,13 +647,15 @@ public static class WalkSites
     /// /cars-for-sale/vehicle/&lt;digits&gt;, sometimes followed by a query string and a fragment such as
     /// #purchaseConfidence, both of which <see cref="CanonicalDetailUrl"/> strips. Its card shows the price
     /// as bare digits ("19,394", no dollar sign) immediately before "See payment" (recorded run
-    /// 20260927-162013, insight/search.txt lines 42-43), so <see cref="WalkSite.CardAmountPattern"/> tells
-    /// <see cref="SearchPageLinks.CardScript"/>'s ancestor climb to accept that beside the default dollar
-    /// sign, and <see cref="WalkSite.CardPriceReader"/> reads the same figure off the card
-    /// (see <see cref="CardPrices.AutotraderCardPrice"/>). Before this, every real card's own dollar-sign
-    /// test failed and read as no card at all; only a recommendation card, which prints a dollar sign
-    /// ("New ... MSRP$29,090"), ever carried card text, and neither kind is ever a candidate anyway (its
-    /// link carries no clickType=listing).</summary>
+    /// 20260927-162013, insight/search.txt lines 42-43), and an unpriced card prints "See payment" with
+    /// no digits before it at all (recorded run 20260926-121057, prius/search.txt lines 388-400), so
+    /// <see cref="WalkSite.CardAmountPattern"/> tells <see cref="SearchPageLinks.CardScript"/>'s ancestor
+    /// climb to accept "See payment" on its own beside the default dollar sign, and
+    /// <see cref="WalkSite.CardPriceReader"/> separately reads the bare-digit figure off the card when
+    /// there is one (see <see cref="CardPrices.AutotraderCardPrice"/>). Before this, every real card's
+    /// own dollar-sign test failed and read as no card at all; only a "New ... MSRP$" recommendation card
+    /// and a "Consider Buying New" one, both of which print a dollar sign, ever carried card text, and
+    /// neither is ever a candidate anyway (its link carries no clickType=listing).</summary>
     public static readonly WalkSite Autotrader = new(
         "autotrader",
         query =>
