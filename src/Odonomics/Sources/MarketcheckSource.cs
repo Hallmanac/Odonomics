@@ -76,6 +76,8 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
         string? apiMake = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("make", out JsonElement mk) ? mk.GetString() : null;
         string? apiModel = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("model", out JsonElement md) ? md.GetString() : null;
         string? trim = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("trim", out JsonElement tr) ? tr.GetString() : null;
+        string? version = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("version", out JsonElement ver) ? ver.GetString() : null;
+        string? powertrainType = build.ValueKind == JsonValueKind.Object && build.TryGetProperty("powertrain_type", out JsonElement pt) ? pt.GetString() : null;
         string make = apiMake ?? query.Make;
         string? inventoryType = listing.TryGetProperty("inventory_type", out JsonElement it) && it.ValueKind == JsonValueKind.String ? it.GetString() : null;
         JsonElement dealerObj = listing.TryGetProperty("dealer", out JsonElement de) ? de : default;
@@ -121,10 +123,19 @@ public sealed class MarketcheckSource(string? apiKey, HttpClient http) : IListin
         // never mislabels a vehicle the API returned for a different reason. The one exception is a
         // Prius Prime the API returned for the plain "Toyota Prius" query (the same mixing-in the
         // walk sees): it is stored as Toyota Prius Prime rather than rejected as an unknown model,
-        // since the scenario scores that variant on its own.
-        string? storedModel = query.MatchesExtractedVehicle(apiMake, apiModel, trim, year)
-            ? query.Model
-            : PriusPrimeVariant.ReadsAsPrime(apiMake, apiModel) ? PriusPrimeVariant.StoredModel : null;
+        // since the scenario scores that variant on its own. This check has to run before
+        // MatchesExtractedVehicle, not only as its fallback: Marketcheck's own recorded Prime keeps
+        // "Prius" as build.model with no hint of the variant in it at all, which is indistinguishable
+        // from a plain Prius by build.model alone and would otherwise already satisfy a plain
+        // "Toyota Prius" query on that field. "SE Plug-in Hybrid" is in build.version instead (folded
+        // into the model text ReadsAsPrime checks), and build.powertrain_type reads "PHEV" for a
+        // plug-in where a plain Prius reads "HEV" (translated to the "Plug-in Hybrid" fuel-type
+        // wording ReadsAsPrime already recognizes).
+        string? modelForPrimeCheck = version is null ? apiModel : $"{apiModel} {version}";
+        string? fuelTypeForPrimeCheck = string.Equals(powertrainType, "PHEV", StringComparison.OrdinalIgnoreCase) ? "Plug-in Hybrid" : null;
+        string? storedModel = PriusPrimeVariant.ReadsAsPrime(apiMake, modelForPrimeCheck, fuelTypeForPrimeCheck)
+            ? PriusPrimeVariant.StoredModel
+            : query.MatchesExtractedVehicle(apiMake, apiModel, trim, year) ? query.Model : null;
 
         if (storedModel is null)
         {

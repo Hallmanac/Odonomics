@@ -171,7 +171,11 @@ public class MarketcheckSourceTests
     {
         // Marketcheck's Prius search can mix a Prius Prime in with the plain trims, the same way it
         // mixes a base gas model into a hybrid query; unlike that case, a Prime is not an unknown
-        // model to reject, it's the scenario's own Toyota Prius Prime, stored as such.
+        // model to reject, it's the scenario's own Toyota Prius Prime, stored as such. The shape here
+        // is the actual recorded Prime (spike/recorded/marketcheck/day1/Toyota-Prius.json,
+        // JTDACACU8S3046841): build.model stays the bare "Prius", with no hint of the variant in it
+        // at all; "SE Plug-in Hybrid" is in build.version, and build.powertrain_type reads "PHEV"
+        // where a plain Prius's own reads "HEV".
         ListingQuery query = new("Toyota", "Prius", YearMin: 2019, "32114", 50, MaxMileage: 100000);
         int yearMax = DateTime.UtcNow.Year + 1;
         string url = "https://mc-api.marketcheck.com/v2/search/car/active" +
@@ -181,11 +185,11 @@ public class MarketcheckSourceTests
             {
               "listings": [
                 {
-                  "vin": "JTDACACU5T3062285",
+                  "vin": "JTDACACU8S3046841",
                   "vdp_url": "https://marketcheck.com/listing/4",
                   "price": 28000,
                   "miles": 4155,
-                  "build": { "year": 2024, "make": "Toyota", "model": "Prius Prime", "trim": "XSE" }
+                  "build": { "year": 2025, "make": "Toyota", "model": "Prius", "trim": "SE", "version": "SE Plug-in Hybrid", "powertrain_type": "PHEV" }
                 }
               ]
             }

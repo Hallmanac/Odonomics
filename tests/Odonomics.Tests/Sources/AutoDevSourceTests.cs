@@ -238,6 +238,42 @@ public class AutoDevSourceTests
     }
 
     [Fact]
+    public async Task RunAsync_ApiReturnsAPriusPlugInHybridModelForAPlainPriusQuery_StoredAsPriusPrimeNotRejected()
+    {
+        // auto.dev carries no fuel-type or trim-level field beyond "model" and "trim", so Toyota's
+        // 2025-and-later naming ("2025 Toyota Prius Plug In Hybrid SE") has nothing to identify the
+        // variant by except the model text itself; this must still be stored as Toyota Prius Prime
+        // rather than rejected as an unknown model.
+        ListingQuery query = new("Toyota", "Prius", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
+        const string body = """
+            {
+              "records": [
+                {
+                  "vin": "JTDACACU8S3046841",
+                  "vdpUrl": "https://auto.dev/listing/5",
+                  "year": 2025,
+                  "make": "Toyota",
+                  "model": "Prius Plug In Hybrid",
+                  "trim": "SE",
+                  "priceUnformatted": 28000,
+                  "mileageUnformatted": 22334
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("Prius Prime", candidate.Model);
+        Assert.Empty(result.Rejections);
+    }
+
+    [Fact]
     public async Task RunAsync_HybridOnlyFromModelYear_CandidateAtOrAboveYear_AcceptedAsCanonicalHybridModel()
     {
         // Toyota dropped the gas-only Camry for model year 2025, so a 2025 Camry SE with no
