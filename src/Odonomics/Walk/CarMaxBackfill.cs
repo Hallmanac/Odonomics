@@ -30,9 +30,14 @@ public sealed record CarMaxBackfillTally(int Filled, int AlreadySet, int CouldNo
 /// model, trim, mileage, and price the card showed before the walk ever opened the link). So a candidate
 /// whose posting URL turns up as an href in some pair folder's <c>cards*.json</c> is anchored to that
 /// folder's own detail page whose fingerprint (<see cref="CarMaxDetailFingerprint"/>) matches the card's:
-/// the two were read from the very same walk, so nothing about either has had a chance to drift yet. That
-/// anchor is trusted ahead of anything below, and is never subject to the fingerprint tolerances or
-/// cross-posting ambiguity checks below, since a posting's own URL can only ever be its own page.</para>
+/// the two were read from the very same walk, so nothing about either has had a chance to drift yet.
+/// That anchor only ever forms when the card's own fingerprint is unique among the pair's own cards,
+/// though: two different cards in the same pair can share one (CarMax prices in round,
+/// model-year-and-mileage-keyed steps, so this does happen), and a fingerprint like that can't tell
+/// their hrefs apart from each other, so neither is anchored to any detail page that shares it. Once
+/// anchored, the match is trusted ahead of anything below, and is never subject to the fingerprint
+/// tolerances or cross-posting ambiguity checks below, since a posting's own URL, anchored this way,
+/// can only ever be its own page.</para>
 ///
 /// <para>A candidate whose URL never turns up in any recorded <c>cards*.json</c> (the search that found
 /// it ran before recording carried card text, or its card was never re-walked) falls back to matching by
@@ -248,8 +253,28 @@ public static class CarMaxBackfill
                     pairPages.Add((fingerprint, page));
                 }
 
-                foreach ((string href, CarMaxDetailFingerprint cardFingerprint) in ReadCardFingerprints(pairDirectory))
+                List<(string Href, CarMaxDetailFingerprint Fingerprint)> cardFingerprints = [.. ReadCardFingerprints(pairDirectory)];
+
+                // A fingerprint two or more of the pair's own cards share (CarMax prices in round,
+                // model-year-and-mileage-keyed steps, so this does happen) can't tell those cards' hrefs
+                // apart from each other, so a detail page with that same fingerprint can't be anchored
+                // to any one of them either: doing so risked linking one car's own recorded page to a
+                // different car's posting, silently.
+                HashSet<CarMaxDetailFingerprint> ambiguousCardFingerprints =
+                [
+                    .. cardFingerprints
+                        .GroupBy(c => c.Fingerprint)
+                        .Where(g => g.Count() > 1)
+                        .Select(g => g.Key),
+                ];
+
+                foreach ((string href, CarMaxDetailFingerprint cardFingerprint) in cardFingerprints)
                 {
+                    if (ambiguousCardFingerprints.Contains(cardFingerprint))
+                    {
+                        continue;
+                    }
+
                     List<RecordedPage> owners = [.. pairPages.Where(p => p.Fingerprint == cardFingerprint).Select(p => p.Page)];
                     if (owners.Count != 1)
                     {
@@ -348,7 +373,7 @@ public static class CarMaxBackfill
             // URL, so all of them are certainly the same car. A store or availability disagreement
             // between them is evidence the car changed between runs, not proof of a fingerprint
             // collision (that proof only ever comes from two pages tying by fingerprint alone, which is
-            // what the fallback below, and its veto, is for) — so the newest recording simply wins.
+            // what the fallback below, and its veto, is for); the newest recording simply wins.
             RecordedPage anchoredNewest = anchoredMatches.Aggregate((a, b) => string.CompareOrdinal(a.RunFolder, b.RunFolder) >= 0 ? a : b);
             match = new RecordedMatch(anchoredNewest.Store, anchoredNewest.Availability);
             return true;

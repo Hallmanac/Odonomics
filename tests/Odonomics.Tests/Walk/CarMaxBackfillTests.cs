@@ -117,6 +117,55 @@ public class CarMaxBackfillTests
     }
 
     [Fact]
+    public async Task RunAsync_TwoCardsInThePairShareAFingerprintAndOnlyOneWasVisited_DoesNotAnchorEitherHrefToTheOthersPage()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        string dataDirectory = Path.GetDirectoryName(testDb.DatabasePath)!;
+
+        // Cars A and B show up as two different cards in the very same pair folder, both "2025 Toyota
+        // Camry, SE, 14K mi, $30,998" (CarMax prices in round, model-year-and-mileage-keyed steps, so
+        // this really does happen). Only B was opened this run; A's own href was already known from an
+        // earlier run and so was skipped. Anchoring by fingerprint alone, without checking whether more
+        // than one of the pair's own cards shares it, would wrongly link A's URL to B's page too.
+        WriteRecordedDetailPage(dataDirectory, "20260926-203954", "camry-hybrid", "detail-1.txt",
+            "2025 Toyota Camry\nSE\n14k miles\n\n$30,998\n\nShips from CarMax Ft. Myers, FL\n");
+        WriteCardsJson(dataDirectory, "20260926-203954", "camry-hybrid", "cards.json",
+            ("https://www.carmax.com/car/70093365", "2025 Toyota Camry\nSE\n14k miles\n\n$30,998"),
+            ("https://www.carmax.com/car/28754250", "2025 Toyota Camry\nSE\n14k miles\n\n$30,998"));
+
+        var upsertService = new LedgerUpsertService(db);
+        var seedRun = new RunEntity { Command = "walk", Sources = "carmax:Camry Hybrid", StartedAt = new DateTimeOffset(2026, 9, 26, 20, 39, 54, TimeSpan.Zero) };
+        db.Runs.Add(seedRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsertService.UpsertAsync(
+            BarePosting("4T1K61AK0RU000010", 2025, "Camry", "SE", 14000, 30998m, make: "Toyota", url: "https://www.carmax.com/car/70093365"),
+            seedRun,
+            CancellationToken.None);
+        await upsertService.UpsertAsync(
+            BarePosting("4T1K61AK0RU000011", 2025, "Camry", "SE", 14000, 30998m, make: "Toyota", url: "https://www.carmax.com/car/28754250"),
+            seedRun,
+            CancellationToken.None);
+
+        var backfillRun = new RunEntity { Command = "walk --backfill-carmax", Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        db.Runs.Add(backfillRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<PostingEntity> candidates = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+        Assert.Equal(2, candidates.Count);
+
+        CarMaxBackfillTally tally = await CarMaxBackfill.RunAsync(dataDirectory, candidates, upsertService, backfillRun, CancellationToken.None);
+
+        // Both cards' own fingerprint is ambiguous within the pair, so neither href is anchored to the
+        // Ft. Myers page, and both postings still tie by fingerprint alone: neither is touched.
+        Assert.Equal(new CarMaxBackfillTally(Filled: 0, AlreadySet: 0, CouldNotMatch: 2), tally);
+
+        List<PostingEntity> updated = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+        Assert.All(updated, p => Assert.Equal(WalkSites.CarMaxDealerName, p.Dealer?.Name));
+    }
+
+    [Fact]
     public async Task RunAsync_PostingWithNoMatchingRecording_CountsAsCouldNotMatch()
     {
         using var testDb = new LedgerTestDatabase();
