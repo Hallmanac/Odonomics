@@ -461,7 +461,8 @@ public static class WalkCommand
 
                 if (outcome.Result.Year is null || listedPrice is null || outcome.Result.Mileage is null)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.MissingFields)} (year/price/mileage; {vin})[/]");
+                    string missingFields = WalkOutcomeWording.MissingFieldNames(outcome.Result.Year, listedPrice, outcome.Result.Mileage);
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]detail {i + 1}: dropped, missing fields: {missingFields} ({vin})[/]");
                     return DetailPageOutcome.MissingFields;
                 }
 

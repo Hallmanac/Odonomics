@@ -70,4 +70,28 @@ public class WalkOutcomeWordingTests
 
         Assert.Equal("2024 Camry SE, gas-only before 2025", detail);
     }
+
+    [Fact]
+    public void MissingFieldNames_OnlyMileageBlank_NamesJustMileage()
+    {
+        Assert.Equal("mileage", WalkOutcomeWording.MissingFieldNames(2026, 33990m, null));
+    }
+
+    [Fact]
+    public void MissingFieldNames_YearAndPriceBlank_NamesBothInOrder()
+    {
+        Assert.Equal("year, price", WalkOutcomeWording.MissingFieldNames(null, null, 12066));
+    }
+
+    [Fact]
+    public void MissingFieldNames_AllThreeBlank_NamesAllThreeInOrder()
+    {
+        Assert.Equal("year, price, mileage", WalkOutcomeWording.MissingFieldNames(null, null, null));
+    }
+
+    [Fact]
+    public void MissingFieldNames_NothingBlank_IsEmpty()
+    {
+        Assert.Equal("", WalkOutcomeWording.MissingFieldNames(2026, 33990m, 12066));
+    }
 }
