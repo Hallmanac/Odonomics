@@ -86,7 +86,13 @@ namespace Odonomics.Walk;
 /// extraction is taken as it comes. <paramref name="CardDistanceReader"/> reads the distance in miles a result card
 /// states from the search's zip (cars.com, see <see cref="CarsComCards.ReadDistanceMiles"/>), for a site whose search URL
 /// carries a radius the site does not actually enforce; null for a site whose radius the search itself holds to, whose
-/// cards are then never checked against it.</summary>
+/// cards are then never checked against it. <paramref name="CardMultiCardPattern"/> is a JavaScript regular expression
+/// source <see cref="SearchPageLinks.CardScript"/> counts matches of, for a site whose bounding heuristic can hand an
+/// empty-text anchor (a photo-only link, or one of cars.com's own recommendation links) a wrapper spanning several
+/// cards instead of its own (cars.com, see <see cref="CarsComCards.DistanceLinePattern"/>): when the wrapper's text
+/// matches it more than once, the wrapper is re-bound to the single child of it that actually holds the anchor. Null
+/// for a site whose card shape has not shown this heuristic hand a link a neighbor's text, whose empty-text anchors
+/// are then left bound to whatever the nearest-dollar-ancestor walk first finds.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -117,7 +123,8 @@ public sealed record WalkSite(
     bool AskingPriceFromCard = false,
     Func<string, ResolvedDealer?>? DetailDealerReader = null,
     Func<string, string?, int?, string?>? DetailTitleModelReader = null,
-    Func<string, int?>? CardDistanceReader = null)
+    Func<string, int?>? CardDistanceReader = null,
+    string? CardMultiCardPattern = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -491,7 +498,11 @@ public static class WalkSites
         // cars.com's maximum_distance query parameter doesn't bound the results it actually returns
         // (a padded page keeps handing back cars hundreds of miles off), so every card's own stated
         // distance is checked against the scenario's radius at link collection instead.
-        CardDistanceReader: CarsComCards.ReadDistanceMiles);
+        CardDistanceReader: CarsComCards.ReadDistanceMiles,
+        // An empty-text anchor (a photo-only link, or one of the site's own recommendation links) can
+        // land the nearest-dollar-ancestor walk on a wrapper spanning several cards; a wrapper naming more
+        // than one distance is re-bound to the single card that holds the anchor (see SearchPageLinks).
+        CardMultiCardPattern: CarsComCards.DistanceLinePattern);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
