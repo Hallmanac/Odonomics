@@ -7,6 +7,7 @@ The table below lists the commands in the order you'd run them. [running.md](run
 ```
 odo search                          run Auto.dev and Marketcheck, upsert the ledger, print the diff
 odo walk [cars.com|carvana|autotrader|carmax|cargurus] [--model "Make Model"] [--max N] [--revisit]
+odo walk --backfill-carmax          fill a bare CarMax dealer's store and availability from disk
                                     an operator-assisted browser walk of the shortlist
 odo research [<vin> ...] [--refresh] [--quiet]
                                     safety ratings and VIN history, with a red-flags summary
@@ -35,6 +36,7 @@ odo finalist <vin>                  mark a vehicle a finalist
 - `--model "Make Model"` narrows the walk to that one model, matching the scenario's own casing case-insensitively.
 - `--max N` limits how many matching detail pages a site-and-model pair visits. Without it, a pair visits every car its search returns that the ledger doesn't already hold.
 - `--revisit` opens a detail page for every link, including cars the ledger already holds.
+- `--backfill-carmax` ignores the site argument and every other walk flag, opens no browser, and visits no page. It reads the CarMax detail pages a walk has already recorded on disk, matches each one to a posting whose dealer is still the bare "CarMax" fallback or whose reserved-or-in-transit availability was never read, and fills in the store and availability from the recording. It prints how many postings it filled, found already set, and could not match to any recording.
 
 ## research
 
