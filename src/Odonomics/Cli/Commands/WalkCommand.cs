@@ -485,15 +485,29 @@ public static class WalkCommand
 
                 CardFee? cardFee = cardText is null ? null : site.ReadCardFee(cardText);
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
-                if (site.DetailDealerReader is not null && dealer.IsFallback && site.DetailDealerReader(bodyText) is null)
+                // Whether the page's own header line matched one of this site's recognised store shapes,
+                // independent of what dealer.IsFallback ends up as: that flag can also read false when
+                // extraction (not the page's header) supplied a dealer name, so it cannot stand in for
+                // "the header was recognised" the way it can for "no store is linked".
+                bool storeLineRecognised = site.DetailDealerReader is not null && site.DetailDealerReader(bodyText) is not null;
+                if (site.DetailDealerReader is not null && dealer.IsFallback && !storeLineRecognised)
                 {
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: {WalkOutcomeWording.StoreLineNotRecognised(dealer.Name ?? WalkSites.CarMaxDealerName)}[/]");
                 }
 
                 Dictionary<string, string> attributes = new(knownTouches.BadgesOfNewLink(canonicalUrl));
+                HashSet<string> attributesToClear = [];
                 if (site.ReadDetailAvailability(bodyText) is string availability)
                 {
                     attributes[PostingAttributeNames.Availability] = availability;
+                }
+                else if (storeLineRecognised)
+                {
+                    // The header names a store, so it states plainly the car is not reserved or in
+                    // transit; unlike a card badge that stopped showing up, this is proof the earlier
+                    // state ended, so the attribute is cleared rather than left standing (see
+                    // ListingCandidate.AttributesToClear).
+                    attributesToClear.Add(PostingAttributeNames.Availability);
                 }
 
                 var candidate = new ListingCandidate
@@ -528,6 +542,7 @@ public static class WalkCommand
                     DealerNameIsFallback = dealer.IsFallback,
                     ShippingFee = cardFee?.ShippingFee ?? site.ReadShippingFee(bodyText),
                     Attributes = attributes,
+                    AttributesToClear = attributesToClear,
                     PickupFee = pickup?.Fee,
                     PickupLocation = cardFee?.PickupLocation ?? pickup?.Location,
                     FeePosture = feeStatement?.Posture,

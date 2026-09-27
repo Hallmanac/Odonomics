@@ -443,6 +443,7 @@ public class KnownCardTouchesTests
         await service.SetPostingAttributesAsync(
             posting.Id,
             new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal", [PostingAttributeNames.Shipping] = "Free shipping" },
+            [],
             first,
             CancellationToken.None);
         KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
@@ -464,7 +465,7 @@ public class KnownCardTouchesTests
         (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m), (2, 19000m));
         PostingEntity earlier = await db.Postings.SingleAsync(p => p.Url == CardUrl(1));
         RunEntity first = await db.Runs.SingleAsync(r => r.StartedAt == FirstRunAt);
-        await service.SetPostingAttributesAsync(earlier.Id, new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal" }, first, CancellationToken.None);
+        await service.SetPostingAttributesAsync(earlier.Id, new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Great Deal" }, [], first, CancellationToken.None);
         KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
 
         await CollectAsync(touches, new() { [1] = [Card(1, 18000m), Card(2, 19000m)] }, poolSize: 60);

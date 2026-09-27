@@ -120,6 +120,7 @@ public class LedgerSiteFactsTests
         await service.SetPostingAttributesAsync(
             posting.Id,
             new Dictionary<string, string> { ["Badge"] = "Certified", ["Rating"] = "4.8" },
+            [],
             run,
             CancellationToken.None);
 
@@ -140,12 +141,14 @@ public class LedgerSiteFactsTests
         await service.SetPostingAttributesAsync(
             posting.Id,
             new Dictionary<string, string> { ["Badge"] = "Certified", ["Rating"] = "4.8" },
+            [],
             first,
             CancellationToken.None);
 
         await service.SetPostingAttributesAsync(
             posting.Id,
             new Dictionary<string, string> { ["Rating"] = "4.6", ["Inspection"] = "150 points" },
+            [],
             second,
             CancellationToken.None);
 
@@ -167,6 +170,7 @@ public class LedgerSiteFactsTests
         await service.SetPostingAttributesAsync(
             posting.Id,
             new Dictionary<string, string> { [" Badge "] = " Certified ", ["  "] = "orphan", ["Rating"] = "" },
+            [],
             run,
             CancellationToken.None);
 
@@ -233,6 +237,30 @@ public class LedgerSiteFactsTests
     }
 
     [Fact]
+    public async Task UpsertAsync_ACandidateThatClearsAnAttributeRemovesItsStoredRow()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity first = await StartRunAsync(db, FirstRunAt);
+        RunEntity second = await StartRunAsync(db, SecondRunAt);
+        await service.UpsertAsync(
+            Candidate() with { Attributes = new Dictionary<string, string> { [PostingAttributeNames.Availability] = "Reserved for another buyer", [PostingAttributeNames.Deal] = "Good Deal" } },
+            first,
+            CancellationToken.None);
+
+        await service.UpsertAsync(
+            Candidate() with { AttributesToClear = new HashSet<string> { PostingAttributeNames.Availability } },
+            second,
+            CancellationToken.None);
+
+        using OdonomicsDbContext reread = testDb.CreateContext();
+        PostingEntity posting = await reread.Postings.SingleAsync();
+        Dictionary<string, (string Value, int RunId)> stored = await AttributesOfAsync(reread, posting.Id);
+        Assert.Equal(("Good Deal", first.Id), Assert.Single(stored).Value);
+    }
+
+    [Fact]
     public async Task SetPostingAttributesByUrlAsync_RefreshesEachPostingAtItsUrlAndIgnoresAnUnknownUrl()
     {
         using var testDb = new LedgerTestDatabase();
@@ -242,6 +270,7 @@ public class LedgerSiteFactsTests
         await service.SetPostingAttributesAsync(
             posting.Id,
             new Dictionary<string, string> { [PostingAttributeNames.Deal] = "Good Deal", [PostingAttributeNames.Demand] = "High Demand" },
+            [],
             first,
             CancellationToken.None);
 

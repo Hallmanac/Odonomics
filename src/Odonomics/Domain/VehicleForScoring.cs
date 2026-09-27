@@ -55,7 +55,7 @@ public sealed record VehicleForScoring
 
     /// <summary>What the cheapest posting's own site said about whether the car can actually be
     /// bought right now (CarMax's "Reserved for another buyer" or "In transit, not yet
-    /// purchasable"), for `odo rank` to show beside the row; null when the ledger holds none.
+    /// purchasable"), for `odo rank` to show on its own line under the row; null when the ledger holds none.
     /// Display only: the scorer never reads it, so a reserved or in-transit car is still ranked
     /// exactly as any other.</summary>
     public string? Availability { get; init; }

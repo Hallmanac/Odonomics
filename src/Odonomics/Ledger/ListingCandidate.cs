@@ -31,6 +31,15 @@ public sealed record ListingCandidate
     /// source showed none.</summary>
     public IReadOnlyDictionary<string, string> Attributes { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>Names of display-only attributes this sighting's page proves no longer apply, so the
+    /// upsert removes their stored rows outright rather than leaving them (see
+    /// <see cref="LedgerUpsertService.ApplyAttributes"/>). Unlike <see cref="Attributes"/>, whose
+    /// absence from a later sighting is never proof a badge is gone, a name here is a state the page's
+    /// own text states positively has ended (CarMax's "availability" once a header stops reading
+    /// "Reserved at" or "Coming to"), so it does not survive the way a card badge does. Empty when the
+    /// source names none.</summary>
+    public IReadOnlySet<string> AttributesToClear { get; init; } = new HashSet<string>();
+
     /// <summary>What it costs to pick the car up instead of having it delivered, when the source's page
     /// offers that (only carvana does). Null when it shows no pickup option, and 0 when the option
     /// prints no fee.</summary>
