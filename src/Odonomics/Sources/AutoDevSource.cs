@@ -118,18 +118,26 @@ public sealed class AutoDevSource(string? apiKey, HttpClient http) : IListingSou
             return;
         }
 
+        // auto.dev's Prius search can mix a Prius Prime in with the plain trims, the same way it
+        // mixes a base gas model into a hybrid query (see the doesn't-match-the-query rejection
+        // below); unlike that case, this needs its own rejection reason, since the record isn't an
+        // unrelated vehicle, it's the scenario's own excluded Toyota Prius Prime. Checked against
+        // the model and trim together, since auto.dev carries no fuel-type field and Toyota's own
+        // "Prime" or "Plug-in Hybrid" wording can land in either.
+        string? modelForPrimeCheck = trim is null ? apiModel : $"{apiModel} {trim}";
+        if (PriusPrimeVariant.ReadsAsPrime(apiMake, modelForPrimeCheck))
+        {
+            result.Rejections.Add($"{query.Make} {query.Model}: candidate rejected, Prius Prime, not a candidate ({vin})");
+            return;
+        }
+
         // The canonical model queried, not the API's own "model" field: VehicleEntity.Model has to
         // match the model half of the "source:model" token ModelsCovered feeds into RunSources.Key.
         // The API is free to return a bare model ("Camry") for a query on a compound one ("Camry
         // Hybrid"), but MatchesExtractedVehicle below has already rejected any candidate that isn't
         // actually this query's model, so stamping the canonical model here never mislabels a
-        // vehicle the API returned for a different reason. The one exception is a Prius Prime the
-        // API returned for the plain "Toyota Prius" query (the same mixing-in the walk sees): it is
-        // stored as Toyota Prius Prime rather than rejected as an unknown model, since the scenario
-        // scores that variant on its own.
-        string? storedModel = query.MatchesExtractedVehicle(apiMake, apiModel, trim, year)
-            ? query.Model
-            : PriusPrimeVariant.ReadsAsPrime(apiMake, apiModel) ? PriusPrimeVariant.StoredModel : null;
+        // vehicle the API returned for a different reason.
+        string? storedModel = query.MatchesExtractedVehicle(apiMake, apiModel, trim, year) ? query.Model : null;
 
         if (storedModel is null)
         {

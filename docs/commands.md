@@ -68,6 +68,8 @@ Both APIs are asked for used cars only, the same as the walk, which already drop
 
 As a backstop against a filter an API ignores, a record either API still marks as new gets dropped, using Auto.dev's `condition` and Marketcheck's `inventory_type`. The rejection names the VIN, and the per-source summary line counts it among the rejected like any other rejection. A record with no such field is kept.
 
+A Prius search can turn up a Toyota Prius Prime the same way it turns up plain Prius trims, and the Prime is not a candidate: a record whose model, trim, or (Marketcheck only) powertrain type names "Prime" or "Plug-in Hybrid" (either spelling of "in") is rejected the same way as a new car, naming the VIN and counted among the rejected, and it is never stored as a Prius. [walk.md](walk.md#rules-every-site-shares) covers the same exclusion in the walk.
+
 A price below $1,000 is a placeholder, not an asking price (Auto.dev has returned 0 for a car with no price posted). Both sources reject a candidate priced that low, with a rejection naming the VIN. A placeholder that's already stored on the ledger is ignored whenever odo picks a vehicle's current price. The diff below skips one under every heading except "Gone".
 
 `odo search` and `odo walk` both finish by printing what changed in the ledger under up to five headings:
