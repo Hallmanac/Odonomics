@@ -203,6 +203,41 @@ public class AutoDevSourceTests
     }
 
     [Fact]
+    public async Task RunAsync_ApiReturnsAPriusPrimeForAPlainPriusQuery_StoredAsPriusPrimeNotRejected()
+    {
+        // auto.dev's Prius search can mix a Prius Prime in with the plain trims, the same way it
+        // mixes a base gas model into a hybrid query; unlike that case, a Prime is not an unknown
+        // model to reject, it's the scenario's own Toyota Prius Prime, stored as such.
+        ListingQuery query = new("Toyota", "Prius", YearMin: 2019, "32114", 50, MaxMileage: 100000);
+        string url = $"https://auto.dev/api/listings?apikey=test-key&zip={query.Zip}&radius={query.RadiusMiles}" +
+                     $"&make={query.Make}&model={query.Model}&year_min={query.YearMin}&mileage_max={query.MaxMileage}&condition=used&condition=certified pre-owned";
+        const string body = """
+            {
+              "records": [
+                {
+                  "vin": "JTDACACU5T3062285",
+                  "vdpUrl": "https://auto.dev/listing/4",
+                  "year": 2024,
+                  "make": "Toyota",
+                  "model": "Prius Prime",
+                  "trim": "XSE",
+                  "priceUnformatted": 28000,
+                  "mileageUnformatted": 4155
+                }
+              ]
+            }
+            """;
+        var handler = new FixtureHttpMessageHandler(new Dictionary<string, string> { [url] = body });
+        var source = new AutoDevSource("test-key", new HttpClient(handler));
+
+        SourceResult result = await source.RunAsync([query], CancellationToken.None);
+
+        ListingCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("Prius Prime", candidate.Model);
+        Assert.Empty(result.Rejections);
+    }
+
+    [Fact]
     public async Task RunAsync_HybridOnlyFromModelYear_CandidateAtOrAboveYear_AcceptedAsCanonicalHybridModel()
     {
         // Toyota dropped the gas-only Camry for model year 2025, so a 2025 Camry SE with no
