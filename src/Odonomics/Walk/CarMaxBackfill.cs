@@ -34,52 +34,26 @@ public sealed record CarMaxBackfillTally(int Filled, int AlreadySet, int CouldNo
 /// That anchor only ever forms when the card's own fingerprint is unique among the pair's own cards,
 /// though: two different cards in the same pair can share one (CarMax prices in round,
 /// model-year-and-mileage-keyed steps, so this does happen), and a fingerprint like that can't tell
-/// their hrefs apart from each other, so neither is anchored to any detail page that shares it. Once
-/// anchored, the match is trusted ahead of anything below, and is never subject to the fingerprint
-/// tolerances or cross-posting ambiguity checks below, since a posting's own URL, anchored this way,
-/// can only ever be its own page.</para>
+/// their hrefs apart from each other, so neither is anchored to any detail page that shares it, however
+/// certain that page otherwise looks.</para>
 ///
-/// <para>A candidate whose URL never turns up in any recorded <c>cards*.json</c> (the search that found
-/// it ran before recording carried card text, or its card was never re-walked) falls back to matching by
-/// fingerprint alone: the year, make, model, trim, mileage, and asking price a page and a posting both
-/// state about the car (see <see cref="CarMaxDetailFingerprint"/>), since every one of those figures is
-/// exactly what the original walk read off the very same page to store the posting in the first place.
-/// That comparison tolerates three known gaps between a page's own words and what the ledger stamped from
-/// them: the ledger's model is the pair's canonical scenario model rather than the page's own title text
-/// ("Camry Hybrid" against a page titled "2025 Toyota Camry"), so make compares case-insensitively and
-/// the ledger's model also matches a page whose title is that same model with a trailing " Hybrid"
-/// stripped (never the other way around, so a plain, non-hybrid candidate is never matched to a page
-/// whose own title does say "Hybrid"); the ledger's mileage can be overwritten to an exact figure by a
-/// later sighting from a different source, so it is rounded to the nearest thousand the same way CarMax's
-/// own pages always are before comparing; and the posting's price can move on from what the page said by
-/// the time this runs, so any price the posting has ever been observed at counts, not only its latest.
-/// Two different candidate postings that tie this way (a real, if rare, occurrence: two same-year,
-/// same-trim, same-mileage cars of the same model) can't be told apart, so neither is touched; a
-/// candidate no recorded page matches at all is left alone the same way. A candidate that ties two or
-/// more distinct recorded pages is left alone for the identical reason: nothing on either side says which
-/// one is really its own page. The same is true the other way around: a single recorded page that
-/// tolerantly matches more than one posting (candidate or already resolved) can never be trusted as the
-/// page a candidate is filled from, since those tolerances can tie two postings whose own fingerprints no
-/// longer match exactly (one posting's mileage or price has drifted since the page was recorded, the
-/// other's hasn't) to the very same page. That page still counts against every candidate it tolerantly
-/// matches, though, rather than being dropped from view outright: a candidate is left alone whenever any
-/// recorded page it tolerantly matches, trustworthy enough to fill from or not, disagrees about the
-/// store or the availability with the page that would otherwise be trusted. Dropping an untrustworthy
-/// page outright, instead of only barring it from being the source, would let a bare posting be filled
-/// from an older recording while a newer page that also plausibly is its own car, and disagrees about
-/// which store it's at now, went unseen.</para>
+/// <para>An anchor to the candidate's own URL is the only match this backfill ever trusts. An earlier
+/// version also matched by fingerprint alone (year, make, model, trim, mileage, and price, with no URL
+/// in it at all) whenever no anchor could be formed, on the theory that two cars agreeing on every one
+/// of those figures at once was rare enough to trust. It wasn't rare enough: a ledger vehicle row can
+/// drift after the fact (a later, more exact source overwrites a shared VIN's mileage or model; see
+/// lesson 84abc33f), far enough that one car's own figures now read as some other, merely
+/// similar-looking car's, and that fallback would then fill a posting from a stranger's recorded page
+/// with nothing on disk left to catch it. Patching one drifted field at a time doesn't make that risk go
+/// away, so this backfill no longer tries: a candidate whose URL never turns up as an anchored href is
+/// left alone, bare, and counted as could-not-match, whatever its fingerprint happens to resemble. The
+/// next ordinary <c>odo walk carmax</c> re-discovers its own card and fills it the ordinary way instead.</para>
 ///
-/// <para>When a candidate matched by fingerprint alone ties more than one trustworthy recorded page
-/// (the same car walked more than once, across different runs), the page from the newest run wins,
-/// since a later recording can only be truer than an older one about which store the car is at now,
-/// unless the pages that tie disagree about which store or availability that is, or two of them come
-/// from the very same run. Any of those is proof the pages are two different cars that merely share a
-/// fingerprint (CarMax prices in round, model-year-and-mileage-keyed steps, so this does happen among its
-/// own inventory), not one car recorded twice, since a single run's own detail pages are never the same
-/// car under two different files; a tie like that is left alone rather than trusted. A candidate anchored
-/// by its own URL never needs that caution: every page it ties carries that same URL, so all of them are
-/// certainly its own car, and a disagreement between them is simply the car changing between runs, not
-/// a fingerprint collision, so the newest one always wins there, disagreement or not.</para>
+/// <para>When a candidate's own URL ties more than one recorded page (the same car walked more than once,
+/// across different runs, each one's card and detail page recorded in its own run's pair folder), the page
+/// from the newest run wins, whether or not the pages agree about the store or the availability: every
+/// page in the set carries the candidate's own canonical URL, so all of them are certainly its own car,
+/// and a disagreement between them is simply the car changing between runs, not proof of anything else.</para>
 ///
 /// <para>Nothing here is ever deleted, and a posting whose dealer is already a real store and whose
 /// availability is already set is never even considered: this only ever fills a gap, never
@@ -107,19 +81,7 @@ public static class CarMaxBackfill
         int alreadySet = allPostings.Count(c => !c.NeedsMatch);
         List<Candidate> candidates = [.. allPostings.Where(c => c.NeedsMatch)];
 
-        // A fingerprint any two CarMax postings both carry, candidate or not, can't be told apart from
-        // a recorded page by fingerprint alone, so neither is touched by the fallback path below: a
-        // posting a --revisit already resolved still proves the same collision for a candidate that
-        // still shares its fingerprint. A candidate anchored by its own URL never consults this at all.
-        HashSet<CarMaxDetailFingerprint> ambiguousFingerprints =
-        [
-            .. allPostings
-                .GroupBy(c => c.Fingerprint)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key),
-        ];
-
-        (List<RecordedPage> recordedPages, Dictionary<string, List<RecordedPage>> pagesByUrl) = ScanRecordings(dataDirectory);
+        Dictionary<string, List<RecordedPage>> pagesByUrl = ScanRecordings(dataDirectory);
 
         int filled = 0;
         int couldNotMatch = 0;
@@ -128,7 +90,7 @@ public static class CarMaxBackfill
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!TryFindMatch(candidate, recordedPages, pagesByUrl, ambiguousFingerprints, allPostings, out RecordedMatch match))
+            if (!TryFindMatch(candidate, pagesByUrl, out RecordedMatch match))
             {
                 // A posting already on a real store only ever entered this loop for its availability
                 // reading, which a missing attribute usually just means is unremarkable ("not
@@ -189,8 +151,7 @@ public static class CarMaxBackfill
 
     private static Candidate? ToCandidate(PostingEntity posting)
     {
-        VehicleEntity? vehicle = posting.Vehicle;
-        if (vehicle is null)
+        if (posting.Vehicle is null)
         {
             return null;
         }
@@ -200,38 +161,24 @@ public static class CarMaxBackfill
                 && string.IsNullOrEmpty(posting.Dealer.Location));
         bool hasAvailability = posting.Attributes.Any(a => a.Name == PostingAttributeNames.Availability);
 
-        List<decimal> observedPrices = [.. posting.PriceObservations.Select(o => o.Price).Distinct()];
-        decimal? latestPrice = posting.PriceObservations
-            .OrderByDescending(o => o.ObservedAt)
-            .Select(o => (decimal?)o.Price)
-            .FirstOrDefault();
-
-        // The latest price still identifies the candidate for the ambiguous-fingerprint check above
-        // (two postings tying on it are exactly as untrustworthy whichever price either is quoted at
-        // right now); TryFindMatch below reaches past it to every price this posting has ever carried.
-        var fingerprint = new CarMaxDetailFingerprint(vehicle.Year, vehicle.Make, vehicle.Model, vehicle.Trim, vehicle.Mileage, latestPrice);
-        return new Candidate(posting.Id, posting.Url, fingerprint, observedPrices, isBareDealer, hasAvailability);
+        return new Candidate(posting.Id, posting.Url, isBareDealer, hasAvailability);
     }
 
     private static readonly JsonSerializerOptions CardEntryOptions = new() { PropertyNameCaseInsensitive = true };
 
     private sealed record CardEntry(string? Href, string? Text, string? Card);
 
-    /// <summary>Every recorded CarMax detail page under <paramref name="dataDirectory"/>'s
-    /// <c>walks/carmax/&lt;run&gt;/&lt;pair&gt;/detail-N.txt</c> files, read once, alongside a map from a
-    /// posting's own URL to every recorded page anchored to it by that URL turning up as an href in the
-    /// same pair folder's own <c>cards*.json</c> (see the class doc). The flat list is kept rather than
-    /// keyed by fingerprint: <see cref="TryFindMatch"/>'s fallback path compares a candidate against a
-    /// page's fingerprint with tolerances a plain dictionary lookup can't express, and needs every page a
-    /// candidate could plausibly match, not only the ones an exact fingerprint would have kept.</summary>
-    private static (List<RecordedPage> Pages, Dictionary<string, List<RecordedPage>> PagesByUrl) ScanRecordings(string dataDirectory)
+    /// <summary>A map from a posting's own URL to every recorded page anchored to it by that URL turning
+    /// up as an href in the same pair folder's own <c>cards*.json</c> (see the class doc), read once from
+    /// every recorded CarMax detail page under <paramref name="dataDirectory"/>'s
+    /// <c>walks/carmax/&lt;run&gt;/&lt;pair&gt;/detail-N.txt</c> files.</summary>
+    private static Dictionary<string, List<RecordedPage>> ScanRecordings(string dataDirectory)
     {
-        var pages = new List<RecordedPage>();
         var pagesByUrl = new Dictionary<string, List<RecordedPage>>();
         string carMaxRoot = Path.Combine(dataDirectory, "walks", "carmax");
         if (!Directory.Exists(carMaxRoot))
         {
-            return (pages, pagesByUrl);
+            return pagesByUrl;
         }
 
         foreach (string runDirectory in Directory.EnumerateDirectories(carMaxRoot))
@@ -248,8 +195,7 @@ public static class CarMaxBackfill
                         continue;
                     }
 
-                    var page = new RecordedPage(fingerprint, runFolder, CarMaxStores.Read(text), CarMaxStores.ReadAvailability(text));
-                    pages.Add(page);
+                    var page = new RecordedPage(runFolder, CarMaxStores.Read(text), CarMaxStores.ReadAvailability(text));
                     pairPages.Add((fingerprint, page));
                 }
 
@@ -296,7 +242,7 @@ public static class CarMaxBackfill
             }
         }
 
-        return (pages, pagesByUrl);
+        return pagesByUrl;
     }
 
     /// <summary>Every (href, fingerprint) pair every <c>cards*.json</c> file in
@@ -334,128 +280,29 @@ public static class CarMaxBackfill
         }
     }
 
-    /// <summary>Whether <paramref name="matches"/>, tied only by fingerprint tolerance (never by a
-    /// shared URL anchor; see the class doc), disagree about the store, the availability, or come from
-    /// more than one detail page in the very same run: proof they're recordings of two different cars
-    /// that merely tie, not the same car recorded more than once, so <paramref name="matches"/> can't be
-    /// trusted as a group at all.</summary>
-    private static bool HasDisqualifyingDisagreement(List<RecordedPage> matches)
-    {
-        bool sameRunTwice = matches.GroupBy(p => p.RunFolder).Any(g => g.Count() > 1);
-        int distinctStores = matches
-            .Select(p => p.Store)
-            .OfType<ResolvedDealer>()
-            .Select(store => (store.Name, store.Location))
-            .Distinct()
-            .Count();
-        int distinctAvailabilities = matches.Select(p => p.Availability).Distinct().Count();
-
-        return sameRunTwice || distinctStores > 1 || distinctAvailabilities > 1;
-    }
-
-    /// <summary>Resolves <paramref name="candidate"/> to the one <paramref name="match"/> to trust, or
-    /// false when there is none to trust (see the class doc for the full set of reasons). A candidate
-    /// whose own URL is anchored to at least one recorded page (<paramref name="pagesByUrl"/>) is
-    /// resolved from that anchored set alone, ahead of and instead of the fingerprint-tolerant fallback
-    /// below: a posting's own URL can only ever be its own page, so neither the ambiguous-fingerprint
-    /// check nor the cross-posting usable-match check, both about fingerprint tolerance, applies to it.</summary>
+    /// <summary>Resolves <paramref name="candidate"/> to the one <paramref name="match"/> to trust: every
+    /// recorded page anchored to the candidate's own URL (<paramref name="pagesByUrl"/>), newest run
+    /// first, or false when its URL was never anchored to any recorded page at all. No disagreement veto
+    /// applies here: every page in an anchored set carries the candidate's own canonical URL, so all of
+    /// them are certainly its own car, and a disagreement between them is simply the car changing between
+    /// runs.</summary>
     private static bool TryFindMatch(
         Candidate candidate,
-        List<RecordedPage> recordedPages,
         Dictionary<string, List<RecordedPage>> pagesByUrl,
-        HashSet<CarMaxDetailFingerprint> ambiguousFingerprints,
-        List<Candidate> allPostings,
         out RecordedMatch match)
     {
-        if (pagesByUrl.TryGetValue(candidate.Url, out List<RecordedPage>? anchoredMatches) && anchoredMatches.Count > 0)
-        {
-            // No disagreement veto here: every page in this set carries the candidate's own canonical
-            // URL, so all of them are certainly the same car. A store or availability disagreement
-            // between them is evidence the car changed between runs, not proof of a fingerprint
-            // collision (that proof only ever comes from two pages tying by fingerprint alone, which is
-            // what the fallback below, and its veto, is for); the newest recording simply wins.
-            RecordedPage anchoredNewest = anchoredMatches.Aggregate((a, b) => string.CompareOrdinal(a.RunFolder, b.RunFolder) >= 0 ? a : b);
-            match = new RecordedMatch(anchoredNewest.Store, anchoredNewest.Availability);
-            return true;
-        }
-
-        if (ambiguousFingerprints.Contains(candidate.Fingerprint))
+        if (!pagesByUrl.TryGetValue(candidate.Url, out List<RecordedPage>? anchoredMatches) || anchoredMatches.Count == 0)
         {
             match = default;
             return false;
         }
 
-        List<RecordedPage> matches = [.. recordedPages.Where(page => Matches(candidate, page.Fingerprint))];
-        if (matches.Count == 0 || HasDisqualifyingDisagreement(matches))
-        {
-            match = default;
-            return false;
-        }
-
-        // A page that also tolerantly matches some other posting can never be the one this candidate is
-        // filled from: the same tolerances that let this candidate's own drifted mileage or price still
-        // find its page (see the class doc) can just as easily let that other posting's page be this
-        // one's instead. It wasn't dropped above, since its disagreement about the store or availability
-        // still had to be able to veto the match; with none found, only a page trustworthy enough to
-        // actually name a source is left standing here.
-        List<RecordedPage> usableMatches =
-            [.. matches.Where(page => allPostings.Count(p => Matches(p, page.Fingerprint)) <= 1)];
-        if (usableMatches.Count == 0)
-        {
-            match = default;
-            return false;
-        }
-
-        RecordedPage newest = usableMatches.Aggregate((a, b) => string.CompareOrdinal(a.RunFolder, b.RunFolder) >= 0 ? a : b);
+        RecordedPage newest = anchoredMatches.Aggregate((a, b) => string.CompareOrdinal(a.RunFolder, b.RunFolder) >= 0 ? a : b);
         match = new RecordedMatch(newest.Store, newest.Availability);
         return true;
     }
 
-    /// <summary>Whether <paramref name="page"/> could be the page <paramref name="candidate"/> was
-    /// walked from: same year, make (case-insensitively), and model (see <see cref="ModelsMatch"/>);
-    /// the candidate's mileage rounded to the nearest thousand the way CarMax's own pages always are
-    /// equals the page's; the trim matches case-insensitively; and the page's price, if it states one,
-    /// is one the posting has been observed at some point, not necessarily its latest.</summary>
-    private static bool Matches(Candidate candidate, CarMaxDetailFingerprint page)
-    {
-        CarMaxDetailFingerprint fingerprint = candidate.Fingerprint;
-        return fingerprint.Year == page.Year
-            && string.Equals(fingerprint.Make, page.Make, StringComparison.OrdinalIgnoreCase)
-            && ModelsMatch(fingerprint.Model, page.Model)
-            && string.Equals(fingerprint.Trim, page.Trim, StringComparison.OrdinalIgnoreCase)
-            && CarMaxRoundedMileage(fingerprint.Mileage) == page.Mileage
-            && (page.Price is not { } pagePrice || candidate.ObservedPrices.Contains(pagePrice));
-    }
-
-    /// <summary>Whether <paramref name="candidateModel"/> (the ledger's model, the pair's canonical
-    /// scenario model, e.g. "Camry Hybrid") and <paramref name="pageModel"/> (the page's own title
-    /// text, e.g. "Camry") name the same car: an exact, case-insensitive match, or the candidate's
-    /// model with any trailing " Hybrid" stripped matching the page's model outright. Only the
-    /// candidate side is ever stripped: a page whose own title does say "Hybrid" is unambiguous about
-    /// being one, so it is never treated as a match for a plain, non-hybrid candidate just because
-    /// they'd share a base model.</summary>
-    private static bool ModelsMatch(string candidateModel, string pageModel) =>
-        string.Equals(candidateModel, pageModel, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(BaseModel(candidateModel), pageModel, StringComparison.OrdinalIgnoreCase);
-
-    private static string BaseModel(string model)
-    {
-        int hybridIndex = model.IndexOf(" Hybrid", StringComparison.OrdinalIgnoreCase);
-        return hybridIndex < 0
-            ? model
-            : model[..hybridIndex];
-    }
-
-    /// <summary>CarMax rounds any mileage at or above 1,000 to the nearest thousand on its own pages
-    /// (see <see cref="CarMaxDetailFingerprints"/>), so a ledger mileage a later sighting from a
-    /// different, more exact source has since overwritten is rounded the same way before it's compared
-    /// to one.</summary>
-    private static int CarMaxRoundedMileage(int mileage) =>
-        mileage < 1000
-            ? mileage
-            : (int)Math.Round(mileage / 1000.0, MidpointRounding.AwayFromZero) * 1000;
-
-    private readonly record struct Candidate(int PostingId, string Url, CarMaxDetailFingerprint Fingerprint, IReadOnlyList<decimal> ObservedPrices, bool IsBareDealer, bool HasAvailability)
+    private readonly record struct Candidate(int PostingId, string Url, bool IsBareDealer, bool HasAvailability)
     {
         /// <summary>Whether this posting is missing anything a recorded page could fill: a real
         /// store (it is still on the bare "CarMax" fallback) or an availability reading. A posting
@@ -469,7 +316,7 @@ public static class CarMaxBackfill
         public bool NeedsMatch => IsBareDealer || !HasAvailability;
     }
 
-    private readonly record struct RecordedPage(CarMaxDetailFingerprint Fingerprint, string RunFolder, ResolvedDealer? Store, string? Availability);
+    private readonly record struct RecordedPage(string RunFolder, ResolvedDealer? Store, string? Availability);
 
     private readonly record struct RecordedMatch(ResolvedDealer? Store, string? Availability);
 }
