@@ -67,16 +67,17 @@ public sealed record SearchDiff(
 /// before the site ran out of results, see <see cref="RunSources.PartialKey"/>) so the walk never
 /// reached it, this run covered its pair only partially because a result page after the first failed
 /// to load (see <see cref="RunSources.UnreadKey"/>), or otherwise it simply is not on the search page
-/// any more. The four after "sold" are cars the search no longer asks for, and "beyond the cap" and
-/// "pages unread" are cars this run did not look for; "sold" and the last are the cars that have
-/// likely left the market, and "sold" is the one a page confirmed. "Card never rendered" is its own
-/// case: the walk saw the link but never actually measured it, so it is reported apart from the
-/// pair's own coverage, which is never marked partial for it (see <see cref="Cli.Commands.WalkCommand"/>), and
-/// it is checked before "search moved" so a card that keeps failing to render is never misreported
-/// against a stale zip or radius comparison. "Search moved" compares the zip and radius each run
-/// recorded (see <see cref="RunEntity.Zip"/>) against the run that last actually confirmed the posting
-/// on the search page — its LastSeen, or, when later, the run that last stamped it as a card that
-/// failed to render — so a run recorded before the ledger kept them never yields it.
+/// any more. Below the year facet, over the mileage cap, and search moved are cars the search no
+/// longer asks for; beyond the cap, pages unread, and card never rendered are cars this run did not
+/// measure; "sold" and the last are the cars that have likely left the market, and "sold" is the one a
+/// page confirmed. "Card never rendered" is its own case: the walk saw the link but never actually
+/// measured it, so it is reported apart from the pair's own coverage, which is never marked partial
+/// for it (see <see cref="Cli.Commands.WalkCommand"/>), and it is checked before "search moved" so a
+/// card that keeps failing to render is never misreported against a stale zip or radius comparison.
+/// "Search moved" compares the zip and radius each run recorded (see <see cref="RunEntity.Zip"/>)
+/// against those on the run that last actually confirmed the posting on the search page: its LastSeen,
+/// or, when later, the run that last stamped it as a card that failed to render. A run recorded before
+/// the ledger kept zip and radius never yields it.
 /// </summary>
 public sealed class LedgerDiffService(OdonomicsDbContext db)
 {
