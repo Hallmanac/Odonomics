@@ -213,6 +213,31 @@ public class RankRendererRenderingTests
     }
 
     [Fact]
+    public void Render_MissingScenarioDataNoVehicleGraded_OmitsGradeColumnAndPrintsOneLineNote()
+    {
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, insuranceUnknown: true);
+
+        string[] lines = Render([score], budget: null);
+
+        Assert.Contains(lines, line => line.Trim() == "Grade: no vehicle here has a CarEdge grade yet.");
+        Assert.DoesNotContain(lines, line => line.Contains("Vehicle") && line.Contains("Grade"));
+    }
+
+    [Fact]
+    public void Render_MissingScenarioDataAtLeastOneVehicleGraded_ShowsAGradeColumnInsteadOfTheOmissionNote()
+    {
+        Score graded = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, insuranceUnknown: true, dealerGrade: "A+");
+        Score ungraded = BuildScore("1HGCM82633A004352", 2019, "Honda", "Insight", 18000m, insuranceUnknown: true);
+
+        string[] lines = Render([graded, ungraded], budget: null);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.DoesNotContain(lines, line => line.Trim() == "Grade: no vehicle here has a CarEdge grade yet.");
+        Assert.Contains(lines, line => line.Contains("Grade"));
+        Assert.Contains(lines, line => line.Contains("A+"));
+    }
+
+    [Fact]
     public void Render_InsuranceUnknownVehiclesWithSameStemDifferentTrim_KeepsBothNamesDistinguishable()
     {
         Score le = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid LE", 22000m, insuranceUnknown: true);
