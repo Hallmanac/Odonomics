@@ -213,6 +213,54 @@ public class VehiclePricingTests
     }
 
     [Fact]
+    public void LowestCurrentPurchasePrice_CardUnrenderedOnAFullyCoveredPair_KeepsThePostingListed()
+    {
+        // Unlike a capped walk, a full walk with one exempted posting does advance
+        // LatestCoverageBySource past that posting's own LastSeen; CardUnrenderedSeenAt is what
+        // keeps it counted active anyway, exactly as a "beyond the cap" posting stays.
+        DateTimeOffset firstRun = RunTime;
+        DateTimeOffset laterFullRun = RunTime.AddDays(1);
+        PostingEntity posting = Posting("cars.com", 15000m, lastSeen: firstRun);
+        posting.CardUnrenderedSeenAt = laterFullRun;
+        VehicleEntity vehicle = Vehicle(posting);
+        Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(
+            [WalkRun(firstRun, capped: false), WalkRun(laterFullRun, capped: false)]);
+
+        Assert.Equal(new PurchasePrice(15000m, null), VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
+        Assert.Equal(15000m, VehiclePricing.LowestCurrentPrice(vehicle, coverage));
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_UntouchedPostingWithNoUnrenderedStamp_DropsOnceAFullWalkAdvancesPastIt()
+    {
+        DateTimeOffset firstRun = RunTime;
+        DateTimeOffset laterFullRun = RunTime.AddDays(1);
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 15000m, lastSeen: firstRun));
+        Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(
+            [WalkRun(firstRun, capped: false), WalkRun(laterFullRun, capped: false)]);
+
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
+    }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_UnrenderedStampOlderThanTheLatestFullCoverage_DoesNotKeepThePostingListed()
+    {
+        // The render wait gave up on this posting once (run 2), but a later full run (run 3) read
+        // every page without flagging it again: the exemption does not carry forward on its own,
+        // the same as an ordinary LastSeen would not.
+        DateTimeOffset firstRun = RunTime;
+        DateTimeOffset unrenderedRun = RunTime.AddDays(1);
+        DateTimeOffset laterFullRun = RunTime.AddDays(2);
+        PostingEntity posting = Posting("cars.com", 15000m, lastSeen: firstRun);
+        posting.CardUnrenderedSeenAt = unrenderedRun;
+        VehicleEntity vehicle = Vehicle(posting);
+        Dictionary<string, DateTimeOffset> coverage = RunSources.LatestCoverageBySource(
+            [WalkRun(firstRun, capped: false), WalkRun(unrenderedRun, capped: false), WalkRun(laterFullRun, capped: false)]);
+
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, coverage, Fulfillment.Delivery));
+    }
+
+    [Fact]
     public void LowestCurrentPurchasePrice_ItemizedPosting_AddsTheItemizedFeesToTheAskingPrice()
     {
         VehicleEntity vehicle = Vehicle(Posting("cars.com", 17000m, feePosture: FeePostures.Itemized, itemizedFees: 1494m));
