@@ -41,7 +41,10 @@ public static class WalkPairSummaryLine
     /// own counts (see <see cref="WalkSearchPages.CollectLinksAsync"/>): cards whose stated distance was
     /// checked and found beyond the scenario's radius, and cards that stated no distance at all, neither
     /// of which was ever a candidate, so neither is part of <paramref name="dropped"/>. Zero for a site
-    /// with no radius check, so its line is unchanged.</summary>
+    /// with no radius check, so its line is unchanged. <paramref name="skippedUnrendered"/> is cars.com's
+    /// own count of cards whose own text never carried a dollar amount within the bounded render wait
+    /// (see <see cref="SearchPageCardRenderWait"/>): also never a candidate, and named apart from the
+    /// other two, since a card that never rendered was never actually measured either way.</summary>
     public static string Format(
         string site,
         string make,
@@ -54,11 +57,13 @@ public static class WalkPairSummaryLine
         bool capped = false,
         int? failedPage = null,
         int skippedBeyondRadius = 0,
-        int skippedNoDistance = 0)
+        int skippedNoDistance = 0,
+        int skippedUnrendered = 0)
     {
         string cappedSuffix = (capped ? ", capped" : "") + (failedPage is int page ? $", page {page} failed" : "");
         string radiusSuffix = (skippedBeyondRadius > 0 ? $", {skippedBeyondRadius} beyond radius" : "")
-            + (skippedNoDistance > 0 ? $", {skippedNoDistance} no distance stated" : "");
+            + (skippedNoDistance > 0 ? $", {skippedNoDistance} no distance stated" : "")
+            + (skippedUnrendered > 0 ? $", {skippedUnrendered} unrendered" : "");
         string prefix = $"{site} / {make} {model}: {pages} pages, {known} known from cards, {saved} saved, {dropped.Total} dropped";
         string cell = DroppedCell(dropped);
         if (cell.Length == 0)

@@ -208,6 +208,11 @@ public static class WalkCommand
         int skippedBeyondRadius = 0;
         int skippedNoDistance = 0;
 
+        // A card a site's render wait gave up on within its bounded scans (see
+        // WalkSite.WaitsForRenderedCards): never rendered a dollar amount of its own, so never a
+        // candidate either. Zero for a site with no such wait.
+        int skippedUnrendered = 0;
+
         // The result card text of every detail link the search pages showed, by canonical URL, for a site
         // that prints a fee on its cards (see WalkSite.CardFeeReader): the visit of a link has only its
         // URL, and the card is where that fee is.
@@ -235,6 +240,13 @@ public static class WalkCommand
                 }
             }
 
+            IReadOnlyList<string> unrenderedHrefs = site.WaitsForRenderedCards
+                ? await SearchPageCardRenderWait.RunAsync(
+                    (script, arg) => page.EvaluateAsync<string[]>(script, arg),
+                    pacing.RandomScrollPause,
+                    ct)
+                : [];
+
             string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
             await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchIndex, pageNumber, searchUrls.Count), searchBodyText, ct);
 
@@ -245,12 +257,20 @@ public static class WalkCommand
                 cardTextByUrl.TryAdd(WalkSites.CanonicalDetailUrl(link.Href), link.CardText);
             }
 
+            if (unrenderedHrefs.Count > 0)
+            {
+                await recorder.WriteAsync(
+                    WalkPairSearches.UnrenderedFileName(searchIndex, pageNumber, searchUrls.Count),
+                    SearchPageCardRenderWait.UnrenderedHrefsJson(unrenderedHrefs),
+                    ct);
+            }
+
             // The token that lines a later page up with the first is in the first page's HTML.
             string? pagingToken = site.PagingTokenReader is not null && pageNumber == 1
                 ? site.ReadPagingToken(await page.ContentAsync())
                 : null;
 
-            return new SearchPageContent(links, searchBodyText, pagingToken);
+            return new SearchPageContent(links, searchBodyText, pagingToken, unrenderedHrefs);
         }
 
         async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
@@ -287,7 +307,8 @@ public static class WalkCommand
                 () => skippedBeyondRadius++,
                 () => skippedNoDistance++,
                 () => skippedBeyondRadius--,
-                () => skippedNoDistance--);
+                () => skippedNoDistance--,
+                () => skippedUnrendered++);
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -479,9 +500,9 @@ public static class WalkCommand
         await knownTouches.CommitAsync(cancellationToken);
 
         bool capped = linkCollectionCapped || tally.Capped;
-        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance)}");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered)}");
 
-        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance);
+        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)

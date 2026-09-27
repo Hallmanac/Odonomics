@@ -229,6 +229,14 @@ public class SearchPageLinksTests
     }
 
     [Fact]
+    public void UnrenderedFileName_SitsBesideTheCardsFileOfTheSamePage()
+    {
+        Assert.Equal("unrendered.json", WalkPairSearches.UnrenderedFileName(0, 1, 1));
+        Assert.Equal("unrendered-2.json", WalkPairSearches.UnrenderedFileName(0, 2, 1));
+        Assert.Equal("unrendered-2-page-3.json", WalkPairSearches.UnrenderedFileName(1, 3, 2));
+    }
+
+    [Fact]
     public void CollectDetailCards_KeepsTheFirstLinkPerListingWithTheFirstCardTextAnyOfItsLinksHas()
     {
         PageLink[] links =
