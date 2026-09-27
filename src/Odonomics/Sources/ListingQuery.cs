@@ -29,6 +29,17 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
             return false;
         }
 
+        // A candidate's own model naming a "Prime" or "Plug-in Hybrid" variant of this base model
+        // (the Prius search mixing in a Prius Prime, the same way a hybrid search mixes in gas
+        // trims, and Toyota titles the same car either way: "Prius Prime XSE" or "Prius Plug-in
+        // Hybrid SE") is never this query's own base model by substring: Toyota Prius Prime is its
+        // own scenario model with its own query, not a Prius. PriusPrimeVariant is what the walk
+        // and the search sources check this candidate against instead.
+        if (model is not null && Regex.IsMatch(model, $@"\b{Regex.Escape(BaseModelName)}\s+(?:Prime|Plug-in Hybrid)\b", RegexOptions.IgnoreCase))
+        {
+            return false;
+        }
+
         return $"{model} {trim}".Contains(BaseModelName, StringComparison.OrdinalIgnoreCase);
     }
 
