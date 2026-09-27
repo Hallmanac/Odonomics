@@ -117,4 +117,42 @@ public class ListingQueryTests
 
         Assert.Null(query.GasOnlyBeforeHybridYear("Toyota", "Corolla", "SE", 2020));
     }
+
+    [Fact]
+    public void MatchesExtractedVehicle_PriusQuery_PriusPrimeModel_RejectedBySubstring()
+    {
+        // The sweep item this closes: a "Prius Prime" candidate must not pass a plain "Toyota
+        // Prius" query just because its model text contains "Prius" as a substring. Toyota Prius
+        // Prime is its own scenario model with its own query (PriusPrimeVariant is what the walk
+        // and the search sources check a candidate like this against instead).
+        ListingQuery query = Query("Toyota", "Prius");
+
+        Assert.False(query.MatchesExtractedVehicle("Toyota", "Prius Prime", "XSE", 2024));
+    }
+
+    [Fact]
+    public void MatchesExtractedVehicle_PriusQuery_PriusPlugInHybridModel_RejectedBySubstring()
+    {
+        // Toyota titles the same car either way ("Prius Prime XSE" or "Prius Plug-in Hybrid SE"),
+        // and a title-line fallback that never says "Prime" at all must still be rejected here.
+        ListingQuery query = Query("Toyota", "Prius");
+
+        Assert.False(query.MatchesExtractedVehicle("Toyota", "Prius Plug-in Hybrid", "SE", 2026));
+    }
+
+    [Fact]
+    public void MatchesExtractedVehicle_PriusQuery_PlainPrius_StillMatches()
+    {
+        ListingQuery query = Query("Toyota", "Prius");
+
+        Assert.True(query.MatchesExtractedVehicle("Toyota", "Prius", "XLE", 2020));
+    }
+
+    [Fact]
+    public void MatchesExtractedVehicle_PriusPrimeQuery_PriusPrimeModel_Matches()
+    {
+        ListingQuery query = Query("Toyota", "Prius Prime");
+
+        Assert.True(query.MatchesExtractedVehicle("Toyota", "Prius Prime", "XSE", 2024));
+    }
 }
