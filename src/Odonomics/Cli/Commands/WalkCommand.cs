@@ -74,6 +74,13 @@ public static class WalkCommand
             throw new InvalidOperationException("the scenario has no allowed models to walk");
         }
 
+        string? unwalkable = models.FirstOrDefault(ModelsWalkedOnlyThroughAnotherPair.Contains);
+        if (unwalkable is not null)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]{unwalkable} has no site search of its own yet; it's reached only through another pair's own search (see docs/walk.md)[/]");
+            return 1;
+        }
+
         foreach (string model in models)
         {
             try
@@ -143,6 +150,19 @@ public static class WalkCommand
         return summaries.Any(s => s.Completed) ? 0 : 1;
     }
 
+    /// <summary>Scenario models the walk never gets its own site-and-model pair for, on a bare
+    /// `odo walk` or an explicit `--model`: they're reached today only through another pair's own
+    /// search (a Toyota Prius Prime candidate turns up on the "Toyota Prius" pair's own searches,
+    /// see <see cref="PriusPrimeVariant"/> and <see cref="WalkPairAsync"/>), and no site's search
+    /// facets for one have been built, so a pair for it here would either search every site for it
+    /// twice or fail outright. `RunAsync` refuses an explicit `--model` naming one of these with a
+    /// clear message instead of attempting it. Revisit once Brian supplies its mpg and insurance
+    /// figures and a pair is worth adding for it.</summary>
+    private static readonly HashSet<string> ModelsWalkedOnlyThroughAnotherPair = new(StringComparer.OrdinalIgnoreCase)
+    {
+        PriusPrimeVariant.ScenarioMakeModel,
+    };
+
     /// <summary>Resolves which "Make Model" values to walk. --model narrows to exactly one,
     /// normalized to the scenario's own casing when it matches one of the allowed models
     /// case-insensitively (an operator typing "honda insight" is still asking for the scenario's
@@ -150,12 +170,13 @@ public static class WalkCommand
     /// coverage token and Vehicle.Model — comes from the scenario's own casing, and a walk that
     /// stored a differently-cased Model would stamp a "source:model" token nothing else ever
     /// matches, silently breaking the rank view's and diff's coverage lookups for that VIN from
-    /// then on. With no --model, every allowed model is walked, in the scenario's own order.</summary>
+    /// then on. With no --model, every allowed model is walked, in the scenario's own order, except
+    /// a model that never gets its own pair (see <see cref="ModelsWalkedOnlyThroughAnotherPair"/>).</summary>
     private static List<string> ResolveModels(Scenario scenario, string? modelOverride)
     {
         if (modelOverride is null)
         {
-            return [.. scenario.Filters.AllowedModels];
+            return [.. scenario.Filters.AllowedModels.Where(m => !ModelsWalkedOnlyThroughAnotherPair.Contains(m))];
         }
 
         string normalized = scenario.Filters.AllowedModels
@@ -414,7 +435,17 @@ public static class WalkCommand
                     return DetailPageOutcome.Repeat;
                 }
 
-                if (!query.MatchesWalkedPage(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year, bodyText, outcome.Result.FuelType))
+                // The Toyota Prius pair's own search mixes Prius Prime candidates in with plain
+                // ones, the same way a hybrid pair's search mixes in gas trims. A Prime page never
+                // passes query.MatchesWalkedPage for the plain "Toyota Prius" query (ListingQuery.
+                // MatchesMakeAndBaseModel rejects a "Prime" model by name), so it is checked for
+                // here first and, when it reads as one, saved and matched as Toyota Prius Prime
+                // instead of dropped as the wrong model.
+                bool isPriusPrime = string.Equals(make, "Toyota", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(model, "Prius", StringComparison.OrdinalIgnoreCase)
+                    && PriusPrimeVariant.ReadsAsPrime(outcome.Result.Make, outcome.Result.Model, outcome.Result.FuelType);
+
+                if (!isPriusPrime && !query.MatchesWalkedPage(outcome.Result.Make, outcome.Result.Model, outcome.Result.Trim, outcome.Result.Year, bodyText, outcome.Result.FuelType))
                 {
                     string detail = WalkOutcomeWording.NotMatchingDetail(query, outcome.Result);
                     AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.NotMatching)} ({detail})[/]");
@@ -462,8 +493,10 @@ public static class WalkCommand
                     // isn't actually this pair's model (e.g. a gas Camry on a Camry Hybrid walk),
                     // so stamping the canonical model here never mislabels a vehicle the page
                     // showed for a different reason (its own text reading as a trimmed variant like
-                    // "Insight EX").
-                    Model = model,
+                    // "Insight EX"). The one exception is a Prius Prime page reached through the
+                    // Prius pair (see isPriusPrime above), stored as "Prius Prime" and matched
+                    // against the scenario as Toyota Prius Prime instead.
+                    Model = isPriusPrime ? PriusPrimeVariant.StoredModel : model,
                     Trim = outcome.Result.Trim,
                     Price = askingPrice,
                     Mileage = outcome.Result.Mileage.Value,

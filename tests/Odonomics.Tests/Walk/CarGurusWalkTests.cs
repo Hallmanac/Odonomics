@@ -64,11 +64,14 @@ public class CarGurusWalkTests
     }
 
     [Fact]
-    public void ModelPath_EveryModelOfTheDaughterScenario_HasAnId()
+    public void ModelPath_EveryWalkedModelOfTheDaughterScenario_HasAnId()
     {
         Scenario scenario = ScenarioLoader.Load(Path.Combine(TestPaths.RepoRoot, "scenarios", "daughter.json"));
 
-        foreach (string makeModel in scenario.Filters.AllowedModels)
+        // Toyota Prius Prime is an allowed scenario model but never gets its own site-and-model
+        // pair (see WalkCommand.ModelsWalkedOnlyThroughAnotherPair), so CarGurusSearch is never
+        // asked for its id and doesn't need one yet.
+        foreach (string makeModel in scenario.Filters.AllowedModels.Where(m => m != PriusPrimeVariant.ScenarioMakeModel))
         {
             (string make, string model) = MakeModel.Split(makeModel);
             Assert.Matches("^m[0-9]+%2Cm[0-9]+%2Fd[0-9]+$", CarGurusSearch.ModelPath(make, model));
