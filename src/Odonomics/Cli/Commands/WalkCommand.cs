@@ -42,6 +42,11 @@ public static class WalkCommand
         Description = "open a detail page for every link, including the ones the ledger already holds; without it those are kept current from their search cards and only new cars are visited",
     };
 
+    public static Option<bool> CreateBackfillCarMaxOption() => new("--backfill-carmax")
+    {
+        Description = "fill a bare CarMax dealer's store, and any CarMax posting's reserved-or-in-transit availability, from CarMax detail pages already recorded on disk under this run's data directory; opens no browser and visits no page, and ignores the site argument and every other walk flag",
+    };
+
     public static async Task<int> RunAsync(string scenarioPath, string? siteName, string? modelOverride, int? maxDetailPages, bool revisit, CancellationToken cancellationToken)
     {
         List<WalkSite> sites;
