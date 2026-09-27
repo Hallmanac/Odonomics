@@ -9,28 +9,38 @@ namespace Odonomics.Walk;
 /// <see cref="SearchPageLinks.CardScript"/>'s dollar-ancestor walk nothing of its own to stop at, so it
 /// climbs past the card to the results list and can read a neighboring card's own stated distance as
 /// this card's (walk run 20260927-113258; lessons 9514dea8 and 1364af73). <see cref="RenderScanScript"/>
-/// finds every &lt;li&gt; of the results list that holds a fuse-card with a /vehicledetail/ link, and for
-/// each such fuse-card whose own text still carries no dollar amount, scrolls it into view (to trigger
-/// cars.com's lazy render) and returns its anchor's href. <see cref="RunAsync"/> runs it, pauses, and
-/// runs it again, up to <see cref="MaxScans"/> more times, stopping as soon as a scan comes back empty.
-/// What it returns after the last scan is the hrefs still unrendered: the caller keeps those out of the
-/// pool (see <see cref="WalkSearchPages.CollectLinksAsync"/>) rather than letting the ambiguous
-/// wrapper-text walk decide their distance for them.
+/// finds every &lt;li&gt; of the results list that holds a fuse-card with a /vehicledetail/ link, scrolls
+/// the first such fuse-card whose own text still carries no dollar amount into view (to trigger cars.com's
+/// lazy render), and returns every still-unrendered card's anchor href, scrolled one or not. Only the
+/// first is ever scrolled in one call: the browser only lays out and checks intersections once the script
+/// returns, so a call that scrolled every unrendered card in turn would only ever have the last one's
+/// position take effect, leaving every earlier region never actually visited. <see cref="RunAsync"/> runs
+/// it, pauses, and runs it again, up to <see cref="MaxScans"/> more times, stopping as soon as a scan comes
+/// back empty; since a rendered card drops out of the next scan's still-empty list, each scan's first
+/// still-unrendered card advances to a new region of the page. What it returns after the last scan is the
+/// hrefs still unrendered: the caller keeps those out of the pool (see
+/// <see cref="WalkSearchPages.CollectLinksAsync"/>) rather than letting the ambiguous wrapper-text walk
+/// decide their distance for them.
 /// </summary>
 public static class SearchPageCardRenderWait
 {
-    /// <summary>The most render scans one search page gets, each followed by a pause: a card that
-    /// still hasn't rendered by then is reported as unrendered rather than waited on further.</summary>
+    /// <summary>How many more render scans <see cref="RunAsync"/> runs, each followed by a pause, after
+    /// its own first, unconditional scan: one search page gets at most this many plus that one (six scans
+    /// in total, at this constant's own value). A card that still hasn't rendered by then is reported as
+    /// unrendered rather than waited on further.</summary>
     public const int MaxScans = 5;
 
-    /// <summary>Scrolls every not-yet-rendered card into view and returns the hrefs of the ones still
-    /// without a dollar amount in their own fuse-card text. Takes the same <c>amount</c> pattern as
-    /// <see cref="SearchPageLinks.CardScript"/> (see <see cref="SearchPageLinks.CardAmountPattern"/>), so
-    /// the two agree on what counts as rendered.</summary>
+    /// <summary>Scrolls the first not-yet-rendered card into view and returns the hrefs of every card still
+    /// without a dollar amount in their own fuse-card text, scrolled or not. Only the first is scrolled: the
+    /// browser only realizes one scroll position per call (see the class summary), so scrolling more than
+    /// one would waste the call on positions that are immediately overwritten and never actually seen. Takes
+    /// the same <c>amount</c> pattern as <see cref="SearchPageLinks.CardScript"/> (see
+    /// <see cref="SearchPageLinks.CardAmountPattern"/>), so the two agree on what counts as rendered.</summary>
     public const string RenderScanScript = """
         ({ amount }) => {
             const hasAmount = new RegExp(amount);
             const hrefs = [];
+            let scrolled = false;
             for (const li of document.querySelectorAll('li')) {
                 const card = li.querySelector('fuse-card');
                 if (!card) {
@@ -43,7 +53,11 @@ public static class SearchPageCardRenderWait
                 }
 
                 if (!hasAmount.test(card.innerText || '')) {
-                    card.scrollIntoView({ block: 'center' });
+                    if (!scrolled) {
+                        card.scrollIntoView({ block: 'center' });
+                        scrolled = true;
+                    }
+
                     hrefs.push(anchor.href);
                 }
             }
