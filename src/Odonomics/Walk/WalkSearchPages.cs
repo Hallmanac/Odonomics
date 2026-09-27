@@ -59,7 +59,12 @@ public static class WalkSearchPages
     /// <paramref name="onBeyondRadiusWithdrawn"/> or <paramref name="onNoDistanceWithdrawn"/> (whichever one
     /// fired for it) the moment the link is pooled or handed to <paramref name="touchKnownAsync"/>, so a car
     /// the walk ends up keeping is never left counted as skipped. A page made only of such cards, or of
-    /// links this pool already holds, adds nothing and ends the paging exactly as an empty page does.</summary>
+    /// links this pool already holds, adds nothing and ends the paging exactly as an empty page does.
+    /// A link a page's <see cref="SearchPageContent.UnrenderedHrefs"/> names (see
+    /// <see cref="SearchPageCardRenderWait"/>) is dropped before any of that: its card never rendered within
+    /// the bounded wait, so it is kept out of <see cref="WalkSite.CollectDetailCards"/> entirely rather than
+    /// let the ambiguous wrapper-text walk decide its distance, and it is told to <paramref name="onUnrendered"/>
+    /// instead, deduplicated the same way.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -75,13 +80,15 @@ public static class WalkSearchPages
         Action? onBeyondRadius = null,
         Action? onNoDistance = null,
         Action? onBeyondRadiusWithdrawn = null,
-        Action? onNoDistanceWithdrawn = null)
+        Action? onNoDistanceWithdrawn = null,
+        Action? onUnrendered = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
         List<string> pool = [];
         HashSet<string> canonicalUrls = [];
         Dictionary<string, Action?> reportedOutOfRadius = [];
+        HashSet<string> reportedUnrendered = [];
         int linkBound = int.MaxValue;
         int considered = 0;
         bool leftBehindForWantOfPoolRoom = false;
@@ -93,6 +100,15 @@ public static class WalkSearchPages
             {
                 reportedOutOfRadius[canonicalUrl] = withdraw;
                 report?.Invoke();
+            }
+        }
+
+        void ReportUnrenderedOnce(string href)
+        {
+            string canonicalUrl = WalkSites.CanonicalDetailUrl(href);
+            if (!canonicalUrls.Contains(canonicalUrl) && reportedUnrendered.Add(canonicalUrl))
+            {
+                onUnrendered?.Invoke();
             }
         }
 
@@ -125,9 +141,20 @@ public static class WalkSearchPages
                 linkBound = statedCount;
             }
 
+            IReadOnlyList<PageLink> renderedLinks = content.Links;
+            if (content.UnrenderedHrefs is { Count: > 0 } unrenderedHrefs)
+            {
+                HashSet<string> unrenderedCanonicalUrls = [.. unrenderedHrefs.Select(WalkSites.CanonicalDetailUrl)];
+                renderedLinks = [.. content.Links.Where(l => !unrenderedCanonicalUrls.Contains(WalkSites.CanonicalDetailUrl(l.Href)))];
+                foreach (string href in unrenderedHrefs)
+                {
+                    ReportUnrenderedOnce(href);
+                }
+            }
+
             int added = 0;
             foreach (PageLink card in site.CollectDetailCards(
-                content.Links,
+                renderedLinks,
                 int.MaxValue,
                 content.Text,
                 maxDistanceMiles,

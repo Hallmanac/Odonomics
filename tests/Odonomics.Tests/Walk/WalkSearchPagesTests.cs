@@ -17,7 +17,7 @@ public class WalkSearchPagesTests
     private static string Fixture(string name) =>
         File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", name));
 
-    private sealed class FakeBrowser(Dictionary<int, List<PageLink>> pages, Dictionary<int, string>? texts = null)
+    private sealed class FakeBrowser(Dictionary<int, List<PageLink>> pages, Dictionary<int, string>? texts = null, Dictionary<int, List<string>>? unrenderedHrefs = null)
     {
         public List<(string Url, int PageNumber)> Loads { get; } = [];
 
@@ -26,7 +26,8 @@ public class WalkSearchPagesTests
             Loads.Add((url, pageNumber));
             IReadOnlyList<PageLink> anchors = pages.TryGetValue(pageNumber, out List<PageLink>? served) ? served : [];
             string? text = texts is not null && texts.TryGetValue(pageNumber, out string? servedText) ? servedText : null;
-            return Task.FromResult(new SearchPageContent(anchors, text));
+            IReadOnlyList<string>? unrendered = unrenderedHrefs is not null && unrenderedHrefs.TryGetValue(pageNumber, out List<string>? servedUnrendered) ? servedUnrendered : null;
+            return Task.FromResult(new SearchPageContent(anchors, text, UnrenderedHrefs: unrendered));
         }
     }
 
@@ -674,6 +675,89 @@ public class WalkSearchPagesTests
         // survives: the pair line must never count a car the walk kept as skipped.
         Assert.Equal(0, beyondRadius);
         Assert.Equal(0, noDistance);
+    }
+
+    [Fact]
+    public async Task CarsCom_ACardStillUnrenderedAfterTheWait_IsNeitherPooledNorCountedAsBeyondRadiusOrNoDistance()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string unrenderedHref = "https://www.cars.com/vehicledetail/unrendered/?sid=x";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>>
+            {
+                [1] =
+                [
+                    new PageLink(unrenderedHref, "", ""),
+                    new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)"),
+                ],
+            },
+            unrenderedHrefs: new Dictionary<int, List<string>> { [1] = [unrenderedHref] });
+        int unrenderedBeyondRadius = 0;
+        int unrenderedNoDistance = 0;
+        int unrendered = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50,
+            onBeyondRadius: () => unrenderedBeyondRadius++, onNoDistance: () => unrenderedNoDistance++, onUnrendered: () => unrendered++);
+
+        Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
+        Assert.Equal(0, unrenderedBeyondRadius);
+        Assert.Equal(0, unrenderedNoDistance);
+        Assert.Equal(1, unrendered);
+    }
+
+    [Fact]
+    public async Task CarsCom_TheSameUnrenderedCardRepeatingAcrossPages_IsReportedOnlyOnce()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string unrenderedHref = "https://www.cars.com/vehicledetail/unrendered/?sid=page-varies";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>>
+            {
+                [1] = [new PageLink(unrenderedHref, "", ""), new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+                [2] = [new PageLink(unrenderedHref, "", ""), new PageLink("https://www.cars.com/vehicledetail/fresh-near/?sid=x", "Used 2020 Honda Insight EX", "Orlando, FL (10 mi)")],
+                [3] = [new PageLink(unrenderedHref, "", "")],
+            },
+            unrenderedHrefs: new Dictionary<int, List<string>>
+            {
+                [1] = [unrenderedHref],
+                [2] = [unrenderedHref],
+                [3] = [unrenderedHref],
+            });
+        int unrendered = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: () => unrendered++);
+
+        // Page 3 (only the repeating unrendered card) adds nothing new and ends paging, exactly as an
+        // empty page does.
+        Assert.Equal([1, 2, 3], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal(2, pool.Count);
+        Assert.Equal(1, unrendered);
+    }
+
+    [Fact]
+    public async Task CarsCom_APageOfOnlyUnrenderedCards_AddsNothingAndStopsPagingLikeAnEmptyPage()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string unrenderedOnPageTwo = "https://www.cars.com/vehicledetail/unrendered/?sid=x";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>>
+            {
+                [1] = [new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+                [2] = [new PageLink(unrenderedOnPageTwo, "", "")],
+                [3] = [new PageLink("https://www.cars.com/vehicledetail/never-read/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+            },
+            unrenderedHrefs: new Dictionary<int, List<string>> { [2] = [unrenderedOnPageTwo] });
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50);
+
+        Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
+        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
     }
 
     [Fact]

@@ -41,6 +41,13 @@ public static class WalkPairSearches
     public static string CardsFileName(int searchIndex, int pageNumber, int searchCount) =>
         PageFileName("cards", "json", searchIndex, pageNumber, searchCount);
 
+    /// <summary>The recorder file name for the hrefs a page's render wait gave up on (see
+    /// <see cref="SearchPageCardRenderWait"/>), for a site whose cards render lazily: it follows
+    /// <see cref="CardsFileName"/> the same way, so "unrendered.json" sits beside "cards.json", and so
+    /// on. Only written when the page's wait actually left something unrendered.</summary>
+    public static string UnrenderedFileName(int searchIndex, int pageNumber, int searchCount) =>
+        PageFileName("unrendered", "json", searchIndex, pageNumber, searchCount);
+
     private static string PageFileName(string stem, string extension, int searchIndex, int pageNumber, int searchCount) => searchCount > 1
         ? $"{stem}-{searchIndex + 1}-page-{pageNumber}.{extension}"
         : pageNumber == 1

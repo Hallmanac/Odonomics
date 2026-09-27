@@ -338,4 +338,30 @@ public class WalkPairSummaryLineTests
 
         Assert.Equal("cars.com / Honda Insight: 1 pages, 0 known from cards, 1 saved, 0 dropped, 4 beyond radius, capped", line);
     }
+
+    [Fact]
+    public void Format_SkippedUnrendered_IsNamedAfterTheDroppedTotalWhenAlone()
+    {
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0), skippedUnrendered: 1);
+
+        Assert.Equal("cars.com / Honda Insight: 1 pages, 0 known from cards, 1 saved, 0 dropped, 1 unrendered", line);
+    }
+
+    [Fact]
+    public void Format_SkippedUnrendered_IsNamedSeparatelyAfterBeyondRadiusAndNoDistance()
+    {
+        string line = WalkPairSummaryLine.Format(
+            "cars.com", "Honda", "Insight", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0),
+            skippedBeyondRadius: 12, skippedNoDistance: 3, skippedUnrendered: 1);
+
+        Assert.Equal("cars.com / Honda Insight: 1 pages, 0 known from cards, 1 saved, 0 dropped, 12 beyond radius, 3 no distance stated, 1 unrendered", line);
+    }
+
+    [Fact]
+    public void Format_SkippedUnrenderedWithACappedPair_PutsCappedLast()
+    {
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0), skippedUnrendered: 1, capped: true);
+
+        Assert.Equal("cars.com / Honda Insight: 1 pages, 0 known from cards, 1 saved, 0 dropped, 1 unrendered, capped", line);
+    }
 }

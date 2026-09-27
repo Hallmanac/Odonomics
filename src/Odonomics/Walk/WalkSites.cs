@@ -87,7 +87,11 @@ namespace Odonomics.Walk;
 /// <paramref name="CardDistanceReader"/> reads the distance in miles a result card
 /// states from the search's zip (cars.com, see <see cref="CarsComCards.ReadDistanceMiles"/>), for a site whose search URL
 /// carries a radius the site does not actually enforce; null for a site whose radius the search itself holds to, whose
-/// cards are then never checked against it.</summary>
+/// cards are then never checked against it. <paramref name="WaitsForRenderedCards"/> says this site's cards render
+/// lazily enough that link collection has to wait for them (cars.com, see <see cref="SearchPageCardRenderWait"/>): a
+/// card still empty when the page first loads leaves <see cref="SearchPageLinks.CardScript"/>'s dollar-ancestor walk
+/// nothing of its own to stop at, so it climbs to the results list and can read a neighboring card's own stated
+/// distance as this card's. False for a site whose cards are there by the time the walk reads them.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -118,7 +122,8 @@ public sealed record WalkSite(
     bool AskingPriceFromCard = false,
     Func<string, ResolvedDealer?>? DetailDealerReader = null,
     Func<string, string?, string?, int?, string?>? DetailTitleModelReader = null,
-    Func<string, int?>? CardDistanceReader = null)
+    Func<string, int?>? CardDistanceReader = null,
+    bool WaitsForRenderedCards = false)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -366,9 +371,12 @@ public sealed record WalkSite(
 public readonly record struct PageLink(string Href, string Text, string CardText = "");
 
 /// <summary>One loaded search page: its anchors, its visible text for a site that states its
-/// match count there (see <see cref="WalkSite.MatchCountPattern"/>), and the paging token its HTML gave, for a site whose
-/// later pages have to carry one (see <see cref="WalkSite.PagingTokenReader"/>).</summary>
-public readonly record struct SearchPageContent(IReadOnlyList<PageLink> Links, string? Text = null, string? PagingToken = null);
+/// match count there (see <see cref="WalkSite.MatchCountPattern"/>), the paging token its HTML gave, for a site whose
+/// later pages have to carry one (see <see cref="WalkSite.PagingTokenReader"/>), and, for a site whose cards render
+/// lazily (see <see cref="WalkSite.WaitsForRenderedCards"/>), the hrefs of the cards still empty once the bounded
+/// render wait gave up on them (see <see cref="SearchPageCardRenderWait"/>); null or empty for a site with nothing
+/// to report.</summary>
+public readonly record struct SearchPageContent(IReadOnlyList<PageLink> Links, string? Text = null, string? PagingToken = null, IReadOnlyList<string>? UnrenderedHrefs = null);
 
 /// <summary>The dealer name and location a walked candidate is stored with, and whether the name is
 /// the site's fallback rather than one the page gave.</summary>
@@ -554,7 +562,11 @@ public static class WalkSites
         // (a padded page keeps handing back cars hundreds of miles off), so every card's own stated
         // distance is checked against the scenario's radius at link collection instead.
         CardDistanceReader: CarsComCards.ReadDistanceMiles,
-        DetailTitleModelReader: ReadTitleModel);
+        DetailTitleModelReader: ReadTitleModel,
+        // A fuse-card can still be empty when the page first loads; reading it then risks the
+        // dollar-ancestor walk landing on the results list and misreading a neighbor's distance as
+        // this card's (walk run 20260927-113258).
+        WaitsForRenderedCards: true);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
