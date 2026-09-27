@@ -201,8 +201,10 @@ public static class WalkCommand
         int? failedResultPage = null;
 
         // A card whose site checks a stated distance against the scenario's radius (see
-        // WalkSite.CardDistanceReader): how many were beyond it, and how many stated none at all. Zero for
-        // a site with no such check.
+        // WalkSite.CardDistanceReader): how many were beyond it, and how many stated none at all (including
+        // one a wrapper-bound card text misread as stating none on an earlier page, corrected once its own
+        // single card's text turns up on a later page: that page withdraws the earlier count instead of
+        // leaving a car the walk kept counted as skipped). Zero for a site with no such check.
         int skippedBeyondRadius = 0;
         int skippedNoDistance = 0;
 
@@ -283,7 +285,9 @@ public static class WalkCommand
                 revisit,
                 query.RadiusMiles,
                 () => skippedBeyondRadius++,
-                () => skippedNoDistance++);
+                () => skippedNoDistance++,
+                () => skippedBeyondRadius--,
+                () => skippedNoDistance--);
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
