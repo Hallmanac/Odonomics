@@ -20,8 +20,9 @@ namespace Odonomics.Walk;
 /// so a pair that fails or is interrupted must leave its known postings exactly as the last completed
 /// run left them. A walk asked to revisit every link gets a set that holds nothing for touching purposes,
 /// so every link is visited as before, but <see cref="IsKnown"/> still answers against what the ledger
-/// actually holds: a card whose posting never rendered under --revisit still needs its pair recorded as
-/// partial rather than as the posting having left the market.
+/// actually holds: a card whose posting never rendered under --revisit still needs its own exemption
+/// from the diff (see <see cref="Cli.Commands.WalkCommand"/>) rather than reading as the posting having left the
+/// market.
 /// </summary>
 public sealed class KnownCardTouches
 {
@@ -50,10 +51,28 @@ public sealed class KnownCardTouches
 
     /// <summary>Whether the ledger already holds <paramref name="canonicalUrl"/>, for a caller deciding
     /// whether a link <see cref="TryTouchAsync"/> was never asked about (a card that never rendered, and so
-    /// was never touched) is a posting whose coverage should be recorded as partial rather than left to read
-    /// as a car that left the market. Answers against the ledger's own holdings regardless of
-    /// <c>--revisit</c>, unlike <see cref="TryTouchAsync"/>, which treats every link as new under that flag.</summary>
+    /// was never touched) is a posting that should be exempted from the diff on its own (see
+    /// <see cref="Cli.Commands.WalkCommand"/>) rather than left to read as a car that left the market. Answers against
+    /// the ledger's own holdings regardless of <c>--revisit</c>, unlike <see cref="TryTouchAsync"/>, which
+    /// treats every link as new under that flag.</summary>
     public bool IsKnown(string canonicalUrl) => _ledgerUrls.Contains(canonicalUrl);
+
+    /// <summary>Adds <paramref name="canonicalUrl"/> to <paramref name="unrenderedKnownUrls"/> when
+    /// <see cref="IsKnown"/> is true for it, for a caller handling a card the render wait gave up on:
+    /// a known posting is exempted from the diff on its own this way (see
+    /// <see cref="Ledger.LedgerDiffService"/>) rather than capping the whole pair, since the walk still
+    /// measured every other card the pair's searches showed. Returns whether it was known and so added;
+    /// a link the ledger does not hold has nothing to exempt.</summary>
+    public bool RecordIfKnown(string canonicalUrl, ICollection<string> unrenderedKnownUrls)
+    {
+        if (!IsKnown(canonicalUrl))
+        {
+            return false;
+        }
+
+        unrenderedKnownUrls.Add(canonicalUrl);
+        return true;
+    }
 
     /// <summary>The touches for <paramref name="source"/> against what the ledger holds for it now, or
     /// touches that treat every link as new when <paramref name="revisit"/> is set.</summary>

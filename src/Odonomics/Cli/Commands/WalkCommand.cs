@@ -323,10 +323,7 @@ public static class WalkCommand
                     // move; it is exempted from the diff on its own (see unrenderedKnownUrls above) rather
                     // than marking the whole pair capped, so every other untouched posting in the pair is
                     // still compared against this run's own full coverage.
-                    if (knownTouches.IsKnown(canonicalUrl))
-                    {
-                        unrenderedKnownUrls.Add(canonicalUrl);
-                    }
+                    knownTouches.RecordIfKnown(canonicalUrl, unrenderedKnownUrls);
                 });
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"

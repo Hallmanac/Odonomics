@@ -176,6 +176,36 @@ public class KnownCardTouchesTests
     }
 
     [Fact]
+    public async Task RecordIfKnown_ALedgerLinkIsAddedToTheListAndReportsTrue()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+        var unrenderedKnownUrls = new List<string>();
+
+        bool recorded = touches.RecordIfKnown(CardUrl(1), unrenderedKnownUrls);
+
+        Assert.True(recorded);
+        Assert.Equal([CardUrl(1)], unrenderedKnownUrls);
+    }
+
+    [Fact]
+    public async Task RecordIfKnown_ALinkTheLedgerDoesNotHoldIsNotAddedAndReportsFalse()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+        var unrenderedKnownUrls = new List<string>();
+
+        bool recorded = touches.RecordIfKnown(CardUrl(2), unrenderedKnownUrls);
+
+        Assert.False(recorded);
+        Assert.Empty(unrenderedKnownUrls);
+    }
+
+    [Fact]
     public async Task Revisit_SendsEveryLinkToTheDetailPoolAndTouchesNone()
     {
         using var testDb = new LedgerTestDatabase();
