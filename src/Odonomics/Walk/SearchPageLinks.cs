@@ -15,6 +15,21 @@ namespace Odonomics.Walk;
 /// card whose text runs past <see cref="MaxCardTextLength"/> is a container of many cards, not one, so
 /// it reads as no card at all. Only links matching the site's detail pattern are asked for a card,
 /// since the rest of a page's anchors (navigation, filters) have none.
+///
+/// <para>For a site whose <see cref="WalkSite.CardAmountMarkerIsInnerToCard"/> is set, the first matching
+/// ancestor is only where the climb starts, not where it ends: it keeps widening to each further parent
+/// for as long as that parent's own text still carries exactly the one amount match the card itself
+/// accounts for, and stops at the last parent before one carries more than one (the results list wrapping
+/// several cards, each with its own price line) or before one runs past <see cref="MaxCardTextLength"/>,
+/// whichever comes first. The length bound alone is what keeps a page with only one real card (a "1
+/// Match" search, with no sponsored card and nothing else on the page carrying the amount marker) from
+/// widening past its actual card, all the way up through the results list, the page header, and the
+/// footer, to <c>document.body</c> itself: every one of those ancestors still carries exactly the card's
+/// own one match, so only the length running past what one card could plausibly hold ever stops it. That
+/// is what lets the card include a top-of-card badge and a dealer footer sitting outside the innermost
+/// price-bearing element (see <see cref="WalkSites.Autotrader"/>), without also pulling in a neighboring
+/// card's own price line, or, on a sparse page, the whole page.
+/// </para>
 /// </summary>
 public static class SearchPageLinks
 {
@@ -33,9 +48,10 @@ public static class SearchPageLinks
     /// <summary>Given the positions of anchors in document order, reads each as [href, card text],
     /// where the card text is empty when no card was found.</summary>
     public const string CardScript = """
-        ({ indices, amount, container }) => {
+        ({ indices, amount, container, extendPastAmount, maxLength }) => {
             const anchors = document.querySelectorAll('a');
             const hasAmount = new RegExp(amount);
+            const countAmount = new RegExp(amount, 'g');
             return indices.map(i => {
                 const anchor = anchors[i];
                 if (!anchor) {
@@ -50,6 +66,18 @@ public static class SearchPageLinks
                         if (hasAmount.test(el.innerText || '')) {
                             card = el;
                             break;
+                        }
+                    }
+
+                    if (card && extendPastAmount) {
+                        for (let el = card.parentElement; el && el !== document.body; el = el.parentElement) {
+                            const text = el.innerText || '';
+                            const matches = text.match(countAmount);
+                            if (!matches || matches.length !== 1 || text.length > maxLength) {
+                                break;
+                            }
+
+                            card = el;
                         }
                     }
                 }
@@ -74,7 +102,7 @@ public static class SearchPageLinks
         ];
         string[][] cards = detailIndices.Count == 0
             ? []
-            : await evaluateAsync(CardScript, new { indices = detailIndices, amount = site.CardAmountPattern ?? CardAmountPattern, container = site.CardContainerSelector });
+            : await evaluateAsync(CardScript, new { indices = detailIndices, amount = site.CardAmountPattern ?? CardAmountPattern, container = site.CardContainerSelector, extendPastAmount = site.CardAmountMarkerIsInnerToCard, maxLength = MaxCardTextLength });
 
         var cardTextByIndex = new Dictionary<int, string>();
         foreach ((int anchorIndex, string[] card) in detailIndices.Zip(cards))

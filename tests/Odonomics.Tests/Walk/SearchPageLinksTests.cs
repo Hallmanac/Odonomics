@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Odonomics.Ledger;
 using Odonomics.Walk;
 
 namespace Odonomics.Tests.Walk;
@@ -55,14 +56,37 @@ public class SearchPageLinksTests
             JsonElement options = JsonSerializer.SerializeToElement(arg);
             var hasAmount = new Regex(options.GetProperty("amount").GetString()!);
             string? container = options.GetProperty("container").GetString();
+            bool extendPastAmount = options.GetProperty("extendPastAmount").GetBoolean();
+            int maxLength = options.GetProperty("maxLength").GetInt32();
             string[][] rows =
             [
                 .. options.GetProperty("indices").EnumerateArray().Select(i =>
                 {
                     FakeElement anchor = _anchors[i.GetInt32()];
-                    FakeElement? card = container is not null
-                        ? Ancestors(anchor).FirstOrDefault(e => e.Tag == container)
-                        : Ancestors(anchor).FirstOrDefault(e => hasAmount.IsMatch(e.Text));
+                    FakeElement? card;
+                    if (container is not null)
+                    {
+                        card = Ancestors(anchor).FirstOrDefault(e => e.Tag == container);
+                    }
+                    else
+                    {
+                        List<FakeElement> chain = [.. Ancestors(anchor)];
+                        int matchIndex = chain.FindIndex(e => hasAmount.IsMatch(e.Text));
+                        card = matchIndex < 0 ? null : chain[matchIndex];
+                        if (card is not null && extendPastAmount)
+                        {
+                            for (int j = matchIndex + 1; j < chain.Count; j++)
+                            {
+                                if (hasAmount.Matches(chain[j].Text).Count != 1 || chain[j].Text.Length > maxLength)
+                                {
+                                    break;
+                                }
+
+                                card = chain[j];
+                            }
+                        }
+                    }
+
                     return new[] { anchor.Href!, card?.Text ?? "" };
                 })
             ];
@@ -162,13 +186,26 @@ public class SearchPageLinksTests
     private static string AutotraderInsightPurchaseConfidenceHref(string id) =>
         $"https://www.autotrader.com/cars-for-sale/vehicle/{id}?listingType=USED&makeCode=HONDA&maxMileage=100000&modelCode=INSIGHT&sortBy=relevance&startYear=2019&zip=32833#purchaseConfidence";
 
-    private static FakeElement AutotraderInsightListingCard(string id, string title, string restOfTitleBlock, string priceBlock, string dealerBlock) =>
-        Card(
-            Div("Used"),
-            Anchor(AutotraderInsightHref(id, "listing"), title),
-            Div(restOfTitleBlock + "\n" + priceBlock),
-            Anchor(AutotraderInsightPurchaseConfidenceHref(id), "No Accidents"),
-            Div(dealerBlock));
+    // Modeled on a live Autotrader results page fetched directly from autotrader.com on 2026-09-27 (a
+    // Toyota Corolla search, zip 32801, 50 miles), not on the flattened cards.json text above: a real
+    // listing card's DOM, from the title anchor outward, is a "title-info" div (year/make/model/trim),
+    // inside an "inventory-listing-body" div that adds the price and "See payment" (the first ancestor
+    // the climb used to stop at before WalkSite.CardAmountMarkerIsInnerToCard existed), inside an
+    // "item-card" div that adds the dealer's name, distance, phone, and "Check Availability" or "Online
+    // Paperwork", inside one more wrapping div that adds a top-of-card badge such as "Price Drop" or
+    // "Newly Listed" when the card has one. One ancestor further out than that wrapping div is the
+    // results list holding every other card on the page. Nesting these levels for real, rather than the
+    // single flat "Card" node this fixture used before, is what a fake tree needs to be able to catch the
+    // climb stopping short of the top badge and the dealer footer (PR #79 review cycle 3, evidence:
+    // recorded card 778466582 against walks/autotrader/20260927-162013/insight/search.txt lines 225-238).
+    private static FakeElement AutotraderInsightListingCard(string id, string title, string restOfTitleBlock, string priceBlock, string dealerBlock, string topBadge = "") =>
+        Div(topBadge,                                                             // top-of-card badge wrapper ("Price Drop", "Newly Listed", or none)
+            Div("",                                                                 // item-card: adds the dealer footer
+                Div("",                                                               // inventory-listing-body: has the price and "See payment"
+                    Div("Used", Anchor(AutotraderInsightHref(id, "listing"), title)),    // title-info: wraps the title anchor
+                    Div(restOfTitleBlock + "\n" + priceBlock)),
+                Anchor(AutotraderInsightPurchaseConfidenceHref(id), "No Accidents"),
+                Div(dealerBlock)));
 
     private static FakeElement AutotraderInsightResults() =>
         Div("3 Matches",
@@ -202,7 +239,52 @@ public class SearchPageLinksTests
         PageLink first = realListingCards.Single(l => l.Href.Contains("790827297"));
         Assert.Contains("19,394", first.CardText);
         Assert.Contains("Great Price", first.CardText);
+        Assert.Contains("Driver's Mart Sanford", first.CardText);
         Assert.DoesNotContain("25,286", first.CardText);
+    }
+
+    [Fact]
+    public async Task ReadAsync_ACardWithATopOfCardBadge_CapturesItAlongsideThePriceAndTheDealerFooter()
+    {
+        // The badge sits above the price block, one ancestor further out than the first match
+        // ("See payment") the old climb used to stop at, and the dealer footer sits below it inside
+        // the same wrapping element; both must reach the card's text for CardBadges.Autotrader to see
+        // "Price Drop" and for the dealer footer to still be there too.
+        var page = new FakePage(Div("1 Match",
+            AutotraderInsightListingCard(
+                "788297548", "2025 Toyota Corolla", "SE\n10K mi",
+                "26,991\nSee payment\nGood Price\nDealer Fees Included",
+                "AutoNation Toyota Winter Park\n5.7 mi. away\n(407) 853-2592\nCheck Availability",
+                topBadge: "Price Drop")));
+
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.Autotrader);
+
+        PageLink card = links.Single(l => l.Href.Contains("clickType=listing"));
+        Assert.Contains("AutoNation Toyota Winter Park", card.CardText);
+        Assert.Equal("Price Drop", Assert.Contains(PostingAttributeNames.PriceDrop, WalkSites.Autotrader.ReadCardBadges(card.CardText)));
+    }
+
+    [Fact]
+    public async Task ReadAsync_ASparsePageWithOnlyOneRealCard_DoesNotWidenPastItIntoTheWholePage()
+    {
+        // A "1 Match" search with no sponsored card and no other card on the page: every ancestor from
+        // the card up to the document body still carries exactly this card's one "See payment", so only
+        // the MaxCardTextLength bound (not the match-count one) stops the widening before it reaches the
+        // page's own nav and footer text, which would otherwise make the card read as empty (too long).
+        var page = new FakePage(Div(
+            "Used Toyota Prius for Sale" + new string('x', SearchPageLinks.MaxCardTextLength),
+            AutotraderInsightListingCard(
+                "790827297", "2021 Honda Insight", "EX\n69K mi\n Hybrid",
+                "19,394\nSee payment\nGreat Price\nDealer Fees Included",
+                "Driver's Mart Sanford\n25.69 mi. away\n(407) 663-0156\nCheck Availability"),
+            Div("Autotrader, a Cox Automotive Company" + new string('y', SearchPageLinks.MaxCardTextLength))));
+
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.Autotrader);
+
+        PageLink card = links.Single(l => l.Href.Contains("clickType=listing"));
+        Assert.Contains("Driver's Mart Sanford", card.CardText);
+        Assert.DoesNotContain("Cox Automotive", card.CardText);
+        Assert.True(card.CardText.Length <= SearchPageLinks.MaxCardTextLength);
     }
 
     [Fact]

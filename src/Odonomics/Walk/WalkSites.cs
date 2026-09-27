@@ -22,8 +22,9 @@ namespace Odonomics.Walk;
 /// cars the scenario can rank. <paramref name="FallbackDealerName"/>
 /// is the dealer a posting is stamped with when its detail page names none, for a site where the
 /// site itself is the seller (carvana); null for a marketplace whose pages carry the dealer's own
-/// name or none at all. <paramref name="PagedSearchUrl"/> is null for a site whose search is one page
-/// (autotrader), and for one whose results run to more pages (cars.com, carvana) it turns a search URL, a 1-based page number, and the
+/// name or none at all. <paramref name="PagedSearchUrl"/> is null for a site whose search is one page,
+/// and for one whose results run to more pages (cars.com and carvana by a <c>page=N</c> parameter,
+/// autotrader by a <c>firstRecord=N</c> record offset) it turns a search URL, a 1-based page number, and the
 /// paging token the search's first page gave (null for a site with none) into
 /// that page's URL (see <see cref="WalkSearchPages"/>). <paramref name="MatchCountPattern"/> is for a site whose search page states
 /// how many listings match ("13 Matches") and keeps filling the page with cards for other models and
@@ -50,6 +51,14 @@ namespace Odonomics.Walk;
 /// ancestor climb, for a site whose card prints its price some other way than a dollar sign followed by a digit
 /// (autotrader, whose price is bare digits beside "See payment"; see <see cref="SearchPageLinks.CardAmountPattern"/>
 /// and <see cref="WalkSites.Autotrader"/>); null for a site whose card the default dollar-sign test already finds.
+/// <paramref name="CardAmountMarkerIsInnerToCard"/> says the amount marker the ancestor climb stops at sits inside
+/// the real card rather than at its outer edge (autotrader: the price/"See payment" line sits below the card's own
+/// top-of-card badge, such as "Price Drop", and above its dealer footer, so the first matching ancestor is missing
+/// both; see <see cref="WalkSites.Autotrader"/> and <see cref="SearchPageLinks.CardScript"/>). When set, the climb
+/// keeps widening past that first match, one parent at a time, for as long as the parent's own text still carries
+/// only the one amount match the card itself accounts for; the moment a parent's text carries more than one (the
+/// results list wrapping several cards, each with its own price line), the widening stops and the last ancestor
+/// under that bound is the card. False for a site whose first matching ancestor already is the whole card.
 /// <paramref name="CardBadgeReader"/>
 /// reads the site's own badges off a card's text as display-only posting attributes (see
 /// <see cref="ReadCardBadges"/>); null for a site whose card shape has not been confirmed.
@@ -113,6 +122,7 @@ public sealed record WalkSite(
     Func<string, decimal?>? CardPriceReader = null,
     string? CardContainerSelector = null,
     string? CardAmountPattern = null,
+    bool CardAmountMarkerIsInnerToCard = false,
     Func<string, IReadOnlyDictionary<string, string>>? CardBadgeReader = null,
     Func<string, PickupOption?>? PickupReader = null,
     string? LazyDetailBlockMarker = null,
@@ -655,7 +665,32 @@ public static class WalkSites
     /// there is one (see <see cref="CardPrices.AutotraderCardPrice"/>). Before this, every real card's
     /// own dollar-sign test failed and read as no card at all; only a "New ... MSRP$" recommendation card
     /// and a "Consider Buying New" one, both of which print a dollar sign, ever carried card text, and
-    /// neither is ever a candidate anyway (its link carries no clickType=listing).</summary>
+    /// neither is ever a candidate anyway (its link carries no clickType=listing).
+    ///
+    /// <para>autotrader pages its results by record offset: a live search fetched directly from
+    /// autotrader.com on 2026-09-27 (a 365-match Corolla search, zip 32801, 50 miles) showed the same
+    /// 25 <c>clickType=listing</c> cards on its first page every time, and requesting the identical URL
+    /// with <c>&amp;firstRecord=25</c> appended returned a second page of 25 more, with zero overlap in
+    /// listing ids against the first: <see cref="WalkSite.PagedSearchUrl"/> below reproduces that
+    /// offset directly, 25 records per page, rather than a page-number parameter like cars.com's and
+    /// carvana's <c>page=N</c>. Before this, autotrader had no <see cref="WalkSite.PagedSearchUrl"/> at
+    /// all, so <see cref="WalkSearchPages.CollectLinksAsync"/> read only the first page of any search,
+    /// however many the stated count promised (walk run 20260927-162013's corolla-hybrid search stated
+    /// 39 Matches and recorded only the 25 on its first page).</para>
+    ///
+    /// <para>The same live fetch also settled <see cref="WalkSite.CardAmountMarkerIsInnerToCard"/>: a
+    /// real listing card's DOM, from the anchor outward, is a "title-info" div (year/make/model/trim),
+    /// inside an "inventory-listing-body" div that adds the price and "See payment" (the first ancestor
+    /// <see cref="SearchPageLinks.CardScript"/>'s climb used to stop at), inside an "item-card" div that
+    /// adds the dealer's name, distance, phone, and "Check Availability" or "Online Paperwork", inside one
+    /// more wrapping div that adds a top-of-card badge such as "Price Drop" or "Newly Listed" when the
+    /// card has one. Stopping at the first match (the old behavior) read a card missing both its top
+    /// badge and its dealer footer (PR #79 review found this from the recorded card 778466582 against
+    /// walks/autotrader/20260927-162013/insight/search.txt lines 225-238, before this live DOM confirmed
+    /// why). One ancestor further out than that wrapping div is the results list holding every other card
+    /// on the page (and, on a page with a sponsored card, its "Sponsored by ..." text too), so the climb
+    /// must widen past the price marker but stop short of that shared list; <see cref="CardAmountMarkerIsInnerToCard"/>
+    /// does exactly that.</para></summary>
     public static readonly WalkSite Autotrader = new(
         "autotrader",
         query =>
@@ -666,6 +701,9 @@ public static class WalkSites
         },
         new Regex(@"/cars-for-sale/vehicle/\d+", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2,
+        // 25 clickType=listing cards per page, offset by record count rather than a page number (see
+        // the class remarks above for the live fetch that confirmed both the count and the offset).
+        PagedSearchUrl: (searchUrl, pageNumber, _) => $"{searchUrl}&firstRecord={(pageNumber - 1) * 25}",
         MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+Match(?:es)?\b"),
         PrivateSellerPagePattern: new Regex(@"\(Private Seller\)\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline),
         ResultCardLinkPattern: new Regex(@"[?&]clickType=listing(?:&|$)"),
@@ -683,6 +721,7 @@ public static class WalkSites
             RegexOptions.IgnoreCase | RegexOptions.Multiline),
         CardPriceReader: CardPrices.AutotraderCardPrice,
         CardAmountPattern: AutotraderCardAmountPattern,
+        CardAmountMarkerIsInnerToCard: true,
         CardBadgeReader: CardBadges.Autotrader,
         FeeStatementReader: FeeStatements.ReadAutotrader,
         DetailTitleModelReader: ReadTitleModel);
