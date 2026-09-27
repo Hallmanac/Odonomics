@@ -149,6 +149,15 @@ public static class WalkOutcomeWording
 
         return string.Join(", ", missing);
     }
+
+    /// <summary>The note an operator sees on a saved detail page's own console line when the site has
+    /// a <see cref="WalkSite.DetailAvailabilityReader"/> or <see cref="WalkSite.DetailDealerReader"/>
+    /// for its store but the page's header matched neither: a CarMax page whose header is some shape
+    /// not yet in <see cref="CarMaxStores"/> is still saved, under <paramref name="dealerName"/>, the
+    /// bare dealer the site falls back to, but this line says why it carries no store rather than
+    /// leaving that silent.</summary>
+    public static string StoreLineNotRecognised(string dealerName) =>
+        $"store line not recognised, saved under bare {dealerName}";
 }
 
 /// <summary>How many candidate detail pages were dropped for each reason. Total, plus whatever

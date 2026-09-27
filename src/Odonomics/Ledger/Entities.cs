@@ -145,6 +145,14 @@ public static class PostingAttributeNames
 
     /// <summary>The "No Accidents" badge (autotrader).</summary>
     public const string NoAccidents = "no-accidents";
+
+    /// <summary>What a CarMax detail page's own header says about a posting that cannot be bought
+    /// like an ordinary listing on the lot: <see cref="Odonomics.Walk.CarMaxStores.Reserved"/> when
+    /// the header read "Reserved at" (held for another buyer) or
+    /// <see cref="Odonomics.Walk.CarMaxStores.ComingSoon"/> when it read "Coming to" (still in
+    /// transit). Display only, the same as every other name here: a car flagged this way is still
+    /// ranked and priced normally.</summary>
+    public const string Availability = "availability";
 }
 
 /// <summary>A selling dealer, keyed by its normalized name and location (see

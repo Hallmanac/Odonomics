@@ -137,6 +137,7 @@ public sealed record WalkSite(
     Func<string, FeeStatement>? CardFeeStatementReader = null,
     bool AskingPriceFromCard = false,
     Func<string, ResolvedDealer?>? DetailDealerReader = null,
+    Func<string, string?>? DetailAvailabilityReader = null,
     Func<string, string?, string?, int?, string?>? DetailTitleModelReader = null,
     Func<string, int?>? CardDistanceReader = null,
     bool WaitsForRenderedCards = false)
@@ -342,6 +343,14 @@ public sealed record WalkSite(
         string.IsNullOrWhiteSpace(extractedDealerName)
             ? FallbackDealerName
             : extractedDealerName.Trim();
+
+    /// <summary>Whether a detail page's own text says the posting cannot be bought like an ordinary
+    /// listing right now (CarMax's "Reserved at" or "Coming to" header, see
+    /// <see cref="CarMaxStores.ReadAvailability"/>), read by this site's
+    /// <see cref="DetailAvailabilityReader"/>, or null when the site has none or the page's header
+    /// says nothing of the kind. Display only, the same as a card badge: it never changes whether the
+    /// posting is ranked.</summary>
+    public string? ReadDetailAvailability(string pageText) => DetailAvailabilityReader?.Invoke(pageText);
 
     /// <summary>The dealer a candidate from this site is stored with, given what extraction returned.
     /// The fallback applies when the page named no dealer, or when the name it named is the fallback
@@ -771,6 +780,7 @@ public static class WalkSites
         CardFeeReader: CarMaxCards.ReadFee,
         DetailHtmlVinReader: CarMaxVin.Read,
         DetailDealerReader: CarMaxStores.Read,
+        DetailAvailabilityReader: CarMaxStores.ReadAvailability,
         LoadMoreControlPattern: new Regex(@"^\s*(?:Show\s+\d+\s+match(?:es)?|Load\s+more)\s*$", RegexOptions.IgnoreCase),
         DetailTitleModelReader: ReadTitleModel);
 
