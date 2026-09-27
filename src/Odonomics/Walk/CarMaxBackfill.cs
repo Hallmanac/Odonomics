@@ -64,14 +64,17 @@ public sealed record CarMaxBackfillTally(int Filled, int AlreadySet, int CouldNo
 /// from an older recording while a newer page that also plausibly is its own car, and disagrees about
 /// which store it's at now, went unseen.</para>
 ///
-/// <para>When a candidate (anchored by URL or matched by fingerprint) ties more than one trustworthy
-/// recorded page (the same car walked more than once, across different runs), the page from the newest
-/// run wins, since a later recording can only be truer than an older one about which store the car is at
-/// now, unless the pages that tie disagree about which store or availability that is, or two of them come
+/// <para>When a candidate matched by fingerprint alone ties more than one trustworthy recorded page
+/// (the same car walked more than once, across different runs), the page from the newest run wins,
+/// since a later recording can only be truer than an older one about which store the car is at now,
+/// unless the pages that tie disagree about which store or availability that is, or two of them come
 /// from the very same run. Any of those is proof the pages are two different cars that merely share a
 /// fingerprint (CarMax prices in round, model-year-and-mileage-keyed steps, so this does happen among its
 /// own inventory), not one car recorded twice, since a single run's own detail pages are never the same
-/// car under two different files; a tie like that is left alone rather than trusted.</para>
+/// car under two different files; a tie like that is left alone rather than trusted. A candidate anchored
+/// by its own URL never needs that caution: every page it ties carries that same URL, so all of them are
+/// certainly its own car, and a disagreement between them is simply the car changing between runs, not
+/// a fingerprint collision, so the newest one always wins there, disagreement or not.</para>
 ///
 /// <para>Nothing here is ever deleted, and a posting whose dealer is already a real store and whose
 /// availability is already set is never even considered: this only ever fills a gap, never
@@ -306,10 +309,11 @@ public static class CarMaxBackfill
         }
     }
 
-    /// <summary>Whether <paramref name="matches"/> disagree about the store, the availability, or come
-    /// from more than one detail page in the very same run: proof they're recordings of two different
-    /// cars that merely tie, not the same car recorded more than once (see the class doc), so
-    /// <paramref name="matches"/> can't be trusted as a group at all.</summary>
+    /// <summary>Whether <paramref name="matches"/>, tied only by fingerprint tolerance (never by a
+    /// shared URL anchor; see the class doc), disagree about the store, the availability, or come from
+    /// more than one detail page in the very same run: proof they're recordings of two different cars
+    /// that merely tie, not the same car recorded more than once, so <paramref name="matches"/> can't be
+    /// trusted as a group at all.</summary>
     private static bool HasDisqualifyingDisagreement(List<RecordedPage> matches)
     {
         bool sameRunTwice = matches.GroupBy(p => p.RunFolder).Any(g => g.Count() > 1);
@@ -340,12 +344,11 @@ public static class CarMaxBackfill
     {
         if (pagesByUrl.TryGetValue(candidate.Url, out List<RecordedPage>? anchoredMatches) && anchoredMatches.Count > 0)
         {
-            if (HasDisqualifyingDisagreement(anchoredMatches))
-            {
-                match = default;
-                return false;
-            }
-
+            // No disagreement veto here: every page in this set carries the candidate's own canonical
+            // URL, so all of them are certainly the same car. A store or availability disagreement
+            // between them is evidence the car changed between runs, not proof of a fingerprint
+            // collision (that proof only ever comes from two pages tying by fingerprint alone, which is
+            // what the fallback below, and its veto, is for) — so the newest recording simply wins.
             RecordedPage anchoredNewest = anchoredMatches.Aggregate((a, b) => string.CompareOrdinal(a.RunFolder, b.RunFolder) >= 0 ? a : b);
             match = new RecordedMatch(anchoredNewest.Store, anchoredNewest.Availability);
             return true;
