@@ -10,15 +10,17 @@ namespace Odonomics.Walk;
 /// climbs past the card to the results list and can read a neighboring card's own stated distance as
 /// this card's (walk run 20260927-113258; lessons 9514dea8 and 1364af73). <see cref="RenderScanScript"/>
 /// finds every &lt;li&gt; of the results list that holds a fuse-card with a /vehicledetail/ link, scrolls
-/// the first such fuse-card whose own text still carries no dollar amount into view (to trigger cars.com's
-/// lazy render), and returns every still-unrendered card's anchor href, scrolled one or not. Only the
-/// first is ever scrolled in one call: the browser only lays out and checks intersections once the script
-/// returns, so a call that scrolled every unrendered card in turn would only ever have the last one's
-/// position take effect, leaving every earlier region never actually visited. <see cref="RunAsync"/> runs
-/// it, pauses, and runs it again, up to <see cref="MaxScans"/> more times, stopping as soon as a scan comes
-/// back empty; since a rendered card drops out of the next scan's still-empty list, each scan's first
-/// still-unrendered card advances to a new region of the page. What it returns after the last scan is the
-/// hrefs still unrendered: the caller keeps those out of the pool (see
+/// the first such fuse-card that still carries no dollar amount of its own and has not already been
+/// scrolled by an earlier scan (to trigger cars.com's lazy render) into view, and returns every
+/// still-unrendered card's anchor href, scrolled or not. Only one card is ever scrolled in one call: the
+/// browser only lays out and checks intersections once the script returns, so a call that scrolled every
+/// unrendered card in turn would only ever have the last one's position take effect, leaving every earlier
+/// region never actually visited. Marking a card scrolled (a data attribute on the element itself, which
+/// survives between calls because every call runs in the same page) is what lets a card that never renders
+/// hand the next scan's single scroll on to the next still-unrendered card instead of holding onto it for
+/// every remaining scan. <see cref="RunAsync"/> runs the scan, pauses, and runs it again, up to
+/// <see cref="MaxScans"/> more times, stopping as soon as a scan comes back empty. What it returns after
+/// the last scan is the hrefs still unrendered: the caller keeps those out of the pool (see
 /// <see cref="WalkSearchPages.CollectLinksAsync"/>) rather than letting the ambiguous wrapper-text walk
 /// decide their distance for them.
 /// </summary>
@@ -30,12 +32,16 @@ public static class SearchPageCardRenderWait
     /// unrendered rather than waited on further.</summary>
     public const int MaxScans = 5;
 
-    /// <summary>Scrolls the first not-yet-rendered card into view and returns the hrefs of every card still
-    /// without a dollar amount in their own fuse-card text, scrolled or not. Only the first is scrolled: the
-    /// browser only realizes one scroll position per call (see the class summary), so scrolling more than
-    /// one would waste the call on positions that are immediately overwritten and never actually seen. Takes
-    /// the same <c>amount</c> pattern as <see cref="SearchPageLinks.CardScript"/> (see
-    /// <see cref="SearchPageLinks.CardAmountPattern"/>), so the two agree on what counts as rendered.</summary>
+    /// <summary>Scrolls the first not-yet-rendered, not-yet-scrolled card into view and returns the hrefs of
+    /// every card still without a dollar amount in their own fuse-card text, scrolled or not. Only one card
+    /// is scrolled per call: the browser only realizes one scroll position per call (see the class summary),
+    /// so scrolling more than one would waste the call on positions that are immediately overwritten and
+    /// never actually seen. A card already scrolled by an earlier call is skipped when picking which card to
+    /// scroll this time (its own <c>data-walk-scrolled</c> attribute says so, and survives between calls
+    /// because every call runs against the same live page), so a card that never renders cannot hold onto
+    /// the one scroll every scan grants and starve every card after it. Takes the same <c>amount</c> pattern
+    /// as <see cref="SearchPageLinks.CardScript"/> (see <see cref="SearchPageLinks.CardAmountPattern"/>), so
+    /// the two agree on what counts as rendered.</summary>
     public const string RenderScanScript = """
         ({ amount }) => {
             const hasAmount = new RegExp(amount);
@@ -53,8 +59,9 @@ public static class SearchPageCardRenderWait
                 }
 
                 if (!hasAmount.test(card.innerText || '')) {
-                    if (!scrolled) {
+                    if (!scrolled && !card.dataset.walkScrolled) {
                         card.scrollIntoView({ block: 'center' });
+                        card.dataset.walkScrolled = '1';
                         scrolled = true;
                     }
 
