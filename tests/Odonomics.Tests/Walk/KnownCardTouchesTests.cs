@@ -164,14 +164,15 @@ public class KnownCardTouchesTests
     }
 
     [Fact]
-    public async Task IsKnown_FalseForEveryLinkUnderRevisit()
+    public async Task IsKnown_StillTrueForALedgerLinkUnderRevisit()
     {
         using var testDb = new LedgerTestDatabase();
         using OdonomicsDbContext db = testDb.CreateContext();
         (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
         KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: true, CancellationToken.None);
 
-        Assert.False(touches.IsKnown(CardUrl(1)));
+        Assert.True(touches.IsKnown(CardUrl(1)));
+        Assert.False(touches.IsKnown(CardUrl(2)));
     }
 
     [Fact]
