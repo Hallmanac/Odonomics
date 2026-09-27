@@ -162,14 +162,14 @@ public class CarMaxWalkTests
     {
         string pageText = Fixture("carmax-camry-detail-3.txt");
 
-        Assert.Equal("Camry", WalkSites.CarMax.ResolveModel(null, "Toyota", 2025, pageText));
-        Assert.Equal("Camry", WalkSites.CarMax.ResolveModel("  ", "Toyota", 2025, pageText));
+        Assert.Equal("Camry", WalkSites.CarMax.ResolveModel(null, "Toyota", "SE", 2025, pageText));
+        Assert.Equal("Camry", WalkSites.CarMax.ResolveModel("  ", "Toyota", "SE", 2025, pageText));
     }
 
     [Fact]
     public void ResolveModel_ExtractionReadAModel_KeepsIt()
     {
-        Assert.Equal("Camry SE", WalkSites.CarMax.ResolveModel("Camry SE", "Toyota", 2025, Fixture("carmax-camry-detail-3.txt")));
+        Assert.Equal("Camry SE", WalkSites.CarMax.ResolveModel("Camry SE", "Toyota", "SE", 2025, Fixture("carmax-camry-detail-3.txt")));
     }
 
     [Fact]
@@ -179,7 +179,7 @@ public class CarMaxWalkTests
         ListingQuery camryHybrid = Query("Toyota", "Camry Hybrid", yearMin: 2018, hybridOnlyFromModelYear: 2025);
         Assert.False(camryHybrid.MatchesWalkedPage("Toyota", null, "SE", 2025, pageText));
 
-        string? model = WalkSites.CarMax.ResolveModel(null, "Toyota", 2025, pageText);
+        string? model = WalkSites.CarMax.ResolveModel(null, "Toyota", "SE", 2025, pageText);
 
         Assert.True(camryHybrid.MatchesWalkedPage("Toyota", model, "SE", 2025, pageText));
     }
@@ -191,13 +191,15 @@ public class CarMaxWalkTests
     [InlineData("Toyota", 2024)]
     public void ResolveModel_TitleLineOfAnotherCarOrNoMakeOrYear_StaysBlank(string? make, int? year)
     {
-        Assert.Null(WalkSites.CarMax.ResolveModel(null, make, year, Fixture("carmax-camry-detail-3.txt")));
+        Assert.Null(WalkSites.CarMax.ResolveModel(null, make, "SE", year, Fixture("carmax-camry-detail-3.txt")));
     }
 
     [Fact]
-    public void ResolveModel_SiteWithoutATitleReader_KeepsTheBlankModel()
+    public void ResolveModel_CarvanaTitleSplitAcrossTwoLines_ReadsTheModelOffIt()
     {
-        Assert.Null(WalkSites.Carvana.ResolveModel(null, "Toyota", 2025, "2025 Toyota Camry\nSE"));
+        // Carvana renders the title's trim on its own line below the year/make/model line, the same
+        // shape CarMax uses, so the fallback that used to be CarMax-only reads "Camry" off it too.
+        Assert.Equal("Camry", WalkSites.Carvana.ResolveModel(null, "Toyota", "SE", 2025, "2025 Toyota Camry\nSE"));
     }
 
     [Fact]

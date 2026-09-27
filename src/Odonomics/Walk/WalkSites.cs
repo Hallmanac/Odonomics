@@ -81,9 +81,10 @@ namespace Odonomics.Walk;
 /// <paramref name="DetailDealerReader"/> reads the dealer a detail page names, ahead of the extraction, for a site whose
 /// dealer is one of many stores under a single name that the extraction does not reliably tell from the site itself
 /// (carmax, see <see cref="CarMaxStores"/>); null for a site whose dealer the extraction reads.
-/// <paramref name="DetailTitleModelReader"/> reads the model off a detail page's own title line, for a site whose extraction can
-/// leave the model blank on a page that prints it there (carmax, see <see cref="CarMaxTitles"/>); null for a site whose
-/// extraction is taken as it comes. <paramref name="CardDistanceReader"/> reads the distance in miles a result card
+/// <paramref name="DetailTitleModelReader"/> reads the model off a detail page's own title line ("2026 Toyota Camry SE Sedan
+/// 4D"), for a site whose extraction can leave the model blank on a page that prints it there (every site sets this; see
+/// <see cref="ReadTitleModel"/>); null for a site whose extraction is taken as it comes.
+/// <paramref name="CardDistanceReader"/> reads the distance in miles a result card
 /// states from the search's zip (cars.com, see <see cref="CarsComCards.ReadDistanceMiles"/>), for a site whose search URL
 /// carries a radius the site does not actually enforce; null for a site whose radius the search itself holds to, whose
 /// cards are then never checked against it.</summary>
@@ -116,7 +117,7 @@ public sealed record WalkSite(
     Func<string, FeeStatement>? CardFeeStatementReader = null,
     bool AskingPriceFromCard = false,
     Func<string, ResolvedDealer?>? DetailDealerReader = null,
-    Func<string, string?, int?, string?>? DetailTitleModelReader = null,
+    Func<string, string?, string?, int?, string?>? DetailTitleModelReader = null,
     Func<string, int?>? CardDistanceReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
@@ -305,11 +306,11 @@ public sealed record WalkSite(
 
     /// <summary>The model to store for a detail page whose extraction returned <paramref name="extractedModel"/>: that model
     /// when it is not blank, otherwise the one the page's own title line prints (see <see cref="DetailTitleModelReader"/>)
-    /// for the page's <paramref name="make"/> and <paramref name="year"/>, or the blank model back when this site has no
-    /// reader or the title names none.</summary>
-    public string? ResolveModel(string? extractedModel, string? make, int? year, string pageText) =>
+    /// for the page's <paramref name="make"/>, <paramref name="trim"/>, and <paramref name="year"/>, or the blank model
+    /// back when this site has no reader or the title names none.</summary>
+    public string? ResolveModel(string? extractedModel, string? make, string? trim, int? year, string pageText) =>
         string.IsNullOrWhiteSpace(extractedModel)
-            ? DetailTitleModelReader?.Invoke(pageText, make, year) ?? extractedModel
+            ? DetailTitleModelReader?.Invoke(pageText, make, trim, year) ?? extractedModel
             : extractedModel;
 
     /// <summary>The dealer name to store for a page whose extraction returned
@@ -459,6 +460,67 @@ public static class WalkSites
         return base64.Replace('+', '-').Replace('/', '_').TrimEnd('=');
     }
 
+    /// <summary>The condition badge a title line can carry ahead of its model year ("Used 2020 Toyota
+    /// Corolla LE", "Certified 2026 Toyota Corolla SE FWD"), shared between <see cref="DetailTitleLine"/>
+    /// and <see cref="ReadTitleModel"/> so the two agree on what counts as one.</summary>
+    private const string TitleConditionWord = @"(?:(?:New|Used|Certified|Price Drop)\s+)?";
+
+    /// <summary>The first line of a page that opens a vehicle title: a run of exactly four digits (a
+    /// model year), optionally behind a condition word, followed by more text. Only the first such line
+    /// in the whole page counts, whichever car it turns out to name: a mismatch against the year and make
+    /// actually asked for (see <see cref="ReadTitleModel"/>) means the page's own title disagrees, not
+    /// that some other, later mention of the right year and make (a similar-vehicles card further down
+    /// the page) should be searched out instead.</summary>
+    private static readonly Regex DetailTitleLine = new(
+        $@"^[ \t]*{TitleConditionWord}\d{{4}}[ \t]+\S.*$",
+        RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
+
+    /// <summary>Reads the model off a detail page's own title line ("2026 Toyota Camry SE Sedan 4D"), for
+    /// a page whose extraction left the model blank even though the page states it. Every site's title
+    /// line takes the form "&lt;year&gt; &lt;make&gt; &lt;model&gt; &lt;trim&gt;", optionally behind a
+    /// condition word; when the extraction's own <paramref name="trim"/> is given, the model is what sits
+    /// between the make and that trim, found as a whole word so a trim that happens to be a substring of
+    /// the model or body style (an "SE" trim inside "SE Sedan 4D") does not cut short. Without a trim to
+    /// bound against, or on a site that renders the trim on the line below the title instead (carvana,
+    /// carmax, whose title line then has nothing after the model to bound against anyway), the whole
+    /// remainder of the line is the model. Null when the make or year is unknown, the page's first title
+    /// line names some other year or make, or what follows the make on it is empty.</summary>
+    private static string? ReadTitleModel(string pageText, string? make, string? trim, int? year)
+    {
+        if (string.IsNullOrWhiteSpace(make) || year is not int titleYear)
+        {
+            return null;
+        }
+
+        Match titleLine = DetailTitleLine.Match(pageText);
+        if (!titleLine.Success)
+        {
+            return null;
+        }
+
+        Match match = Regex.Match(
+            titleLine.Value.Trim(),
+            $@"^{TitleConditionWord}{titleYear}\s+{Regex.Escape(make.Trim())}\s+(?<rest>\S.*)$",
+            RegexOptions.IgnoreCase);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        string rest = match.Groups["rest"].Value.Trim();
+        if (!string.IsNullOrWhiteSpace(trim))
+        {
+            Match beforeTrim = Regex.Match(rest, $@"^(?<model>.*?)\b{Regex.Escape(trim.Trim())}\b", RegexOptions.IgnoreCase);
+            if (beforeTrim.Success)
+            {
+                rest = beforeTrim.Groups["model"].Value;
+            }
+        }
+
+        string model = Regex.Replace(rest, @"\s+", " ").Trim();
+        return model.Length > 0 ? model : null;
+    }
+
     public static readonly WalkSite CarsCom = new(
         "cars.com",
         query =>
@@ -491,7 +553,8 @@ public static class WalkSites
         // cars.com's maximum_distance query parameter doesn't bound the results it actually returns
         // (a padded page keeps handing back cars hundreds of miles off), so every card's own stated
         // distance is checked against the scenario's radius at link collection instead.
-        CardDistanceReader: CarsComCards.ReadDistanceMiles);
+        CardDistanceReader: CarsComCards.ReadDistanceMiles,
+        DetailTitleModelReader: ReadTitleModel);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
@@ -529,7 +592,8 @@ public static class WalkSites
         // The delivery block also carries the pickup option, and renders only after the page has been
         // scrolled about a third of the way down.
         PickupReader: CarvanaPickup.Read,
-        LazyDetailBlockMarker: CarvanaPickup.BlockHeading);
+        LazyDetailBlockMarker: CarvanaPickup.BlockHeading,
+        DetailTitleModelReader: ReadTitleModel);
 
     /// <summary>What a private seller's listing is stored as: one dealer row for every private seller,
     /// with no location, so no individual's name or city enters the ledger and
@@ -582,7 +646,8 @@ public static class WalkSites
             @"\A(?:(?!^\s*View similar vehicles\s*$)[\s\S])*^\s*Contact Dealer For Price\s*$",
             RegexOptions.IgnoreCase | RegexOptions.Multiline),
         CardBadgeReader: CardBadges.Autotrader,
-        FeeStatementReader: FeeStatements.ReadAutotrader);
+        FeeStatementReader: FeeStatements.ReadAutotrader,
+        DetailTitleModelReader: ReadTitleModel);
 
     /// <summary>What CarMax's own name is stored as when a detail page names no store. A CarMax page
     /// normally names the store the car is at ("CarMax Orlando"), and a page that does not is still a
@@ -630,7 +695,7 @@ public static class WalkSites
         DetailHtmlVinReader: CarMaxVin.Read,
         DetailDealerReader: CarMaxStores.Read,
         LoadMoreControlPattern: new Regex(@"^\s*(?:Show\s+\d+\s+match(?:es)?|Load\s+more)\s*$", RegexOptions.IgnoreCase),
-        DetailTitleModelReader: CarMaxTitles.ReadModel);
+        DetailTitleModelReader: ReadTitleModel);
 
     /// <summary>CarGurus: a marketplace of dealers' cars, searched by the ids CarGurus gives the make and model (see
     /// <see cref="CarGurusSearch"/>) within the scenario's radius. A search page states "N vehicles found", and that
@@ -660,7 +725,8 @@ public static class WalkSites
         AskingPriceFromCard: true,
         CardBadgeReader: CardBadges.CarGurus,
         CardFeeReader: CarGurusCards.ReadFee,
-        CardFeeStatementReader: FeeStatements.ReadCarGurusCard);
+        CardFeeStatementReader: FeeStatements.ReadCarGurusCard,
+        DetailTitleModelReader: ReadTitleModel);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {
