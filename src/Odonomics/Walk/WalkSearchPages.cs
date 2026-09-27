@@ -81,7 +81,8 @@ public static class WalkSearchPages
 
         void ReportOnce(PageLink card, Action? report)
         {
-            if (reportedOutOfRadius.Add(WalkSites.CanonicalDetailUrl(card.Href)))
+            string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
+            if (!canonicalUrls.Contains(canonicalUrl) && reportedOutOfRadius.Add(canonicalUrl))
             {
                 report?.Invoke();
             }
