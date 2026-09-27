@@ -972,6 +972,107 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_ThirdFullRunAfterACardNeverRendered_StillReportsThePostingGoneEvenThoughItsLastSeenPredatesTheChain()
+    {
+        // Run1 sees A. Run2 is a full walk where A's card never rendered: A is stamped with
+        // CardUnrenderedSeenAt = run2 but its LastSeen stays at run1 (see LedgerUpsertService.MarkCardsUnrenderedAsync).
+        // Run3 is a full walk where A really has left the market. Run3's own coverage chain is [run2], and
+        // A's LastSeen (run1) is not in it, so without also matching on CardUnrenderedSeenAt, A would never
+        // be considered gone by run3 or any later run.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(FirstRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDKN3DU0A0000028", 15000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.MarkCardsUnrenderedAsync("cars.com", ["https://cars.com/a"], run2, CancellationToken.None);
+
+        RunEntity run3 = Run(ThirdRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run3);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run3, DaughterScenario, CancellationToken.None);
+
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal("JTDKN3DU0A0000028", gone.Vin);
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_ThirdFullRunWhoseCardFailsToRenderAgain_ReportsCardNeverRenderedAgain()
+    {
+        // Same setup as above, but run3's own render wait also gave up on A's card: it should be reported
+        // "card never rendered" again, not silently dropped from Gone.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(FirstRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDKN3DU0A0000029", 15000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.MarkCardsUnrenderedAsync("cars.com", ["https://cars.com/a"], run2, CancellationToken.None);
+
+        RunEntity run3 = Run(ThirdRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run3);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.MarkCardsUnrenderedAsync("cars.com", ["https://cars.com/a"], run3, CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run3, DaughterScenario, ["https://cars.com/a"], CancellationToken.None);
+
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal("JTDKN3DU0A0000029", gone.Vin);
+        Assert.Equal(GoneReasons.CardNeverRendered, gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_ThirdFullRunAfterACardNeverRenderedWithAZipChange_ComparesAgainstTheStampNotTheStaleLastSeen()
+    {
+        // Run1 sees A at 32833. Run2 moves the search to 32801, and A's card never renders there: A
+        // is stamped with run2 while its LastSeen stays at run1 (see
+        // LedgerUpsertService.MarkCardsUnrenderedAsync). Run3 stays at 32801 and A has genuinely
+        // left. The run that last actually confirmed A on the search page is run2, not run1, and
+        // run2's zip matches run3's, so this must read "not on search page", not "search moved"
+        // against run1's stale zip.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        var diffService = new LedgerDiffService(db);
+
+        RunEntity run1 = Run(FirstRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(Candidate("JTDKN3DU0A0000030", 15000m, "https://cars.com/a", "cars.com"), run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "cars.com:Prius", "32801", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.MarkCardsUnrenderedAsync("cars.com", ["https://cars.com/a"], run2, CancellationToken.None);
+
+        RunEntity run3 = Run(ThirdRunAt, "cars.com:Prius", "32801", 50);
+        db.Runs.Add(run3);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        SearchDiff diff = await diffService.ComputeAsync(run3, DaughterScenario, CancellationToken.None);
+
+        GonePostingEntry gone = Assert.Single(diff.Gone);
+        Assert.Equal("JTDKN3DU0A0000030", gone.Vin);
+        Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
+    }
+
+    [Fact]
     public async Task ComputeAsync_PostingAnUnreadRunNeverReached_IsStillGoneOnTheNextFullRunOfThePair()
     {
         ListingCandidate prius = Candidate("JTDKN3DU0A0000022", 15000m, "https://carvana.com/prius", "carvana");

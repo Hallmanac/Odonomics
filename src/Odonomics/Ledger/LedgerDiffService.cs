@@ -60,20 +60,23 @@ public sealed record SearchDiff(
 /// keeps a run that only covered one model from marking every other model on that same source as
 /// checked too. Every "gone" entry carries a reason, checked in order: this run's detail page for it
 /// said the car sold, the vehicle's year is below the scenario's minimum for its model, its mileage
-/// is over the scenario's maximum, the run that last saw it searched a different zip or radius than this one,
-/// this run's render wait gave up on this exact posting's own search card while the ledger already held it
-/// (see <paramref name="unrenderedKnownUrls"/> on the overload below), this run covered its pair only
-/// partially (an explicit --max stopped the link collection before the site ran out of results, see
-/// <see cref="RunSources.PartialKey"/>) so the walk never reached it, this run covered its pair only
-/// partially because a result page after the first failed to load (see <see cref="RunSources.UnreadKey"/>),
-/// or otherwise it simply is not on the search page any more. The four after "sold" are cars the search no
-/// longer asks for, and "beyond the cap" and "pages unread" are cars this run did not look for; "sold" and
-/// the last are the cars that have likely left the market, and "sold" is the one a page confirmed. "Card
-/// never rendered" is its own case: the walk saw the link but never actually measured it, so it is reported
-/// apart from the pair's own coverage, which is never marked partial for it (see WalkCommand). "Search
-/// moved" compares the zip and radius each run
-/// recorded (see <see cref="RunEntity.Zip"/>), so a run recorded before the ledger kept them never
-/// yields it.
+/// is over the scenario's maximum, this run's render wait gave up on this exact posting's own search
+/// card while the ledger already held it (see <paramref name="unrenderedKnownUrls"/> on the overload
+/// below), the run that last confirmed it on the search page searched a different zip or radius than
+/// this one, this run covered its pair only partially (an explicit --max stopped the link collection
+/// before the site ran out of results, see <see cref="RunSources.PartialKey"/>) so the walk never
+/// reached it, this run covered its pair only partially because a result page after the first failed
+/// to load (see <see cref="RunSources.UnreadKey"/>), or otherwise it simply is not on the search page
+/// any more. The four after "sold" are cars the search no longer asks for, and "beyond the cap" and
+/// "pages unread" are cars this run did not look for; "sold" and the last are the cars that have
+/// likely left the market, and "sold" is the one a page confirmed. "Card never rendered" is its own
+/// case: the walk saw the link but never actually measured it, so it is reported apart from the
+/// pair's own coverage, which is never marked partial for it (see <see cref="Cli.Commands.WalkCommand"/>), and
+/// it is checked before "search moved" so a card that keeps failing to render is never misreported
+/// against a stale zip or radius comparison. "Search moved" compares the zip and radius each run
+/// recorded (see <see cref="RunEntity.Zip"/>) against the run that last actually confirmed the posting
+/// on the search page — its LastSeen, or, when later, the run that last stamped it as a card that
+/// failed to render — so a run recorded before the ledger kept them never yields it.
 /// </summary>
 public sealed class LedgerDiffService(OdonomicsDbContext db)
 {
@@ -245,7 +248,16 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             // A posting this run did not touch is a gone candidate when the last run to cover its pair
             // saw it. A run that covered the pair only partially never looked for the postings it did not
             // reach, so those still carry the LastSeen of the run before it: the search reaches back
-            // through partial runs to the newest one that covered the pair in full.
+            // through partial runs to the newest one that covered the pair in full. A posting whose card
+            // never rendered is exempted from the pair's own coverage instead of moving its LastSeen (see
+            // LedgerUpsertService.MarkCardsUnrenderedAsync), so it is also a gone candidate whenever its
+            // CardUnrenderedSeenAt, rather than its LastSeen, is the one in that chain, or equals this
+            // run's own StartedAt: the walk stamps a card that fails to render with the current run
+            // before this diff ever runs, so a posting whose card keeps failing carries this run's own
+            // stamp rather than a prior run's by the time this query runs. Without matching that stamp
+            // too, a run after the one that first stamped it never looks at it again, and it is never
+            // reported gone even once the car has actually left, nor "card never rendered" again if its
+            // card keeps failing.
             List<DateTimeOffset> comparableCoverage = [.. RunSources.CoverageChain(token, priorRuns).Select(r => r.StartedAt)];
             if (comparableCoverage.Count == 0)
             {
@@ -256,7 +268,10 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             List<PostingEntity> stillMarkedFromPreviousCoverage = await db.Postings
                 .Include(p => p.Vehicle)
                 .Include(p => p.PriceObservations)
-                .Where(p => p.Source == source && p.Vehicle!.Model == model && comparableCoverage.Contains(p.LastSeen))
+                .Where(p => p.Source == source && p.Vehicle!.Model == model
+                    && (comparableCoverage.Contains(p.LastSeen)
+                        || (p.CardUnrenderedSeenAt != null
+                            && (comparableCoverage.Contains(p.CardUnrenderedSeenAt.Value) || p.CardUnrenderedSeenAt == currentRun.StartedAt))))
                 .OrderBy(p => p.Id)
                 .ToListAsync(cancellationToken);
 
@@ -279,7 +294,16 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                 }
 
                 decimal lastKnownPrice = posting.PriceObservations.OrderByDescending(o => o.ObservedAt).First().Price;
-                RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == posting.LastSeen);
+
+                // A stamp-matched posting's own card was last confirmed on the search page by whichever
+                // run stamped CardUnrenderedSeenAt, which can be newer than its LastSeen (a posting whose
+                // card fails to render never moves LastSeen). Comparing the search area against the older
+                // of the two would blame a zip or radius change that happened before the card was last
+                // actually seen on the page.
+                DateTimeOffset lastSeenAt = posting.CardUnrenderedSeenAt is DateTimeOffset cardUnrenderedSeenAt && cardUnrenderedSeenAt > posting.LastSeen
+                    ? cardUnrenderedSeenAt
+                    : posting.LastSeen;
+                RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == lastSeenAt);
                 var entry = new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(posting, vehicle, lastSeenRun, currentRun, scenario, cappedTokens.Contains(token), unreadTokens.Contains(token), unrenderedKnownUrlSet.Contains(posting.Url)));
                 if (alreadyGone)
                 {
@@ -316,14 +340,14 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             return GoneReasons.OverMileage;
         }
 
-        if (SearchAreaChanged(lastSeenRun, currentRun))
-        {
-            return GoneReasons.SearchMoved;
-        }
-
         if (cardNeverRendered)
         {
             return GoneReasons.CardNeverRendered;
+        }
+
+        if (SearchAreaChanged(lastSeenRun, currentRun))
+        {
+            return GoneReasons.SearchMoved;
         }
 
         return (pairCapped, pairHadUnreadPages) switch
