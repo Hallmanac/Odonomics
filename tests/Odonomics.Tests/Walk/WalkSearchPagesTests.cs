@@ -761,6 +761,115 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
+    public async Task CarsCom_AnUnrenderedCardThatRendersOnALaterPage_IsNotCountedUnrendered()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string resolvesLaterHref = "https://www.cars.com/vehicledetail/resolves-later/?sid=x";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>>
+            {
+                [1] =
+                [
+                    new PageLink(resolvesLaterHref, "", ""),
+                    new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)"),
+                ],
+                [2] =
+                [
+                    new PageLink(resolvesLaterHref, "Used 2020 Honda Insight EX", "Melbourne, FL (39 mi)"),
+                    new PageLink("https://www.cars.com/vehicledetail/fresh-near/?sid=x", "Used 2020 Honda Insight EX", "Orlando, FL (10 mi)"),
+                ],
+            },
+            unrenderedHrefs: new Dictionary<int, List<string>> { [1] = [resolvesLaterHref] });
+        int unrendered = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: () => unrendered++);
+
+        Assert.Contains(resolvesLaterHref, pool);
+        Assert.Equal(0, unrendered);
+    }
+
+    [Fact]
+    public async Task CarsCom_AnUnrenderedCardThatIsBeyondRadiusOnALaterPage_IsNotCountedUnrendered()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string resolvesFarHref = "https://www.cars.com/vehicledetail/resolves-far/?sid=x";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>>
+            {
+                [1] =
+                [
+                    new PageLink(resolvesFarHref, "", ""),
+                    new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)"),
+                ],
+                [2] = [new PageLink(resolvesFarHref, "Used 2020 Honda Insight EX", "Tampa, FL (95 mi)")],
+            },
+            unrenderedHrefs: new Dictionary<int, List<string>> { [1] = [resolvesFarHref] });
+        int unrendered = 0;
+        int beyondRadius = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onBeyondRadius: () => beyondRadius++, onUnrendered: () => unrendered++);
+
+        Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
+        Assert.Equal(0, unrendered);
+        Assert.Equal(1, beyondRadius);
+    }
+
+    [Fact]
+    public async Task CarsCom_AKnownLinkThatStaysUnrendered_IsNotTouchedSoTheLedgerNeverCreditsAnUnmeasuredCard()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string knownUnrenderedHref = "https://www.cars.com/vehicledetail/known-unrendered/?sid=x";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>> { [1] = [new PageLink(knownUnrenderedHref, "", "")] },
+            unrenderedHrefs: new Dictionary<int, List<string>> { [1] = [knownUnrenderedHref] });
+        List<(string CanonicalUrl, decimal? Price, int BadgeCount)> touches = [];
+        ValueTask<bool> TouchKnownAsync(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken _)
+        {
+            touches.Add((canonicalUrl, cardPrice, cardBadges.Count));
+            return ValueTask.FromResult(true);
+        }
+        int unrendered = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, TouchKnownAsync, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: () => unrendered++);
+
+        Assert.Empty(pool);
+        Assert.Equal(1, unrendered);
+        Assert.Empty(touches);
+    }
+
+    [Fact]
+    public async Task CarsCom_AnEmptyHrefAnchorOnAPageThatGaveUpTheRenderWait_IsSkippedRatherThanThrowing()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string unrenderedHref = "https://www.cars.com/vehicledetail/unrendered/?sid=x";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>>
+            {
+                [1] =
+                [
+                    new PageLink("", "", ""),
+                    new PageLink(unrenderedHref, "", ""),
+                    new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)"),
+                ],
+            },
+            unrenderedHrefs: new Dictionary<int, List<string>> { [1] = [unrenderedHref] });
+        int unrendered = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: () => unrendered++);
+
+        Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
+        Assert.Equal(1, unrendered);
+    }
+
+    [Fact]
     public async Task PagedSearchWithNoCap_VisitsEveryLinkOfEveryPage()
     {
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
