@@ -296,4 +296,46 @@ public class WalkPairSummaryLineTests
 
         Assert.DoesNotContain("capped", line);
     }
+
+    [Fact]
+    public void Format_NoSkippedRadiusCounts_OmitsThemEntirely()
+    {
+        string line = WalkPairSummaryLine.Format("carvana", "Toyota", "Camry Hybrid", pages: 30, known: 0, saved: 30, new DroppedBreakdown(0, 0, 0, 0));
+
+        Assert.Equal("carvana / Toyota Camry Hybrid: 30 pages, 0 known from cards, 30 saved, 0 dropped", line);
+    }
+
+    [Fact]
+    public void Format_SkippedBeyondRadius_IsNamedAfterTheDroppedTotal()
+    {
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0), skippedBeyondRadius: 12);
+
+        Assert.Equal("cars.com / Honda Insight: 1 pages, 0 known from cards, 1 saved, 0 dropped, 12 beyond radius", line);
+    }
+
+    [Fact]
+    public void Format_SkippedNoDistance_IsNamedSeparatelyFromBeyondRadius()
+    {
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0), skippedBeyondRadius: 12, skippedNoDistance: 3);
+
+        Assert.Equal("cars.com / Honda Insight: 1 pages, 0 known from cards, 1 saved, 0 dropped, 12 beyond radius, 3 no distance stated", line);
+    }
+
+    [Fact]
+    public void Format_SkippedRadiusCountsAlongsideADroppedBreakdown_FollowTheBreakdownParenthetical()
+    {
+        var dropped = new DroppedBreakdown(MissingFields: 2, NoVin: 0, NotMatching: 0, Failed: 0);
+
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 9, known: 0, saved: 7, dropped, skippedBeyondRadius: 5);
+
+        Assert.Equal("cars.com / Honda Insight: 9 pages, 0 known from cards, 7 saved, 2 dropped (missing fields), 5 beyond radius", line);
+    }
+
+    [Fact]
+    public void Format_SkippedRadiusCountsWithACappedPair_PutsCappedLast()
+    {
+        string line = WalkPairSummaryLine.Format("cars.com", "Honda", "Insight", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0), skippedBeyondRadius: 4, capped: true);
+
+        Assert.Equal("cars.com / Honda Insight: 1 pages, 0 known from cards, 1 saved, 0 dropped, 4 beyond radius, capped", line);
+    }
 }

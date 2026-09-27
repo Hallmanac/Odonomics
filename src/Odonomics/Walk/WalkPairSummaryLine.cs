@@ -36,7 +36,12 @@ public static class WalkPairSummaryLine
     /// <summary>The per-pair line printed right after its walk. When the whole line would be wider
     /// than <paramref name="width"/> (the console width; unbounded by default), the tally stays on
     /// the first line and the parenthesized reason breakdown moves, intact, to a second line
-    /// indented by four spaces, so the console never breaks it mid-parenthetical.</summary>
+    /// indented by four spaces, so the console never breaks it mid-parenthetical.
+    /// <paramref name="skippedBeyondRadius"/> and <paramref name="skippedNoDistance"/> are cars.com's
+    /// own counts (see <see cref="WalkSearchPages.CollectLinksAsync"/>): cards whose stated distance was
+    /// checked and found beyond the scenario's radius, and cards that stated no distance at all, neither
+    /// of which was ever a candidate, so neither is part of <paramref name="dropped"/>. Zero for a site
+    /// with no radius check, so its line is unchanged.</summary>
     public static string Format(
         string site,
         string make,
@@ -47,17 +52,21 @@ public static class WalkPairSummaryLine
         DroppedBreakdown dropped,
         int width = int.MaxValue,
         bool capped = false,
-        int? failedPage = null)
+        int? failedPage = null,
+        int skippedBeyondRadius = 0,
+        int skippedNoDistance = 0)
     {
         string cappedSuffix = (capped ? ", capped" : "") + (failedPage is int page ? $", page {page} failed" : "");
+        string radiusSuffix = (skippedBeyondRadius > 0 ? $", {skippedBeyondRadius} beyond radius" : "")
+            + (skippedNoDistance > 0 ? $", {skippedNoDistance} no distance stated" : "");
         string prefix = $"{site} / {make} {model}: {pages} pages, {known} known from cards, {saved} saved, {dropped.Total} dropped";
         string cell = DroppedCell(dropped);
         if (cell.Length == 0)
         {
-            return prefix + cappedSuffix;
+            return prefix + radiusSuffix + cappedSuffix;
         }
 
-        string breakdown = $"({cell}){cappedSuffix}";
+        string breakdown = $"({cell}){radiusSuffix}{cappedSuffix}";
         return prefix.Length + 1 + breakdown.Length > width
             ? $"{prefix}\n{ContinuationIndent}{breakdown}"
             : $"{prefix} {breakdown}";

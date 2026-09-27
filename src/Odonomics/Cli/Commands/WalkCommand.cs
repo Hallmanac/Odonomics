@@ -200,6 +200,12 @@ public static class WalkCommand
         // pages after it were never read, so the pair's coverage is recorded as partial for that reason.
         int? failedResultPage = null;
 
+        // A card whose site checks a stated distance against the scenario's radius (see
+        // WalkSite.CardDistanceReader): how many were beyond it, and how many stated none at all. Zero for
+        // a site with no such check.
+        int skippedBeyondRadius = 0;
+        int skippedNoDistance = 0;
+
         // The result card text of every detail link the search pages showed, by canonical URL, for a site
         // that prints a fee on its cards (see WalkSite.CardFeeReader): the visit of a link has only its
         // URL, and the card is where that fee is.
@@ -274,7 +280,10 @@ public static class WalkCommand
                 pageNumber => AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: the search ran out of exact matches, so paging stops there"),
                 () => linkCollectionCapped = true,
                 ct,
-                revisit);
+                revisit,
+                query.RadiusMiles,
+                () => skippedBeyondRadius++,
+                () => skippedNoDistance++);
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -472,9 +481,9 @@ public static class WalkCommand
         await knownTouches.CommitAsync(cancellationToken);
 
         bool capped = linkCollectionCapped || tally.Capped;
-        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage)}");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance)}");
 
-        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage);
+        return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
