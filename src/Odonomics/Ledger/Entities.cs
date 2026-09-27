@@ -68,6 +68,16 @@ public sealed class PostingEntity
     /// dropped off the search.</summary>
     public DateTimeOffset? SoldSeenAt { get; set; }
 
+    /// <summary>The StartedAt of the most recent run whose render wait gave up on this posting's own
+    /// search card while the ledger already held it (see
+    /// <see cref="LedgerUpsertService.MarkCardsUnrenderedAsync"/>), or null when that has never
+    /// happened. A run that gives up this way never touches <see cref="LastSeen"/>, since it never
+    /// actually measured the car, so the diff reports the posting gone under "card never rendered"
+    /// rather than folding it into whatever reason the rest of its pair's untouched postings get; and
+    /// <see cref="VehiclePricing"/> keeps counting it active exactly as it would a posting "beyond the
+    /// cap", even once a later run's full coverage of the pair would otherwise have dropped it.</summary>
+    public DateTimeOffset? CardUnrenderedSeenAt { get; set; }
+
     public VehicleEntity? Vehicle { get; set; }
     public DealerEntity? Dealer { get; set; }
     public List<PriceObservationEntity> PriceObservations { get; set; } = [];
