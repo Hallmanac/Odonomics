@@ -83,7 +83,10 @@ namespace Odonomics.Walk;
 /// (carmax, see <see cref="CarMaxStores"/>); null for a site whose dealer the extraction reads.
 /// <paramref name="DetailTitleModelReader"/> reads the model off a detail page's own title line, for a site whose extraction can
 /// leave the model blank on a page that prints it there (carmax, see <see cref="CarMaxTitles"/>); null for a site whose
-/// extraction is taken as it comes.</summary>
+/// extraction is taken as it comes. <paramref name="CardDistanceReader"/> reads the distance in miles a result card
+/// states from the search's zip (cars.com, see <see cref="CarsComCards.ReadDistanceMiles"/>), for a site whose search URL
+/// carries a radius the site does not actually enforce; null for a site whose radius the search itself holds to, whose
+/// cards are then never checked against it.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -113,7 +116,8 @@ public sealed record WalkSite(
     Func<string, FeeStatement>? CardFeeStatementReader = null,
     bool AskingPriceFromCard = false,
     Func<string, ResolvedDealer?>? DetailDealerReader = null,
-    Func<string, string?, int?, string?>? DetailTitleModelReader = null)
+    Func<string, string?, int?, string?>? DetailTitleModelReader = null,
+    Func<string, int?>? CardDistanceReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -137,8 +141,23 @@ public sealed record WalkSite(
 
     /// <summary>The same links <see cref="CollectDetailLinks"/> returns, each with its result card's
     /// text: when a listing is linked more than once (a card's photo and its title), the first link is
-    /// kept, carrying the first card text any of its links has.</summary>
-    public IReadOnlyList<PageLink> CollectDetailCards(IReadOnlyList<PageLink> links, int poolSize, string? searchPageText = null)
+    /// kept, carrying the first card text any of its links has. When this site has a
+    /// <see cref="CardDistanceReader"/> and <paramref name="maxDistanceMiles"/> is given, a card whose
+    /// reader finds a distance over that bound never enters the pool either, and
+    /// <paramref name="onBeyondRadius"/> is told it (cars.com's search URL carries a radius the site does
+    /// not itself enforce, so a card far outside it still turns up). A card whose text states no distance
+    /// at all (empty text, or one of the site's own nationwide recommendation links padding a later page)
+    /// is kept out the same way, but is told to <paramref name="onNoDistance"/> instead, so a reader can
+    /// tell "measured and too far" from "never measured" apart. Neither ever counts against
+    /// <paramref name="poolSize"/> or enters the pool, the same as a title
+    /// <see cref="SkippedCardTitlePattern"/> drops.</summary>
+    public IReadOnlyList<PageLink> CollectDetailCards(
+        IReadOnlyList<PageLink> links,
+        int poolSize,
+        string? searchPageText = null,
+        int? maxDistanceMiles = null,
+        Action<PageLink>? onBeyondRadius = null,
+        Action<PageLink>? onNoDistance = null)
     {
         int? statedCount = MatchCountIn(searchPageText);
         if (statedCount is int matchCount)
@@ -159,14 +178,38 @@ public sealed record WalkSite(
             detailLinks = resultCards.Count > 0 ? resultCards : detailLinks;
         }
 
-        return
+        List<PageLink> candidates =
         [
             .. detailLinks
                 .GroupBy(l => WalkSites.CanonicalDetailUrl(l.Href))
                 .Where(g => !skipped.Contains(g.Key))
                 .Select(g => g.First() with { CardText = g.Select(l => l.CardText).FirstOrDefault(t => t.Length > 0) ?? "" })
-                .Take(poolSize)
         ];
+
+        if (CardDistanceReader is null || maxDistanceMiles is not int radius)
+        {
+            return [.. candidates.Take(poolSize)];
+        }
+
+        List<PageLink> inRadius = [];
+        foreach (PageLink card in candidates)
+        {
+            int? distance = CardDistanceReader(card.CardText);
+            if (distance is null)
+            {
+                onNoDistance?.Invoke(card);
+            }
+            else if (distance > radius)
+            {
+                onBeyondRadius?.Invoke(card);
+            }
+            else
+            {
+                inRadius.Add(card);
+            }
+        }
+
+        return [.. inRadius.Take(poolSize)];
     }
 
     /// <summary>Whether <paramref name="link"/> is the link of a sponsored card (see <see cref="SponsoredLinkPattern"/>). Only that link
@@ -442,7 +485,11 @@ public static class WalkSites
         // site ignores a page_size parameter, so the search URL carries none.
         PagedSearchUrl: (searchUrl, pageNumber, _) => $"{searchUrl}&page={pageNumber}",
         CardBadgeReader: CardBadges.CarsCom,
-        FeeStatementReader: FeeStatements.ReadCarsCom);
+        FeeStatementReader: FeeStatements.ReadCarsCom,
+        // cars.com's maximum_distance query parameter doesn't bound the results it actually returns
+        // (a padded page keeps handing back cars hundreds of miles off), so every card's own stated
+        // distance is checked against the scenario's radius at link collection instead.
+        CardDistanceReader: CarsComCards.ReadDistanceMiles);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
