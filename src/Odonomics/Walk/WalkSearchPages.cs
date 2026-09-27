@@ -60,6 +60,14 @@ public static class WalkSearchPages
     /// fired for it) the moment the link is pooled or handed to <paramref name="touchKnownAsync"/>, so a car
     /// the walk ends up keeping is never left counted as skipped. A page made only of such cards, or of
     /// links this pool already holds, adds nothing and ends the paging exactly as an empty page does.
+    /// <paramref name="minYearFor"/> and <paramref name="maxMileage"/> are the scenario's own facets, checked
+    /// against a card's own stated year and mileage for a site with a <see cref="WalkSite.CardFacetsReader"/>
+    /// (carmax, whose search URL carries both facets already but does not actually honor the year range): a
+    /// card whose stated year is under the floor (<paramref name="minYearFor"/> takes whether the card's own
+    /// model text says "Hybrid", for a hybrid-only-from-year model's base-model card) or whose stated mileage
+    /// is over the cap never enters the pool and is never handed to <paramref name="touchKnownAsync"/>, and is
+    /// told to <paramref name="onBelowYearFloor"/> or <paramref name="onOverMileageCap"/> respectively (see
+    /// <see cref="WalkSite.CollectDetailCards"/>), the same as a beyond-radius or no-distance card.
     /// A link a page's <see cref="SearchPageContent.UnrenderedHrefs"/> names (see
     /// <see cref="SearchPageCardRenderWait"/>) is dropped from that page before any of that: its card never
     /// rendered within the bounded wait, so it is kept out of <see cref="WalkSite.CollectDetailCards"/> for
@@ -90,7 +98,11 @@ public static class WalkSearchPages
         Action? onNoDistance = null,
         Action? onBeyondRadiusWithdrawn = null,
         Action? onNoDistanceWithdrawn = null,
-        Action<string>? onUnrendered = null)
+        Action<string>? onUnrendered = null,
+        Func<bool, int>? minYearFor = null,
+        int? maxMileage = null,
+        Action? onBelowYearFloor = null,
+        Action? onOverMileageCap = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -156,7 +168,11 @@ public static class WalkSearchPages
                 content.Text,
                 maxDistanceMiles,
                 card => ReportOnce(card, onBeyondRadius, onBeyondRadiusWithdrawn),
-                card => ReportOnce(card, onNoDistance, onNoDistanceWithdrawn)))
+                card => ReportOnce(card, onNoDistance, onNoDistanceWithdrawn),
+                minYearFor,
+                maxMileage,
+                _ => onBelowYearFloor?.Invoke(),
+                _ => onOverMileageCap?.Invoke()))
             {
                 if (considered >= linkBound)
                 {

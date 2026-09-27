@@ -105,7 +105,13 @@ namespace Odonomics.Walk;
 /// lazily enough that link collection has to wait for them (cars.com, see <see cref="SearchPageCardRenderWait"/>): a
 /// card still empty when the page first loads leaves <see cref="SearchPageLinks.CardScript"/>'s dollar-ancestor walk
 /// nothing of its own to stop at, so it climbs to the results list and can read a neighboring card's own stated
-/// distance as this card's. False for a site whose cards are there by the time the walk reads them.</summary>
+/// distance as this card's. False for a site whose cards are there by the time the walk reads them.
+/// <paramref name="CardFacetsReader"/> reads a result card's own stated model year, mileage, and whether its model
+/// text says "Hybrid" (carmax, see <see cref="CarMaxCards.ReadVehicleFacets"/>), for a site whose search URL carries
+/// the scenario's minimum year and maximum mileage as facets but does not actually honor them: a card whose stated
+/// year or mileage already fails those facets is dropped before its link is ever pooled or checked against the
+/// ledger (see <see cref="CollectDetailCards"/>), the same as a beyond-radius or no-distance card. Null for a site
+/// whose own search facets are trusted as they come, whose cards are then never checked against them.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -140,7 +146,8 @@ public sealed record WalkSite(
     Func<string, string?>? DetailAvailabilityReader = null,
     Func<string, string?, string?, int?, string?>? DetailTitleModelReader = null,
     Func<string, int?>? CardDistanceReader = null,
-    bool WaitsForRenderedCards = false)
+    bool WaitsForRenderedCards = false,
+    Func<string, CardVehicleFacets>? CardFacetsReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -175,14 +182,24 @@ public sealed record WalkSite(
     /// is told to <paramref name="onNoDistance"/> instead, so a reader can tell "measured and too far" from
     /// "never measured" apart. Neither ever counts against
     /// <paramref name="poolSize"/> or enters the pool, the same as a title
-    /// <see cref="SkippedCardTitlePattern"/> drops.</summary>
+    /// <see cref="SkippedCardTitlePattern"/> drops. When this site has a <see cref="CardFacetsReader"/>, a
+    /// card whose own text states a model year under <paramref name="minYearFor"/> (given whether that
+    /// card's own model text says "Hybrid", for a hybrid-only-from-year model's base-model card) is told to
+    /// <paramref name="onBelowYearFloor"/> instead of ever being pooled or checked against the ledger, and one
+    /// whose stated mileage is over <paramref name="maxMileage"/> is told to <paramref name="onOverMileageCap"/>
+    /// the same way; a card whose text states neither is unaffected. Checked ahead of the radius check above,
+    /// so a card dropped for its year or mileage is never also reported beyond radius or as stating none.</summary>
     public IReadOnlyList<PageLink> CollectDetailCards(
         IReadOnlyList<PageLink> links,
         int poolSize,
         string? searchPageText = null,
         int? maxDistanceMiles = null,
         Action<PageLink>? onBeyondRadius = null,
-        Action<PageLink>? onNoDistance = null)
+        Action<PageLink>? onNoDistance = null,
+        Func<bool, int>? minYearFor = null,
+        int? maxMileage = null,
+        Action<PageLink>? onBelowYearFloor = null,
+        Action<PageLink>? onOverMileageCap = null)
     {
         int? statedCount = MatchCountIn(searchPageText);
         if (statedCount is int matchCount)
@@ -210,6 +227,30 @@ public sealed record WalkSite(
                 .Where(g => !skipped.Contains(g.Key))
                 .Select(g => g.First() with { CardText = g.Select(l => l.CardText).FirstOrDefault(t => t.Length > 0) ?? "" })
         ];
+
+        if (CardFacetsReader is not null && (minYearFor is not null || maxMileage is not null))
+        {
+            List<PageLink> withinFacets = [];
+            foreach (PageLink card in candidates)
+            {
+                CardVehicleFacets facets = CardFacetsReader(card.CardText);
+                if (minYearFor is not null && facets.Year is int year && year < minYearFor(facets.ModelNamesHybrid))
+                {
+                    onBelowYearFloor?.Invoke(card);
+                    continue;
+                }
+
+                if (maxMileage is int cap && facets.Mileage is int mileage && mileage > cap)
+                {
+                    onOverMileageCap?.Invoke(card);
+                    continue;
+                }
+
+                withinFacets.Add(card);
+            }
+
+            candidates = withinFacets;
+        }
 
         if (CardDistanceReader is null || maxDistanceMiles is not int radius)
         {
@@ -784,7 +825,10 @@ public static class WalkSites
         DetailDealerReader: CarMaxStores.Read,
         DetailAvailabilityReader: CarMaxStores.ReadAvailability,
         LoadMoreControlPattern: new Regex(@"^\s*(?:Show\s+\d+\s+match(?:es)?|Load\s+more)\s*$", RegexOptions.IgnoreCase),
-        DetailTitleModelReader: ReadTitleModel);
+        DetailTitleModelReader: ReadTitleModel,
+        // The search URL's own year range and mileage facet are not actually honored by the site (see
+        // CarMaxCards.ReadVehicleFacets), so a card that already fails either is dropped here.
+        CardFacetsReader: CarMaxCards.ReadVehicleFacets);
 
     /// <summary>CarGurus: a marketplace of dealers' cars, searched by the ids CarGurus gives the make and model (see
     /// <see cref="CarGurusSearch"/>) within the scenario's radius. A search page states "N vehicles found", and that

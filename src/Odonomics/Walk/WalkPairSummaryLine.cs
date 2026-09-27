@@ -45,7 +45,12 @@ public static class WalkPairSummaryLine
     /// with no radius check, so its line is unchanged. <paramref name="skippedUnrendered"/> is cars.com's
     /// own count of cards whose own text never carried a dollar amount within the bounded render wait
     /// (see <see cref="SearchPageCardRenderWait"/>): also never a candidate, and named apart from the
-    /// other two, since a card that never rendered was never actually measured either way.</summary>
+    /// other two, since a card that never rendered was never actually measured either way.
+    /// <paramref name="skippedBelowYearFloor"/> and <paramref name="skippedOverMileageCap"/> are carmax's own
+    /// counts (see <see cref="WalkSearchPages.CollectLinksAsync"/>): cards whose own stated year or mileage
+    /// already failed the scenario's facets, which the site's search URL carries but does not actually honor.
+    /// Neither was ever a candidate either, and both are named apart from the radius counts above, since they
+    /// are a different check. Zero for a site with no such check.</summary>
     public static string Format(
         string site,
         string make,
@@ -59,12 +64,16 @@ public static class WalkPairSummaryLine
         int? failedPage = null,
         int skippedBeyondRadius = 0,
         int skippedNoDistance = 0,
-        int skippedUnrendered = 0)
+        int skippedUnrendered = 0,
+        int skippedBelowYearFloor = 0,
+        int skippedOverMileageCap = 0)
     {
         string cappedSuffix = (capped ? ", capped" : "") + (failedPage is int page ? $", page {page} failed" : "");
         string radiusSuffix = (skippedBeyondRadius > 0 ? $", {skippedBeyondRadius} beyond radius" : "")
             + (skippedNoDistance > 0 ? $", {skippedNoDistance} no distance stated" : "")
-            + (skippedUnrendered > 0 ? $", {skippedUnrendered} unrendered" : "");
+            + (skippedUnrendered > 0 ? $", {skippedUnrendered} unrendered" : "")
+            + (skippedBelowYearFloor > 0 ? $", {skippedBelowYearFloor} below year floor" : "")
+            + (skippedOverMileageCap > 0 ? $", {skippedOverMileageCap} over mileage cap" : "");
         string prefix = $"{site} / {make} {model}: {pages} pages, {known} known from cards, {saved} saved, {dropped.Total} dropped";
         string cell = DroppedCell(dropped);
         if (cell.Length == 0)
