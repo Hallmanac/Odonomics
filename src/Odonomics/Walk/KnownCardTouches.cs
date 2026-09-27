@@ -18,8 +18,10 @@ namespace Odonomics.Walk;
 /// the touch: <see cref="CommitAsync"/> writes them all once the pair has finished, because a touch
 /// stamps LastSeen with this run and the pair's coverage token is only stamped when the pair completes,
 /// so a pair that fails or is interrupted must leave its known postings exactly as the last completed
-/// run left them. A walk asked to revisit every link gets a set that holds nothing, so every link is
-/// visited as before.
+/// run left them. A walk asked to revisit every link gets a set that holds nothing for touching purposes,
+/// so every link is visited as before, but <see cref="IsKnown"/> still answers against what the ledger
+/// actually holds: a card whose posting never rendered under --revisit still needs its pair recorded as
+/// partial rather than as the posting having left the market.
 /// </summary>
 public sealed class KnownCardTouches
 {
@@ -27,18 +29,20 @@ public sealed class KnownCardTouches
     private readonly string _source;
     private readonly RunEntity _run;
     private readonly HashSet<string> _knownUrls;
+    private readonly HashSet<string> _ledgerUrls;
     private readonly Dictionary<string, decimal?> _pendingPricesByUrl = [];
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _pendingBadgesByUrl = [];
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>> _newLinkBadgesByUrl = [];
     private readonly Dictionary<string, (decimal ShippingFee, string? PickupLocation)> _pendingFeesByUrl = [];
     private readonly Dictionary<string, (string Posture, decimal? ItemizedTotal)> _pendingPosturesByUrl = [];
 
-    private KnownCardTouches(LedgerUpsertService ledger, string source, RunEntity run, HashSet<string> knownUrls)
+    private KnownCardTouches(LedgerUpsertService ledger, string source, RunEntity run, HashSet<string> knownUrls, HashSet<string> ledgerUrls)
     {
         _ledger = ledger;
         _source = source;
         _run = run;
         _knownUrls = knownUrls;
+        _ledgerUrls = ledgerUrls;
     }
 
     /// <summary>How many distinct known links were seen on cards so far.</summary>
@@ -47,13 +51,17 @@ public sealed class KnownCardTouches
     /// <summary>Whether the ledger already holds <paramref name="canonicalUrl"/>, for a caller deciding
     /// whether a link <see cref="TryTouchAsync"/> was never asked about (a card that never rendered, and so
     /// was never touched) is a posting whose coverage should be recorded as partial rather than left to read
-    /// as a car that left the market.</summary>
-    public bool IsKnown(string canonicalUrl) => _knownUrls.Contains(canonicalUrl);
+    /// as a car that left the market. Answers against the ledger's own holdings regardless of
+    /// <c>--revisit</c>, unlike <see cref="TryTouchAsync"/>, which treats every link as new under that flag.</summary>
+    public bool IsKnown(string canonicalUrl) => _ledgerUrls.Contains(canonicalUrl);
 
     /// <summary>The touches for <paramref name="source"/> against what the ledger holds for it now, or
     /// touches that treat every link as new when <paramref name="revisit"/> is set.</summary>
-    public static async ValueTask<KnownCardTouches> LoadAsync(LedgerUpsertService ledger, string source, RunEntity run, bool revisit, CancellationToken cancellationToken) =>
-        new(ledger, source, run, revisit ? [] : await ledger.KnownUrlsAsync(source, cancellationToken));
+    public static async ValueTask<KnownCardTouches> LoadAsync(LedgerUpsertService ledger, string source, RunEntity run, bool revisit, CancellationToken cancellationToken)
+    {
+        HashSet<string> ledgerUrls = await ledger.KnownUrlsAsync(source, cancellationToken);
+        return new(ledger, source, run, revisit ? [] : ledgerUrls, ledgerUrls);
+    }
 
     /// <summary>Remembers a touch of the posting at <paramref name="canonicalUrl"/> with the card's price
     /// (<paramref name="cardPrice"/>, null when the card's price could not be read) and its badges
