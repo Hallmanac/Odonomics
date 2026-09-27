@@ -10,7 +10,11 @@ namespace Odonomics.Tests.Walk;
 /// detail-link anchor on it as one JSON [href, text] pair per line; the private-seller detail page is
 /// a recording with the seller's name replaced by "Sample S". The sold and no-price detail pages are
 /// the top of two pages recorded in walk run 20260926-121057 (a Corolla Hybrid page saying the car
-/// "has already found a new home", and a Prius page that reads "Contact Dealer For Price").</summary>
+/// "has already found a new home", and a Prius page that reads "Contact Dealer For Price").
+/// autotrader-insight-search.txt and autotrader-insight-search-links.jsonl are walk run
+/// 20260927-162013's insight/search.txt and insight/cards.json (zip 32833, 50 miles, 2019 and newer,
+/// under 100,000 miles), the run whose cards.json first showed every real listing card's own
+/// cards.json entry carrying empty text.</summary>
 public class AutotraderWalkTests
 {
     private static ListingQuery Query(string make, string model, int yearMin = 2019, int? hybridOnlyFromModelYear = null) =>
@@ -125,6 +129,22 @@ public class AutotraderWalkTests
         // (other years, new cars).
         Assert.All(links, l => Assert.Contains("clickType=listing", l));
         Assert.Equal("789050704", ListingId(links[0]));
+    }
+
+    [Fact]
+    public void CollectDetailLinks_RecordedInsightSearchPage_YieldsOnlyTheThreeClickTypeListingLinksAndNoRecommendationCard()
+    {
+        string pageText = Fixture("autotrader-insight-search.txt");
+        List<PageLink> anchors = Anchors("autotrader-insight-search-links.jsonl");
+        Assert.Contains("3 Matches", pageText);
+
+        IReadOnlyList<string> links = WalkSites.Autotrader.CollectDetailLinks(anchors, poolSize: 60, pageText);
+
+        Assert.Equal(3, links.Count);
+        Assert.All(links, l => Assert.Contains("clickType=listing", l));
+        // The "Consider Buying New" and "New ... MSRP$29,090" recommendation cards (clickType=ncb and
+        // clickType=highlight) are never among them, whatever their own card text says.
+        Assert.Equal(["790827297", "790295486", "792107365"], links.Select(ListingId));
     }
 
     [Fact]

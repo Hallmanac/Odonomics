@@ -22,6 +22,13 @@ public static class CardPrices
         @"^[ \t]*\$(?<amount>\d[\d,]*)[ \t\r]*$",
         RegexOptions.Multiline | RegexOptions.Compiled);
 
+    // autotrader prints its card price as bare digits, immediately before "See payment" (no dollar
+    // sign anywhere near it), which is also what WalkSites.Autotrader's own CardAmountPattern override
+    // tells SearchPageLinks.CardScript to treat as this card's price marker.
+    private static readonly Regex AutotraderPriceBeforeSeePayment = new(
+        @"(?<amount>\d[\d,]*)\s+See payment",
+        RegexOptions.Compiled);
+
     /// <summary>The first dollar amount in the card's text. A cars.com card reads its price, then a
     /// price-drop amount when it has one, then its mileage and its "Used 2023 ..." title, so the
     /// first amount is the asking price.</summary>
@@ -38,6 +45,13 @@ public static class CardPrices
     /// delivered one, with any shipping the card names already in it.</summary>
     public static decimal? CarGurusPrice(string cardText) =>
         Read(CarGurusPriceLine.Matches(cardText).LastOrDefault());
+
+    /// <summary>The bare-digit amount right before "See payment" on an autotrader card. A "Consider
+    /// Buying New" recommendation card prints "See details" instead of "See payment" and so reads no
+    /// price here; a "New ... MSRP$" one does carry "See payment" after its MSRP figure and so would
+    /// read that as a price, but neither is ever a candidate anyway (its link carries no
+    /// clickType=listing, see <see cref="WalkSite.ResultCardLinkPattern"/>).</summary>
+    public static decimal? AutotraderCardPrice(string cardText) => Read(AutotraderPriceBeforeSeePayment.Match(cardText));
 
     private static decimal? Read(Match? match) =>
         match is { Success: true }

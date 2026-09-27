@@ -151,6 +151,74 @@ public class SearchPageLinksTests
         Assert.Equal("", Assert.Single(links).CardText);
     }
 
+    // Cut from walks/autotrader/20260927-162013/insight/search.txt (lines 37-105) and cards.json: three
+    // real listing cards, each linked by a title anchor (clickType=listing) and a "No Accidents"
+    // purchaseConfidence anchor, and the "Consider Buying New" recommendation card that follows them.
+    // Every real card's own dollar-ancestor test used to fail here, since its price is bare digits
+    // ("19,394") with no dollar sign; only the recommendation card's "$265" ever matched.
+    private static string AutotraderInsightHref(string id, string clickType) =>
+        $"https://www.autotrader.com/cars-for-sale/vehicle/{id}?listingType=USED&makeCode=HONDA&maxMileage=100000&modelCode=INSIGHT&sortBy=relevance&startYear=2019&zip=32833&clickType={clickType}";
+
+    private static string AutotraderInsightPurchaseConfidenceHref(string id) =>
+        $"https://www.autotrader.com/cars-for-sale/vehicle/{id}?listingType=USED&makeCode=HONDA&maxMileage=100000&modelCode=INSIGHT&sortBy=relevance&startYear=2019&zip=32833#purchaseConfidence";
+
+    private static FakeElement AutotraderInsightListingCard(string id, string title, string restOfTitleBlock, string priceBlock, string dealerBlock) =>
+        Card(
+            Div("Used"),
+            Anchor(AutotraderInsightHref(id, "listing"), title),
+            Div(restOfTitleBlock + "\n" + priceBlock),
+            Anchor(AutotraderInsightPurchaseConfidenceHref(id), "No Accidents"),
+            Div(dealerBlock));
+
+    private static FakeElement AutotraderInsightResults() =>
+        Div("3 Matches",
+            AutotraderInsightListingCard(
+                "790827297", "2021 Honda Insight", "EX\n69K mi\n Hybrid",
+                "19,394\nSee payment\nGreat Price\nDealer Fees Included",
+                "Driver's Mart Sanford\n25.69 mi. away\n(407) 663-0156\nCheck Availability"),
+            AutotraderInsightListingCard(
+                "790295486", "2021 Honda Insight", "Touring\n32K mi\n Hybrid",
+                "25,286\nSee payment\nGreat Price\nDealer Fees Included",
+                "Dealer\n38.24 mi. away\nGet seller's phone number\nCheck Availability"),
+            AutotraderInsightListingCard(
+                "792107365", "2019 Honda Insight", "Touring\n49K mi\n Hybrid",
+                "19,201\nSee payment\nGreat Price\nDealer Fees Included",
+                "Dealer\n40.08 mi. away\nGet seller's phone number\nCheck Availability"),
+            Card(
+                Div("Consider Buying New"),
+                Anchor(AutotraderInsightHref("791238424", "ncb"), "2026 Honda Civic"),
+                Div("Sport\n8 mi\n$265\n/mo.\nSee details\n30,232")));
+
+    [Fact]
+    public async Task ReadAsync_RecordedAutotraderInsightSearchPage_EveryRealListingCardHasItsOwnNonEmptyText()
+    {
+        var page = new FakePage(AutotraderInsightResults());
+
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.Autotrader);
+
+        PageLink[] realListingCards = [.. links.Where(l => l.Href.Contains("clickType=listing"))];
+        Assert.Equal(3, realListingCards.Length);
+        Assert.All(realListingCards, l => Assert.NotEmpty(l.CardText));
+        PageLink first = realListingCards.Single(l => l.Href.Contains("790827297"));
+        Assert.Contains("19,394", first.CardText);
+        Assert.Contains("Great Price", first.CardText);
+        Assert.DoesNotContain("25,286", first.CardText);
+    }
+
+    [Fact]
+    public async Task ReadAsync_RecordedAutotraderInsightSearchPage_TheRecommendationCardsTextNeverMakesItACandidate()
+    {
+        var page = new FakePage(AutotraderInsightResults());
+
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.Autotrader);
+        IReadOnlyList<PageLink> candidates = WalkSites.Autotrader.CollectDetailCards(links, poolSize: 60, "3 Matches");
+
+        PageLink recommendation = links.Single(l => l.Text == "2026 Honda Civic");
+        Assert.NotEmpty(recommendation.CardText);
+        Assert.DoesNotContain(candidates, c => c.Href == recommendation.Href);
+        Assert.Equal(3, candidates.Count);
+    }
+
     [Fact]
     public async Task ReadAsync_ACardLongerThanOneCardCouldBeReadsAsNoCard()
     {

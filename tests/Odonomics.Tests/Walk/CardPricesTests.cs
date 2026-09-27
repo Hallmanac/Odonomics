@@ -3,7 +3,9 @@ using Odonomics.Walk;
 namespace Odonomics.Tests.Walk;
 
 /// <summary>Card texts here are cut from the search pages the walk recorded on 2026-09-26
-/// (walks/cars.com/20260926-121057/corolla-hybrid/search.txt and the carvana one beside it).</summary>
+/// (walks/cars.com/20260926-121057/corolla-hybrid/search.txt and the carvana one beside it).
+/// <see cref="AutotraderCard"/> is shaped like a real autotrader card (walks/autotrader/20260927-162013/insight/search.txt
+/// lines 42-43: a bare-digit price immediately before "See payment") but with its own made-up figures.</summary>
 public class CardPricesTests
 {
     private const string CarsComCardWithPriceDrop = """
@@ -114,10 +116,20 @@ public class CardPricesTests
         Assert.Null(WalkSites.Carvana.ReadCardPrice(cardText));
     }
 
+    private const string AutotraderCard = "Used\n2022 Toyota Prius\nLimited\n138K mi\n Hybrid\n17,499\nSee payment";
+
     [Fact]
-    public void Autotrader_HasNoCardPriceReaderUntilItsCardShapeIsConfirmed()
+    public void Autotrader_ReadsTheBareDigitPriceBesideSeePayment()
     {
-        Assert.Null(WalkSites.Autotrader.CardPriceReader);
-        Assert.Null(WalkSites.Autotrader.ReadCardPrice("Used\n2022 Toyota Prius\nLimited\n138K mi\n Hybrid\n17,499\nSee payment"));
+        Assert.Equal(17499m, WalkSites.Autotrader.ReadCardPrice(AutotraderCard));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Used\n2022 Toyota Prius\nLimited\n138K mi\n Hybrid\nContact Dealer For Price")]
+    [InlineData("Consider Buying New\n2026 Honda Civic\nSport\n8 mi\n$265\n/mo.\nSee details\n30,232")]
+    public void Autotrader_ACardWithNoBareDigitPriceBesideSeePaymentHasNoPrice(string cardText)
+    {
+        Assert.Null(WalkSites.Autotrader.ReadCardPrice(cardText));
     }
 }

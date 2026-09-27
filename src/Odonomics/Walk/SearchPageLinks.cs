@@ -6,16 +6,21 @@ namespace Odonomics.Walk;
 /// <summary>
 /// Pulls a search page's anchors and, for each detail link, the text of its own result card: the
 /// nearest ancestor element of the anchor (the anchor itself counts, since a site may make the whole
-/// card one link) whose text contains a dollar amount, or the element <see cref="WalkSite.CardContainerSelector"/>
-/// names when the site has one. Both cars.com and carvana print a card's price inside the card, so
-/// the nearest ancestor that shows a dollar amount is the card and not a container of several. A
+/// card one link) whose text matches <see cref="CardAmountPattern"/> or the site's own
+/// <see cref="WalkSite.CardAmountPattern"/> override, or the element
+/// <see cref="WalkSite.CardContainerSelector"/> names when the site has one. Both cars.com and carvana
+/// print a card's price inside the card as a dollar amount, so the nearest ancestor that shows one is
+/// the card and not a container of several; autotrader's price is bare digits, so it overrides the
+/// pattern instead (see <see cref="WalkSites.Autotrader"/>). A
 /// card whose text runs past <see cref="MaxCardTextLength"/> is a container of many cards, not one, so
 /// it reads as no card at all. Only links matching the site's detail pattern are asked for a card,
 /// since the rest of a page's anchors (navigation, filters) have none.
 /// </summary>
 public static class SearchPageLinks
 {
-    /// <summary>A dollar sign followed by a digit, as a JavaScript regular expression source.</summary>
+    /// <summary>A dollar sign followed by a digit, as a JavaScript regular expression source; the
+    /// default ancestor-climb test, used by a site with no <see cref="WalkSite.CardAmountPattern"/>
+    /// override.</summary>
     public const string CardAmountPattern = @"\$\s*\d";
 
     /// <summary>The longest text a single result card can plausibly have; the recorded cards run to a
@@ -69,7 +74,7 @@ public static class SearchPageLinks
         ];
         string[][] cards = detailIndices.Count == 0
             ? []
-            : await evaluateAsync(CardScript, new { indices = detailIndices, amount = CardAmountPattern, container = site.CardContainerSelector });
+            : await evaluateAsync(CardScript, new { indices = detailIndices, amount = site.CardAmountPattern ?? CardAmountPattern, container = site.CardContainerSelector });
 
         var cardTextByIndex = new Dictionary<int, string>();
         foreach ((int anchorIndex, string[] card) in detailIndices.Zip(cards))
