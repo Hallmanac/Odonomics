@@ -699,7 +699,7 @@ public class WalkSearchPagesTests
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
             CancellationToken.None, revisit: false, maxDistanceMiles: 50,
-            onBeyondRadius: () => unrenderedBeyondRadius++, onNoDistance: () => unrenderedNoDistance++, onUnrendered: () => unrendered++);
+            onBeyondRadius: () => unrenderedBeyondRadius++, onNoDistance: () => unrenderedNoDistance++, onUnrendered: _ => unrendered++);
 
         Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
         Assert.Equal(0, unrenderedBeyondRadius);
@@ -729,7 +729,7 @@ public class WalkSearchPagesTests
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
-            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: () => unrendered++);
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: _ => unrendered++);
 
         // Page 3 (only the repeating unrendered card) adds nothing new and ends paging, exactly as an
         // empty page does.
@@ -784,7 +784,7 @@ public class WalkSearchPagesTests
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
-            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: () => unrendered++);
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: _ => unrendered++);
 
         Assert.Contains(resolvesLaterHref, pool);
         Assert.Equal(0, unrendered);
@@ -811,7 +811,7 @@ public class WalkSearchPagesTests
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
-            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onBeyondRadius: () => beyondRadius++, onUnrendered: () => unrendered++);
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onBeyondRadius: () => beyondRadius++, onUnrendered: _ => unrendered++);
 
         Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
         Assert.Equal(0, unrendered);
@@ -832,14 +832,16 @@ public class WalkSearchPagesTests
             touches.Add((canonicalUrl, cardPrice, cardBadges.Count));
             return ValueTask.FromResult(true);
         }
-        int unrendered = 0;
+        List<string> unrenderedUrls = [];
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, TouchKnownAsync, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
-            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: () => unrendered++);
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: unrenderedUrls.Add);
 
         Assert.Empty(pool);
-        Assert.Equal(1, unrendered);
+        // The canonical URL is what lets a caller (WalkCommand) check whether the ledger already
+        // holds this exact link and, if so, record the pair's coverage as partial for it.
+        Assert.Equal([WalkSites.CanonicalDetailUrl(knownUnrenderedHref)], unrenderedUrls);
         Assert.Empty(touches);
     }
 
@@ -863,7 +865,7 @@ public class WalkSearchPagesTests
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
-            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: () => unrendered++);
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50, onUnrendered: _ => unrendered++);
 
         Assert.Equal(["https://www.cars.com/vehicledetail/near/?sid=x"], pool);
         Assert.Equal(1, unrendered);

@@ -67,11 +67,13 @@ public static class WalkSearchPages
     /// padded later pages can repeat the same car, so a link named unrendered on one page but read normally
     /// (pooled, touched as known, beyond radius, or no distance) on another is not unrendered at all; only a
     /// link that stays unrendered on every page it appears on, across the whole search, is told to
-    /// <paramref name="onUnrendered"/>, once per canonical URL. A link the ledger already holds that stays
-    /// unrendered this way is never handed to <paramref name="touchKnownAsync"/>: its card was never actually
-    /// read, so touching it would keep it current for rank without ever measuring it, and would double-count
-    /// it as both known from cards and unrendered. Its posting's LastSeen does not move, so the diff may
-    /// report such a car as gone from the search until a later walk's page renders its card.</summary>
+    /// <paramref name="onUnrendered"/> with its canonical URL, once per canonical URL. A link the ledger
+    /// already holds that stays unrendered this way is never handed to <paramref name="touchKnownAsync"/>:
+    /// its card was never actually read, so touching it would keep it current for rank without ever
+    /// measuring it, and would double-count it as both known from cards and unrendered. Its posting's
+    /// LastSeen does not move; the canonical URL <paramref name="onUnrendered"/> is told lets the caller
+    /// check whether the ledger already holds it and, if so, record the pair's coverage as partial rather
+    /// than let the diff read a car it never actually measured as one that left the market.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -88,7 +90,7 @@ public static class WalkSearchPages
         Action? onNoDistance = null,
         Action? onBeyondRadiusWithdrawn = null,
         Action? onNoDistanceWithdrawn = null,
-        Action? onUnrendered = null)
+        Action<string>? onUnrendered = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -212,7 +214,7 @@ public static class WalkSearchPages
                 continue;
             }
 
-            onUnrendered?.Invoke();
+            onUnrendered?.Invoke(canonicalUrl);
         }
 
         if (leftBehindForWantOfPoolRoom)

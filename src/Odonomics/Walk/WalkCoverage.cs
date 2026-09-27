@@ -5,10 +5,12 @@ namespace Odonomics.Walk;
 /// <summary>What one (site, model) pair's walk actually visited, and how many of the ledger's known
 /// links it kept current from their search cards without visiting them. <see cref="Capped"/> is true when
 /// an explicit --max ended the pair before the site ran out of results (the link pool filled while more pages
-/// remained, a search was never opened, or with --revisit the cap left collected links unvisited), so the
-/// pair's coverage is partial. <see cref="FailedPage"/> is the number of the first result page after the
-/// first that failed to load (null when none did), which ended that search's paging with the pages after
-/// it unread, so the pair's coverage is partial for that reason too.</summary>
+/// remained, a search was never opened, or with --revisit the cap left collected links unvisited), or when a
+/// known link's card never rendered within the site's bounded render wait (see
+/// <see cref="SearchPageCardRenderWait"/>) and so was never touched, so the pair's coverage is partial.
+/// <see cref="FailedPage"/> is the number of the first result page after the first that failed to load
+/// (null when none did), which ended that search's paging with the pages after it unread, so the pair's
+/// coverage is partial for that reason too.</summary>
 public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
