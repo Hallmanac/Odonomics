@@ -229,6 +229,50 @@ public class ShowRendererMonthlyCostRenderingTests
     }
 
     [Fact]
+    public void CostOrReason_OnlyReservedOrInTransit_GivesTheReservedReasonNotTheGoneOne()
+    {
+        // A reserved-only vehicle has a null purchase price for a different reason than "every
+        // posting is gone" (see VehiclePricing.OnlyReservedOrInTransit's own doc comment); `odo show`
+        // must tell the two apart the same way `odo rank` does.
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyReservedOrInTransit: true, BuildScenario());
+
+        Assert.Null(cost);
+        Assert.Equal("every posting is reserved for another buyer or in transit, not yet purchasable", unavailable);
+    }
+
+    [Fact]
+    public void CostOrReason_NotReservedWithNoCurrentPrice_GivesTheGoneReason()
+    {
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyReservedOrInTransit: false, BuildScenario());
+
+        Assert.Null(cost);
+        Assert.Contains("gone", unavailable);
+    }
+
+    [Fact]
+    public void CostOrReason_OverTheCeilingAndOnlyReservedOrInTransit_TheCeilingReasonWins()
+    {
+        Scenario scenario = BuildScenario() with { Filters = BuildScenario().Filters with { MaxPrice = 25000 } };
+        var purchasePrice = new PurchasePrice(25001m, null);
+
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyReservedOrInTransit: true, scenario);
+
+        Assert.Null(cost);
+        Assert.Contains("exceeds the maximum", unavailable);
+    }
+
+    [Fact]
+    public void CostOrReason_NotReservedWithACurrentPrice_PricesNormally()
+    {
+        var purchasePrice = new PurchasePrice(17950m, null);
+
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyReservedOrInTransit: false, BuildScenario());
+
+        Assert.NotNull(cost);
+        Assert.Null(unavailable);
+    }
+
+    [Fact]
     public void RenderMonthlyCost_VehicleWithAShippingFee_PrintsTheFeeOnItsOwnLineUnderTheAskingPrice()
     {
         var purchasePrice = new PurchasePrice(16360m, 1590m);

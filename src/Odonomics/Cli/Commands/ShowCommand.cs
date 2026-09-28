@@ -47,9 +47,8 @@ public static class ShowCommand
         IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment)];
 
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, scenario.Fulfillment);
-        (CostBreakdown? monthlyCost, string? unavailable) = OverPriceCeiling(purchasePrice, scenario.Filters.MaxPrice) is string ceilingReason
-            ? (null, ceilingReason)
-            : MonthlyCostFor($"{vehicle.Make} {vehicle.Model}", purchasePrice?.Total, scenario);
+        bool onlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource);
+        (CostBreakdown? monthlyCost, string? unavailable) = CostOrReason($"{vehicle.Make} {vehicle.Model}", purchasePrice, onlyReservedOrInTransit, scenario);
         ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice);
         return 0;
     }
@@ -73,6 +72,19 @@ public static class ShowCommand
             : null;
     }
 
+    /// <summary>The monthly cost `odo show` prints for one vehicle, or the reason it can't be priced,
+    /// checked in the order that reason should win: the scenario's own price ceiling first (see
+    /// <see cref="OverPriceCeiling"/>), then whether every live posting is reserved or in transit (see
+    /// <see cref="VehiclePricing.OnlyReservedOrInTransit"/>) rather than <paramref name="purchasePrice"/>
+    /// simply being null, since that null means something else, "no current asking price (every posting
+    /// is gone)", only when it is not also true. <see cref="MonthlyCostFor"/> checks the rest.</summary>
+    public static (CostBreakdown? Cost, string? Unavailable) CostOrReason(string makeModel, PurchasePrice? purchasePrice, bool onlyReservedOrInTransit, Scenario scenario) =>
+        OverPriceCeiling(purchasePrice, scenario.Filters.MaxPrice) is string ceilingReason
+            ? (null, ceilingReason)
+            : onlyReservedOrInTransit
+                ? (null, "every posting is reserved for another buyer or in transit, not yet purchasable")
+                : MonthlyCostFor(makeModel, purchasePrice?.Total, scenario);
+
     /// <summary>Prices one vehicle the way `odo rank` does (see <see cref="Scorer.ComputeCost"/>), but
     /// without the hard filters: `odo show` is asked about any VIN in the ledger, including one the
     /// scenario would exclude, and its monthly cost is still worth seeing. What it cannot price it
@@ -82,8 +94,7 @@ public static class ShowCommand
     /// excluded, so its monthly cost is never computed, the same as any other model missing that
     /// data. <paramref name="purchasePrice"/> is what the car costs to take home, its asking price
     /// plus the fee for the scenario's fulfillment and any itemized fees (see <see cref="PurchasePrice.Total"/>).
-    /// The price ceiling is checked ahead of this, in <see cref="RunAsync"/>, since it needs the asking price
-    /// and shipping fee separately rather than this method's already-totaled figure.</summary>
+    /// <see cref="CostOrReason"/> checks the price ceiling and the reserved/in-transit case ahead of this.</summary>
     public static (CostBreakdown? Cost, string? Unavailable) MonthlyCostFor(string makeModel, decimal? purchasePrice, Scenario scenario)
     {
         if (purchasePrice is not decimal price)

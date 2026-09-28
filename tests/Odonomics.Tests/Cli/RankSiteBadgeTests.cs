@@ -257,6 +257,7 @@ public class RankSiteBadgeTests
         Score excludedScore = scores.Single(s => s.Vehicle.Vin == ledger[0].Vin);
         Assert.False(excludedScore.Passes);
         Assert.Contains(excludedScore.FailureReasons, r => r.Contains("reserved") && r.Contains("in transit"));
+        Assert.DoesNotContain(excludedScore.FailureReasons, r => r.Contains("gone"));
         Assert.Contains(lines, l => l.Contains("Ranked (3)"));
         Assert.Contains(lines, l => l.Contains("Excluded (1)"));
         // The Reasons column wraps a reason this long across several of the table's own printed

@@ -10,8 +10,10 @@ public sealed record VehicleForScoring
     public required string Model { get; init; }
     public required int Mileage { get; init; }
 
-    /// <summary>The asking price of the posting that is cheapest to take home (see
-    /// <see cref="PurchasePrice"/>), null when every posting is gone.</summary>
+    /// <summary>The asking price of the cheapest purchasable, priced posting to take home (see
+    /// <see cref="PurchasePrice"/>), null when every posting is gone or, same as null, when none of
+    /// the live ones is both purchasable and priced (see <see cref="OnlyReservedOrInTransit"/> below,
+    /// which tells the two apart for <see cref="Scorer.FilterReasons"/>).</summary>
     public required decimal? LowestCurrentPrice { get; init; }
 
     /// <summary>The one-time shipping fee of that same posting, null when it shows none.</summary>
