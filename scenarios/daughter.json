@@ -7,7 +7,7 @@
   "holdYears": 10,
   "downPayment": 3000,
   "apr": { "min": 0.065, "max": 0.095 },
-  "termMonths": 60,
+  "termMonths": 72,
   "maintenancePerMile": 0.07,
   "emergencyReservePerMonth": 50,
   "salesTaxStateRate": 0.06,

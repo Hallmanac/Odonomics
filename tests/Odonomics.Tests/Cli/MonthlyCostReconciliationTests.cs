@@ -189,9 +189,9 @@ public class MonthlyCostReconciliationTests
         string rankPayment = Assert.Single(RenderRankDetail(score), line => line.Contains("loan payment $")).Trim();
         string[] show = RenderShow(score.Cost!);
 
-        Assert.Equal("loan payment $269-$290  of during $537-$569", rankPayment);
-        Assert.Equal(["Loan", "payment", "$269-$290"], Cells(show[1]));
-        Assert.Equal(["During-loan", "total", "$537-$569"], Cells(show[6]));
+        Assert.Equal("loan payment $231-$252  of during $499-$531", rankPayment);
+        Assert.Equal(["Loan", "payment", "$231-$252"], Cells(show[1]));
+        Assert.Equal(["During-loan", "total", "$499-$531"], Cells(show[6]));
     }
 
     [Fact]
