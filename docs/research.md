@@ -7,7 +7,7 @@ Both `odo show <vin>` and `odo research` pull the same free background research 
 On top of the NHTSA decode, recalls, and complaints that `odo show` has always fetched, there are two more pieces of research.
 
 - NHTSA safety ratings: the overall and per-category (front crash, side crash, rollover) star ratings for that year, make, and model.
-- Marketcheck VIN history: every prior listing recorded for the VIN, with its dealer, first and last seen dates, price, and mileage, along with the current listing's days on market. This one needs `Marketcheck:ApiKey`, and with no key set it degrades to a "could not fetch" line rather than failing the command. Marketcheck rate-limits under load with HTTP 429; the call backs off and retries a bounded number of times, honoring the response's Retry-After header when present, before it degrades to a "could not fetch" reason.
+- Marketcheck VIN history: every prior listing recorded for the VIN, with its dealer, first and last seen dates, price, and mileage, along with the current listing's days on market. This one needs `Marketcheck:ApiKey`, and with no key set it degrades to a "could not fetch" line rather than failing the command. Marketcheck rate-limits under load with HTTP 429; the call backs off and retries a bounded number of times, honoring the response's Retry-After header when present but capped at a few seconds so a long Retry-After can't stall a batch, before it degrades to a "could not fetch" reason.
 
 ## Caching and refresh
 

@@ -121,6 +121,30 @@ public class MarketcheckHistoryClientTests
         Assert.True(handler.CallCount is > 1 and <= 4, $"expected a bounded 2-4 attempts, got {handler.CallCount}");
     }
 
+    /// <summary>Pins the cap on <see cref="MarketcheckHistoryClient"/>'s Retry-After wait: a
+    /// quota-exhausted 429 can carry a hours-long Retry-After, and honoring that verbatim would
+    /// stall a whole `odo research` batch on the first rate-limited vehicle. The fake handler's
+    /// first response asks for a one-hour wait; the test's own elapsed time proves the client
+    /// didn't take it.</summary>
+    [Fact]
+    public async Task GetHistoryAsync_HistoryCallReturns429WithHourLongRetryAfter_CapsTheWait()
+    {
+        string historyUrl = $"https://mc-api.marketcheck.com/v2/history/car/{Vin}?api_key=test-key";
+        string activeUrl = $"https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&vin={Vin}";
+        var handler = new TooManyRequestsWithRetryAfterThenFixtureHttpMessageHandler(
+            historyUrl, TimeSpan.FromHours(1), await File.ReadAllTextAsync(FixturePath($"vin-history-{Vin}.json")),
+            activeUrl, await File.ReadAllTextAsync(FixturePath($"active-search-{Vin}.json")));
+        var client = new MarketcheckHistoryClient("test-key", new HttpClient(handler));
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        VinHistoryResult result = await client.GetHistoryAsync(Vin, CancellationToken.None);
+
+        stopwatch.Stop();
+        Assert.Null(result.CouldNotFetchReason);
+        Assert.Equal(7, result.PriorListings.Count);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(30), $"expected the wait to be capped well under Retry-After's one hour, took {stopwatch.Elapsed}");
+    }
+
     [Fact]
     public async Task GetHistoryAsync_CallerCancels_PropagatesCancellation()
     {
@@ -164,6 +188,39 @@ public class MarketcheckHistoryClientTests
             {
                 var tooManyRequests = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("") };
                 tooManyRequests.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+                return Task.FromResult(tooManyRequests);
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(historyBody) });
+        }
+    }
+
+    /// <summary>Answers <paramref name="historyUrl"/> with HTTP 429 and a Retry-After of
+    /// <paramref name="retryAfter"/> the first time, and <paramref name="historyBody"/> after that;
+    /// always answers <paramref name="activeUrl"/> with <paramref name="activeBody"/>.</summary>
+    private sealed class TooManyRequestsWithRetryAfterThenFixtureHttpMessageHandler(
+        string historyUrl, TimeSpan retryAfter, string historyBody, string activeUrl, string activeBody) : HttpMessageHandler
+    {
+        private int _historyUrlCallCount;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            string url = request.RequestUri?.ToString() ?? throw new InvalidOperationException("request has no URL");
+            if (url == activeUrl)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(activeBody) });
+            }
+
+            if (url != historyUrl)
+            {
+                throw new InvalidOperationException($"unexpected URL {url}");
+            }
+
+            _historyUrlCallCount++;
+            if (_historyUrlCallCount == 1)
+            {
+                var tooManyRequests = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("") };
+                tooManyRequests.Headers.RetryAfter = new RetryConditionHeaderValue(retryAfter);
                 return Task.FromResult(tooManyRequests);
             }
 
