@@ -92,21 +92,27 @@ public static class VehiclePricing
     /// <summary>The posting's purchase price at <paramref name="asking"/>. Itemized fees count only when
     /// the posture is itemized: an all-in page's asking price already holds its fees, and adding an
     /// itemized total the page also printed would count them twice. That total is still carried, for
-    /// display, as the fees an all-in price includes. The same goes for a shipping fee on an all-in posting:
-    /// the only card that says so is one that says "Price includes $462 shipping", so the fee is carried for
-    /// display and never added (see <see cref="PurchasePrice.ShippingIncluded"/>). A CarMax "Only at"
-    /// posting's own $0 <see cref="PostingEntity.ShippingFee"/> is read here as no fee at all rather than a
-    /// free one: it is a side effect of the same "Available today" card line an ordinary local pickup city
-    /// also sets it from (see <see cref="CarMaxStores.OnlyAtStoreName"/>), and CarMax offers no delivery on
-    /// a car like this at all, only pickup at its one store, so treating it as free shipping would tell a
-    /// buyer under delivery fulfillment that CarMax will ship a car it will not.</summary>
+    /// display, as the fees an all-in price includes. A shipping fee on an all-in posting is only ever
+    /// carried for display and never added when the posting is cargurus's own: the only card that says so
+    /// is one that says "Price includes $462 shipping" (see <see cref="Walk.FeeStatements.ReadCarGurusCard"/>),
+    /// so that is the only source whose all-in posture says anything about shipping at all. Every other
+    /// site's all-in posture (cars.com's "Seller has no extra fees", Autotrader's "Dealer Fees Included")
+    /// speaks only to the dealer's own documentation fees; a stored shipping or delivery fee on one of
+    /// those postings is a separate charge the page never said was in the price, so it is still added (see
+    /// <see cref="PurchasePrice.ShippingIncluded"/>). A CarMax "Only at" posting's own $0
+    /// <see cref="PostingEntity.ShippingFee"/> is read here as no fee at all rather than a free one: it is a
+    /// side effect of the same "Available today" card line an ordinary local pickup city also sets it from
+    /// (see <see cref="CarMaxStores.OnlyAtStoreName"/>), and CarMax offers no delivery on a car like this at
+    /// all, only pickup at its one store, so treating it as free shipping would tell a buyer under delivery
+    /// fulfillment that CarMax will ship a car it will not.</summary>
     private static PurchasePrice PurchasePriceOf(PostingEntity posting, decimal asking, Fulfillment fulfillment)
     {
         decimal? shippingFee = CarMaxStores.OnlyAtStoreName(posting.PickupLocation) is not null ? null : posting.ShippingFee;
+        bool shippingIncluded = posting.Source == WalkSites.CarGurus.Name && shippingFee is not null;
         return posting.FeePosture switch
         {
             FeePostures.Itemized => new(asking, shippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, posting.ItemizedFeesTotal, posting.FeePosture),
-            FeePostures.AllIn => new(asking, shippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture, posting.ItemizedFeesTotal, ShippingIncluded: shippingFee is not null),
+            FeePostures.AllIn => new(asking, shippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture, posting.ItemizedFeesTotal, ShippingIncluded: shippingIncluded),
             _ => new(asking, shippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture),
         };
     }

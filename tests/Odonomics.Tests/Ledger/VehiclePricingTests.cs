@@ -325,6 +325,20 @@ public class VehiclePricingTests
     }
 
     [Fact]
+    public void LowestCurrentPurchasePrice_CarsComAllInPostingWithADeliveryFee_StillAddsTheFeeUnderDelivery()
+    {
+        // Unlike cargurus, cars.com's all-in posture ("Seller has no extra fees") speaks only to the
+        // dealer's documentation fees; a $1,999 delivery fee a CarMax card states on cars.com is a
+        // separate charge the page never said was in the price, so it is still added.
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 16998m, shippingFee: 1999m, feePosture: FeePostures.AllIn));
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(18997m, price?.Total);
+        Assert.False(price?.ShippingIncluded);
+    }
+
+    [Fact]
     public void ForScoring_AllInPostingThatNamesShipping_ScoresAtTheAskingPriceAlone()
     {
         VehicleEntity vehicle = Vehicle(Posting("cargurus", 27697m, shippingFee: 699m, feePosture: FeePostures.AllIn));
