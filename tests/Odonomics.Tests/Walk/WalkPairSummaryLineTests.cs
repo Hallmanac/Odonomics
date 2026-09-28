@@ -424,4 +424,32 @@ public class WalkPairSummaryLineTests
 
         Assert.Equal("carmax / Toyota Camry Hybrid: 1 pages, 0 known from cards, 1 saved, 0 dropped, 10 below year floor, capped", line);
     }
+
+    [Fact]
+    public void Format_SkippedOverPriceCeiling_IsNamedAfterTheDroppedTotal()
+    {
+        string line = WalkPairSummaryLine.Format("carmax", "Toyota", "Camry Hybrid", pages: 30, known: 28, saved: 2, new DroppedBreakdown(0, 0, 0, 0), skippedOverPriceCeiling: 298);
+
+        Assert.Equal("carmax / Toyota Camry Hybrid: 30 pages, 28 known from cards, 2 saved, 0 dropped, 298 over price ceiling", line);
+    }
+
+    [Fact]
+    public void Format_SkippedOverPriceCeiling_IsNamedLastAfterBelowYearFloorAndOverMileageCap()
+    {
+        string line = WalkPairSummaryLine.Format(
+            "carmax", "Toyota", "Camry Hybrid", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0),
+            skippedBelowYearFloor: 10, skippedOverMileageCap: 2, skippedOverPriceCeiling: 298);
+
+        Assert.Equal(
+            "carmax / Toyota Camry Hybrid: 1 pages, 0 known from cards, 1 saved, 0 dropped, 10 below year floor, 2 over mileage cap, 298 over price ceiling",
+            line);
+    }
+
+    [Fact]
+    public void Format_SkippedOverPriceCeilingWithACappedPair_PutsCappedLast()
+    {
+        string line = WalkPairSummaryLine.Format("carmax", "Toyota", "Camry Hybrid", pages: 1, known: 0, saved: 1, new DroppedBreakdown(0, 0, 0, 0), skippedOverPriceCeiling: 298, capped: true);
+
+        Assert.Equal("carmax / Toyota Camry Hybrid: 1 pages, 0 known from cards, 1 saved, 0 dropped, 298 over price ceiling, capped", line);
+    }
 }

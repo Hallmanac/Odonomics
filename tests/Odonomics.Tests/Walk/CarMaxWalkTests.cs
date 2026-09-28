@@ -259,6 +259,14 @@ public class CarMaxWalkTests
     }
 
     [Fact]
+    public void CollectDetailCards_ReadCardPrice_GivesEachRecordedCardItsOwnPrice()
+    {
+        IReadOnlyList<PageLink> cards = WalkSites.CarMax.CollectDetailCards(Cards("carmax-prius-search-cards.json"), poolSize: 60, Fixture("carmax-prius-search.txt"));
+
+        Assert.Equal([24998m, 23498m, 29998m, 21998m], cards.Select(c => WalkSites.CarMax.ReadCardPrice(c.CardText)));
+    }
+
+    [Fact]
     public void Find_CarMax_ReturnsTheSite()
     {
         Assert.Same(WalkSites.CarMax, WalkSites.Find("CarMax"));

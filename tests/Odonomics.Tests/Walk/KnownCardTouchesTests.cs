@@ -351,10 +351,8 @@ public class KnownCardTouchesTests
         await service.UpsertAsync(Candidate(1, 18000m) with { Source = "cars.com", Url = url }, first, CancellationToken.None);
         RunEntity second = await StartRunAsync(db, SecondRunAt);
         KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "cars.com", second, revisit: false, CancellationToken.None);
-        // CarMax is the only site with no CardPriceReader in production (its cards never disclose which
-        // dollar amount is the asking price), but it collects through SearchPageLoadMore rather than this
-        // paged-URL routine, so a plain override on a site that does route through it (CollectLinksAsync)
-        // proves the same "no reader" path without borrowing a routine this site doesn't actually use.
+        // Every production site now has a CardPriceReader, so this proves the "no reader" path with a
+        // plain override instead, on a site that routes through this paged-URL routine (CollectLinksAsync).
         WalkSite siteWithNoCardPriceReader = WalkSites.CarsCom with { CardPriceReader = null };
         var page = new SearchPageContent([new PageLink(url, "Used 2022 Toyota Prius", "Used 2022 Toyota Prius\n$17,499")]);
 

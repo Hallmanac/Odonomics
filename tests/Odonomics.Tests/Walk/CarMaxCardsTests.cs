@@ -84,4 +84,48 @@ public class CarMaxCardsTests
 
         Assert.Equal(new CardVehicleFacets(null, null, ModelNamesHybrid: false), facets);
     }
+
+    [Theory]
+    [InlineData("2022 Toyota Prius LE\n38K miles\n$24,998\n$49 shipping·Get it by Monday\nSave", 24998)]
+    [InlineData("2021 Toyota Prius XLE\n52K miles\n$23,498\nAvailable today·Orlando\nSave", 23498)]
+    [InlineData("2023 Toyota Prius Prime SE\n21K miles\n$29,998\n$149 shipping·Get it by Sep 28 - Oct 2\nSave", 29998)]
+    [InlineData("2020 Toyota Prius Limited\n64K miles\n$21,998\n$1,999 shipping·Get it by Oct 5 - Oct 12\nSave", 21998)]
+    public void ReadPrice_OlderCardShapeWithThePriceAheadOfTheFeeLine_ReadsTheFirstAmount(string cardText, int expected)
+    {
+        Assert.Equal(expected, CarMaxCards.ReadPrice(cardText));
+    }
+
+    [Theory]
+    [InlineData("View more\nCompare\n2025 Toyota Camry\nSE\n·\n27K mi\nAvailable today·Orlando\nEst. $485/mo\n·\n$29,998", 29998)]
+    [InlineData("View more\nCompare\n2021 Toyota Camry Hybrid\nXSE\n·\n25K mi\n$49 shipping·Get it by Wednesday\nEst. $522/mo\n·\n$31,998", 31998)]
+    [InlineData("View more\nCompare\n2016 Toyota Camry Hybrid\nXLE\n·\n74K mi\n$499 shipping·Get it by Oct 4 - Oct 10\nEst. $311/mo\n·\n$19,998", 19998)]
+    public void ReadPrice_NewerCardShapeWithThePriceAfterTheFeeAndEstimateLines_ReadsTheLastAmount(string cardText, int expected)
+    {
+        Assert.Equal(expected, CarMaxCards.ReadPrice(cardText));
+    }
+
+    [Fact]
+    public void ReadPrice_PriceDropCard_ReadsTheCurrentPriceAheadOfTheOldOne()
+    {
+        // "Price drop" cards print the current (lower) price first and the old one it dropped from second.
+        const string card = "Price drop\nView more\nCompare\n2026 Toyota Camry\nSE\n·\n9K mi\n$49 shipping·Get it by Sep 29 - Oct 3\nEst. $522/mo\n·\n$31,998\n$32,998";
+
+        Assert.Equal(31998m, CarMaxCards.ReadPrice(card));
+    }
+
+    [Fact]
+    public void ReadPrice_ShippingAmountAndMonthlyEstimateAreNeverMistakenForThePrice()
+    {
+        Assert.Equal(29998m, CarMaxCards.ReadPrice("$29,998\n$149 shipping·Get it by Sep 28 - Oct 2"));
+        Assert.Equal(19998m, CarMaxCards.ReadPrice("$499 shipping·Get it by Oct 4 - Oct 10\nEst. $311/mo\n·\n$19,998"));
+    }
+
+    [Theory]
+    [InlineData("$49 shipping·Get it by Monday")]
+    [InlineData("Est. $311/mo")]
+    [InlineData("")]
+    public void ReadPrice_CardWithNoPriceLeft_ReturnsNull(string cardText)
+    {
+        Assert.Null(CarMaxCards.ReadPrice(cardText));
+    }
 }
