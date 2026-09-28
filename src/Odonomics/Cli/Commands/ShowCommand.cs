@@ -55,8 +55,8 @@ public static class ShowCommand
     }
 
     /// <summary>Why <paramref name="purchasePrice"/>'s vehicle can't be priced because of the scenario's own
-    /// price ceiling (see <see cref="Domain.HardFilters.MaxPrice"/>), the same figure `odo rank` and `odo budget`
-    /// check against (see <see cref="Scorer.FilterReasons"/>): its asking price plus its shipping fee, unless
+    /// price ceiling (see <see cref="Domain.HardFilters.MaxPrice"/>), the same figure `odo rank` checks against
+    /// (see <see cref="Scorer.FilterReasons"/>): its asking price plus its shipping fee, unless
     /// that fee is already in the asking price (see <see cref="PurchasePrice.ShippingIncluded"/>). Null when the
     /// scenario sets no ceiling, there's no current price to check, or the price is within it, so `odo show`'s
     /// cost line is unaffected until then.</summary>

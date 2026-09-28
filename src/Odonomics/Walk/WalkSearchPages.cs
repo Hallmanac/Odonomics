@@ -75,8 +75,12 @@ public static class WalkSearchPages
     /// price plus any shipping or delivery fee that same card states, on every site rather than only one
     /// with a <see cref="WalkSite.CardFacetsReader"/> (see <see cref="WalkSite.CollectDetailCards"/>): a card
     /// over the ceiling never enters the pool either, but is touched from its card first, the same as a
-    /// below-floor or over-mileage one, and <paramref name="onOverPriceCeiling"/> is told about it once that
-    /// touch is done. A card whose text states no price at all is unaffected, kept exactly as it always was.
+    /// below-floor or over-mileage one, and <paramref name="onOverPriceCeiling"/> is told about it, and it
+    /// counts toward the page's own tally of links added, once per canonical URL for the whole search: a
+    /// padded site that keeps repeating the same over-ceiling car on every later page has it touched and
+    /// counted only the first time, exactly as a beyond-radius card is (see <paramref name="onBeyondRadius"/>
+    /// above), so a page made up only of such repeats still reads as adding nothing and ends the paging. A
+    /// card whose text states no price at all is unaffected, kept exactly as it always was.
     /// A link a page's <see cref="SearchPageContent.UnrenderedHrefs"/> names (see
     /// <see cref="SearchPageCardRenderWait"/>) is dropped from that page before any of that: its card never
     /// rendered within the bounded wait, so it is kept out of <see cref="WalkSite.CollectDetailCards"/> for
@@ -120,6 +124,7 @@ public static class WalkSearchPages
         List<string> pool = [];
         HashSet<string> canonicalUrls = [];
         Dictionary<string, Action?> reportedOutOfRadius = [];
+        HashSet<string> reportedOverPriceCeiling = [];
         HashSet<string> everUnrenderedCanonicalUrls = [];
         int linkBound = int.MaxValue;
         int considered = 0;
@@ -239,19 +244,30 @@ public static class WalkSearchPages
                 onOverMileageCap?.Invoke();
             }
 
-            foreach (PageLink card in overPriceCeilingCards)
-            {
-                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
-                onOverPriceCeiling?.Invoke();
-            }
-
             // An over-ceiling card is still one of the page's exact matches (see WalkSites.CollectDetailCards,
             // which now bounds the price check to those before this ever sees a padding card), so it counts
             // the same way a pooled one does: without this, a URL-paged site's page made up entirely of cars
             // over the ceiling would read as adding nothing and end the paging, leaving every later page,
-            // cheaper cars included, unread.
-            considered += overPriceCeilingCards.Count;
-            added += overPriceCeilingCards.Count;
+            // cheaper cars included, unread. But a padded page can repeat the same over-ceiling card the
+            // search already reported (cars.com's later pages can repeat the same far, expensive cards on
+            // every page), so, exactly as ReportOnce does for a beyond-radius or no-distance card, a
+            // canonical URL already pooled or known, or already reported over the ceiling earlier in this
+            // search, counts toward neither added nor considered again: otherwise a page made up only of
+            // such repeats would still read as adding something and cars.com's only stop rule (a page that
+            // adds nothing) would never fire.
+            foreach (PageLink card in overPriceCeilingCards)
+            {
+                string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
+                if (canonicalUrls.Contains(canonicalUrl) || !reportedOverPriceCeiling.Add(canonicalUrl))
+                {
+                    continue;
+                }
+
+                considered++;
+                added++;
+                await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                onOverPriceCeiling?.Invoke();
+            }
 
             // A page that adds nothing, or a stated count already reached, means the site's results are
             // all read even when the pool happens to be full too; only a full pool with more to read is capped.
