@@ -94,7 +94,12 @@ public static class WalkSearchPages
     /// measuring it, and would double-count it as both known from cards and unrendered. Its posting's
     /// LastSeen does not move; the canonical URL <paramref name="onUnrendered"/> is told lets the caller
     /// check whether the ledger already holds it and, if so, record the pair's coverage as partial rather
-    /// than let the diff read a car it never actually measured as one that left the market.</summary>
+    /// than let the diff read a car it never actually measured as one that left the market.
+    /// <paramref name="onSearchCoverageKnown"/> is told, once, how many links this search actually
+    /// considered and the count its own first page stated (null when it stated none), so a caller with
+    /// more than one search for the pair (a hybrid-only-from-year model's hybrid and base-model searches)
+    /// can compare the two against each other and decide whether the pair's own coverage is full or
+    /// partial (see <see cref="WalkSearchCoverage"/>).</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -117,7 +122,8 @@ public static class WalkSearchPages
         Action? onBelowYearFloor = null,
         Action? onOverMileageCap = null,
         int? maxPrice = null,
-        Action? onOverPriceCeiling = null)
+        Action? onOverPriceCeiling = null,
+        Action<int, int?>? onSearchCoverageKnown = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -299,6 +305,8 @@ public static class WalkSearchPages
         {
             onCapped();
         }
+
+        onSearchCoverageKnown?.Invoke(considered, linkBound == int.MaxValue ? null : linkBound);
 
         return pool;
     }

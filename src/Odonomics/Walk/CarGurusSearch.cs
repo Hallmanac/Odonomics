@@ -18,6 +18,15 @@ public static class CarGurusSearch
             ["Toyota Prius"] = (7, 15),
             ["Toyota Corolla Hybrid"] = (7, 2840),
             ["Toyota Camry Hybrid"] = (7, 2908),
+            // The plain (non-hybrid-named) Camry, for the base-model search a hybrid-only-from-year
+            // rule adds (see WalkSites.CarGurus): CarGurus files the 2025+ Camry Hybrid here rather
+            // than under d2908, since Toyota dropped the gas Camry that year. Verified live rather than
+            // guessed: a probe browser (port 9223, profile edge-probe-profile, kept apart from the
+            // walk's own port 9222) loaded the d2908 search above and its embedded facet data listed
+            // this model's sibling entry as {"label":"Camry","value":"m7/d292"}; loading
+            // m7/d292 with startYear=2025 directly then showed the site's own applied-years chip as
+            // "2025 - 2026" and 394 vehicles found, confirming the id.
+            ["Toyota Camry"] = (7, 292),
             ["Honda Insight"] = (6, 591),
         };
 
@@ -33,9 +42,15 @@ public static class CarGurusSearch
     /// <summary>CarGurus's search URL for <paramref name="query"/>: the zip and radius, the model, the minimum model year
     /// (<c>startYear</c>; the site ignores <c>minYear</c>, <c>minModelYear</c> and <c>yearMin</c>) and the mileage ceiling,
     /// best match first. The site prints the years it applied as a chip ("2019 - 2026") when it honors them.</summary>
-    public static string SearchUrl(ListingQuery query) =>
-        $"https://www.cargurus.com/search?zip={query.Zip}&distance={query.RadiusMiles}&makeModelTrimPaths={ModelPath(query.Make, query.Model)}" +
-        $"&startYear={query.YearMin}&maxMileage={query.MaxMileage}&sortDirection=ASC&sortType=BEST_MATCH";
+    public static string SearchUrl(ListingQuery query) => SearchUrl(query, query.Model, query.YearMin);
+
+    /// <summary>The same URL <see cref="SearchUrl(ListingQuery)"/> builds, but for <paramref name="model"/> and
+    /// <paramref name="yearMin"/> rather than the query's own: for a hybrid-only-from-year model, whose base-model
+    /// search (see <see cref="WalkSites.CarGurus"/>) needs the base model's own id and the hybrid-only year rather
+    /// than the query's hybrid model and minimum year.</summary>
+    public static string SearchUrl(ListingQuery query, string model, int yearMin) =>
+        $"https://www.cargurus.com/search?zip={query.Zip}&distance={query.RadiusMiles}&makeModelTrimPaths={ModelPath(query.Make, model)}" +
+        $"&startYear={yearMin}&maxMileage={query.MaxMileage}&sortDirection=ASC&sortType=BEST_MATCH";
 
     /// <summary>The URL of result page <paramref name="pageNumber"/> of <paramref name="searchUrl"/>: <c>page=N</c>, and
     /// the page's <c>pageAlignment</c> when the first page gave one. The alignment is how many cards the first page held and

@@ -21,7 +21,10 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
     /// <summary>Whether this query asks for a hybrid variant of its base model ("Corolla Hybrid").</summary>
     public bool IsHybridVariant => Model.Contains("Hybrid", StringComparison.OrdinalIgnoreCase);
 
-    private string BaseModelName => IsHybridVariant
+    /// <summary>This query's model with its "Hybrid" suffix stripped ("Camry Hybrid" to "Camry"),
+    /// or the model itself when it names none: what a hybrid-only-from-year model's second, base-model
+    /// search is actually searching for, and what a multi-search pair's own coverage line calls it.</summary>
+    public string BaseModelName => IsHybridVariant
         ? Model[..Model.IndexOf(" Hybrid", StringComparison.OrdinalIgnoreCase)]
         : Model;
 

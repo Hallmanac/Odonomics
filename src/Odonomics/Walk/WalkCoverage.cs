@@ -20,8 +20,13 @@ namespace Odonomics.Walk;
 /// a fresh save would leave every run after the first one that ever found a Prime unable to stamp its
 /// coverage again. A "source:model" token gets stamped for it beside the pair's own (see
 /// WalkCoverage.RunAsync), with the same partial-coverage markers, since a model with no walk pair of its
-/// own otherwise has no run that ever covers it, leaving its postings unable to ever be reported gone.</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null);
+/// own otherwise has no run that ever covers it, leaving its postings unable to ever be reported gone.
+/// <see cref="SearchFellShortOfStatedCount"/> is true when a multi-search pair (a hybrid-only-from-year
+/// model's hybrid and base-model searches) had a search that fell short of its own stated count outside
+/// the tolerance <see cref="WalkSearchCoverage"/> allows: the pages that would have closed that gap were
+/// never read, so this is treated the same way a failed later page is, with the same "pages unread" reason
+/// (see <see cref="FailedPage"/> and <see cref="Ledger.LedgerDiffService"/>).</summary>
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
 /// is false when the pair's own walk threw (a page that never loaded, a site that errored); the
@@ -30,8 +35,9 @@ public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, Dropp
 /// true when the pair stopped short of the site's results (see <see cref="WalkPairOutcome.Capped"/>), and
 /// <see cref="FailedPage"/> is the result page that failed to load, if one did. <see cref="UnrenderedKnownUrls"/>
 /// carries forward <see cref="WalkPairOutcome.UnrenderedKnownUrls"/>, for the caller to hand every pair's
-/// list to the diff once the whole run is done.</summary>
-public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null);
+/// list to the diff once the whole run is done. <see cref="SearchFellShortOfStatedCount"/> carries forward
+/// <see cref="WalkPairOutcome.SearchFellShortOfStatedCount"/>.</summary>
+public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, bool SearchFellShortOfStatedCount = false);
 
 /// <summary>
 /// Walks every (site, model) pair in order, stamping the run's coverage token the moment each
@@ -88,7 +94,7 @@ public static class WalkCoverage
                         coveredTokens.Add(RunSources.PartialKey(coverageKey));
                     }
 
-                    if (outcome.FailedPage is not null)
+                    if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount)
                     {
                         coveredTokens.Add(RunSources.UnreadKey(coverageKey));
                     }
@@ -102,7 +108,7 @@ public static class WalkCoverage
                             coveredTokens.Add(RunSources.PartialKey(alsoCoverageKey));
                         }
 
-                        if (outcome.FailedPage is not null)
+                        if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount)
                         {
                             coveredTokens.Add(RunSources.UnreadKey(alsoCoverageKey));
                         }
@@ -120,7 +126,7 @@ public static class WalkCoverage
                         throw;
                     }
 
-                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage, outcome.SkippedBeyondRadius, outcome.SkippedNoDistance, outcome.SkippedUnrendered, outcome.UnrenderedKnownUrls));
+                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage, outcome.SkippedBeyondRadius, outcome.SkippedNoDistance, outcome.SkippedUnrendered, outcome.UnrenderedKnownUrls, outcome.SearchFellShortOfStatedCount));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

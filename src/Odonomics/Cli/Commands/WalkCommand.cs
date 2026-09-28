@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Collections.Specialized;
 using System.Text.RegularExpressions;
 using System.Web;
 using Microsoft.Playwright;
@@ -195,6 +196,23 @@ public static class WalkCommand
         return modelOverride is null ? label : $"{label} --model \"{modelOverride}\"";
     }
 
+    /// <summary>What a multi-search pair's console label calls one of its searches: cars.com's own
+    /// model facet ("toyota-camry_hybrid") when the URL carries one, otherwise CarGurus's own model
+    /// path parameter ("m7,m7/d2908"), decoded the way the site's own chip reads it rather than
+    /// percent-encoded.</summary>
+    private static string SearchFacetLabel(string searchUrl)
+    {
+        NameValueCollection query = HttpUtility.ParseQueryString(new Uri(searchUrl).Query);
+        return query.Get("models[]") ?? query.Get("makeModelTrimPaths") ?? "";
+    }
+
+    /// <summary>What a multi-search pair's own coverage line (see <see cref="WalkSearchCoverage"/>) calls
+    /// one of its searches: the hybrid model's own scenario name for the first ("Camry Hybrid"), and the
+    /// base model from its hybrid-only year for the second ("Camry from 2025") — the only two searches
+    /// a hybrid-only-from-year model's pair ever has (see <see cref="WalkSites.BuildSearchUrls"/>).</summary>
+    private static string SearchCoverageLabel(ListingQuery query, int searchIndex) =>
+        searchIndex == 0 ? query.Model : $"{query.BaseModelName} from {query.HybridOnlyFromModelYear}";
+
     private static async Task<WalkPairOutcome> WalkPairAsync(
         WalkSite site,
         string makeModel,
@@ -223,6 +241,17 @@ public static class WalkCommand
         // Set when a search's link collection stopped with the site's results not all read because
         // the pool was full (see WalkSearchPages); the pair's coverage is then recorded as partial.
         bool linkCollectionCapped = false;
+
+        // One entry per search, its own stated and collected counts (see WalkSearchCoverage), for a
+        // pair with more than one search: printed together on the pair's own coverage line.
+        var searchCoverages = new List<SearchCoverage>();
+
+        // Set when a search with a stated count fell short of it outside the tolerance
+        // WalkSearchCoverage allows, for a reason other than the link pool filling (that is
+        // linkCollectionCapped's own reason, already recorded as "beyond the cap"): the pages that
+        // would have closed the gap were never read, so this is recorded as partial with the same
+        // "pages unread" reason a failed later page gets.
+        bool searchFellShortOfStatedCount = false;
 
         // The first result page after the first that failed to load, in any of the pair's searches; the
         // pages after it were never read, so the pair's coverage is recorded as partial for that reason.
@@ -322,8 +351,13 @@ public static class WalkCommand
         async Task<IReadOnlyList<string>> CollectLinksAsync(string searchUrl, int searchIndex, int linkPoolSize, CancellationToken ct)
         {
             string searchLabel = searchUrls.Count > 1
-                ? $"search {searchIndex + 1} of {searchUrls.Count}, {HttpUtility.ParseQueryString(new Uri(searchUrl).Query).Get("models[]")} facet"
+                ? $"search {searchIndex + 1} of {searchUrls.Count}, {SearchFacetLabel(searchUrl)} facet"
                 : "search page";
+
+            // Whether this one search's own link pool filled with more of its results left to read,
+            // so a shortfall against its stated count is already accounted for as "beyond the cap"
+            // (see linkCollectionCapped) and is never also counted below as "pages unread" too.
+            bool thisSearchCapped = false;
             IReadOnlyList<string> links = await WalkSearchPages.CollectLinksAsync(
                 site,
                 searchUrl,
@@ -346,7 +380,11 @@ public static class WalkCommand
                     AnsiConsole.MarkupLineInterpolated($"[yellow]{searchLabel}, page {pageNumber} failed to load, so paging stops there ({ex.Message})[/]");
                 },
                 pageNumber => AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: the search ran out of exact matches, so paging stops there"),
-                () => linkCollectionCapped = true,
+                () =>
+                {
+                    linkCollectionCapped = true;
+                    thisSearchCapped = true;
+                },
                 ct,
                 revisit,
                 query.RadiusMiles,
@@ -368,7 +406,19 @@ public static class WalkCommand
                 () => skippedBelowYearFloor++,
                 () => skippedOverMileageCap++,
                 query.MaxPrice,
-                () => skippedOverPriceCeiling++);
+                () => skippedOverPriceCeiling++,
+                (considered, statedCount) =>
+                {
+                    if (searchUrls.Count > 1)
+                    {
+                        var coverage = new SearchCoverage(SearchCoverageLabel(query, searchIndex), considered, statedCount);
+                        searchCoverages.Add(coverage);
+                        if (!thisSearchCapped && !coverage.IsFull)
+                        {
+                            searchFellShortOfStatedCount = true;
+                        }
+                    }
+                });
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -614,6 +664,11 @@ public static class WalkCommand
         }
 
         bool capped = linkCollectionCapped || tally.Capped;
+        if (WalkSearchCoverage.PairLine(searchCoverages) is string coverageLine)
+        {
+            AnsiConsole.MarkupLineInterpolated($"{site.Name} / {make} {model}: {coverageLine}");
+        }
+
         AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, skippedBelowYearFloor, skippedOverMileageCap, skippedOverPriceCeiling)}");
 
         // The Prius pair's own search always mixes Prime candidates into its results (see
@@ -625,7 +680,8 @@ public static class WalkCommand
         // forever. Stamping it whenever this pair's own search ran (successfully or partially, the
         // same as its own coverage token) is what actually matches what the pair covered.
         return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls,
-            AlsoCoveredModel: isPriusPair ? PriusPrimeVariant.StoredModel : null);
+            AlsoCoveredModel: isPriusPair ? PriusPrimeVariant.StoredModel : null,
+            SearchFellShortOfStatedCount: searchFellShortOfStatedCount);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
@@ -690,7 +746,7 @@ public static class WalkCommand
     private static string StatusCell(WalkPairSummary summary) => summary switch
     {
         { Completed: false } => "[yellow]failed[/]",
-        { FailedPage: not null } => "unread",
+        { FailedPage: not null } or { SearchFellShortOfStatedCount: true } => "unread",
         { Capped: true } => "capped",
         _ => "ok",
     };
