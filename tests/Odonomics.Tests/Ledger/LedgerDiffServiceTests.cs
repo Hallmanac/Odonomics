@@ -6,7 +6,7 @@ namespace Odonomics.Tests.Ledger;
 
 public class LedgerDiffServiceTests
 {
-    private static ListingCandidate Candidate(string vin, decimal price, string url, string source = "auto.dev", string model = "Prius", string make = "Toyota", int year = 2020, int mileage = 40000) => new()
+    private static ListingCandidate Candidate(string vin, decimal price, string url, string source = "auto.dev", string model = "Prius", string make = "Toyota", int year = 2020, int mileage = 40000, string? dealerName = null) => new()
     {
         Vin = vin,
         Source = source,
@@ -17,6 +17,7 @@ public class LedgerDiffServiceTests
         Trim = "LE",
         Price = price,
         Mileage = mileage,
+        DealerName = dealerName,
     };
 
     private static Scenario DaughterScenario { get; } = ScenarioLoader.Load(Path.Combine(TestPaths.RepoRoot, "scenarios", "daughter.json"));
@@ -846,6 +847,35 @@ public class LedgerDiffServiceTests
 
         Assert.Equal(GoneReasons.NotOnSearchPage, gone.Reason);
         Assert.Equal("not on search page", gone.Reason);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_CarsComPostingForACarMaxDealer_IsNeverReportedGone()
+    {
+        // Same shape as ComputeAsync_SameZipAndRadiusAsTheRunThatLastSawTheVehicle_IsGoneForNotOnSearchPage
+        // above (untouched by an otherwise full second run of the same zip and radius), except this
+        // posting's dealer is one of CarMax's own stores: the cars.com walk now skips a posting like
+        // this outright rather than saving it (see WalkSite.IsCarMaxDealer), so it simply stops being
+        // touched, never because the car actually left cars.com. It must not be reported "not on
+        // search page" or under any other reason: the diff must not report it gone at all.
+        ListingCandidate carMaxOnCarsCom = Candidate("JTDKN3DU0A0000099", 16998m, "https://cars.com/carmax-norco", "cars.com", dealerName: "CarMax Norco");
+
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(FirstRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await upsert.UpsertAsync(carMaxOnCarsCom, run1, CancellationToken.None);
+
+        RunEntity run2 = Run(SecondRunAt, "cars.com:Prius", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, DaughterScenario, CancellationToken.None);
+
+        Assert.Empty(diff.Gone);
     }
 
     [Fact]

@@ -10,7 +10,7 @@ public class VehiclePricingTests
     private static readonly DateTimeOffset RunTime = new(2026, 9, 25, 0, 0, 0, TimeSpan.Zero);
     private static readonly IReadOnlyDictionary<string, DateTimeOffset> NoCoverage = new Dictionary<string, DateTimeOffset>();
 
-    private static PostingEntity Posting(string source, decimal price, decimal? shippingFee = null, DateTimeOffset? lastSeen = null, decimal? pickupFee = null, string? pickupLocation = null, string? feePosture = null, decimal? itemizedFees = null) => new()
+    private static PostingEntity Posting(string source, decimal price, decimal? shippingFee = null, DateTimeOffset? lastSeen = null, decimal? pickupFee = null, string? pickupLocation = null, string? feePosture = null, decimal? itemizedFees = null, string? dealerName = null) => new()
     {
         VehicleVin = "1HGCM82633A004352",
         Source = source,
@@ -22,6 +22,7 @@ public class VehiclePricingTests
         PickupLocation = pickupLocation,
         FeePosture = feePosture,
         ItemizedFeesTotal = itemizedFees,
+        Dealer = dealerName is null ? null : new DealerEntity { Name = dealerName, NormalizedName = dealerName.ToUpperInvariant(), NormalizedLocation = "" },
         PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = price, ObservedAt = RunTime }],
     };
 
@@ -546,6 +547,41 @@ public class VehiclePricingTests
         PostingEntity? posting = VehiclePricing.LowestCurrentPurchasePosting(vehicle, NoCoverage, Fulfillment.Delivery, DaughterZip, DaughterRadiusMiles);
         Assert.Equal(22000m, price?.Asking);
         Assert.Equal("cars.com", posting?.Source);
+    }
+
+    [Fact]
+    public void OnlyAtOutOfRadiusStore_OtherPurchasablePostingIsACarsComCarMaxDealer_StillExcludesTheVehicle()
+    {
+        // The Norco Insight bug (19XZE4F13KE013612, walk run 2026-09-28): CarMax's own posting says
+        // "Only at Norco", thousands of miles out of radius, but cars.com also carried the same car
+        // under its "CarMax Norco" dealer name at a cheaper price with no such marker, since cars.com
+        // shows CarMax's nationwide inventory as if it delivered anywhere. That cars.com posting must
+        // never count as the vehicle's other purchasable posting: CarMax is already walked nationwide
+        // on its own, so the vehicle still stands or falls on its own CarMax posting alone.
+        PostingEntity onlyAt = Posting("carmax", 19998m, shippingFee: 0m, pickupLocation: "Only at Norco");
+        PostingEntity carsComCarMaxCopy = Posting("cars.com", 16998m, dealerName: "CarMax Norco");
+        VehicleEntity vehicle = Vehicle(onlyAt, carsComCarMaxCopy);
+
+        Assert.Equal("Norco", VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, NoCoverage, DaughterZip, DaughterRadiusMiles));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery, DaughterZip, DaughterRadiusMiles));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePosting(vehicle, NoCoverage, Fulfillment.Delivery, DaughterZip, DaughterRadiusMiles));
+        // The cars.com CarMax copy never counts at all, so even the raw asking price (which an
+        // otherwise-excluded reserved or out-of-radius posting would still contribute) comes only
+        // from the vehicle's own CarMax posting, not the cheaper cars.com one.
+        Assert.Equal(19998m, VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void OnlyAtOutOfRadiusStore_OtherPurchasablePostingIsANonCarMaxDealerOnCarsCom_StillPricesFromIt()
+    {
+        // A genuine, distinct cars.com dealer (not CarMax) still counts normally: only a CarMax
+        // dealer on cars.com is excluded.
+        PostingEntity onlyAt = Posting("carmax", 19998m, shippingFee: 0m, pickupLocation: "Only at Norco");
+        PostingEntity realCarsComListing = Posting("cars.com", 22000m, dealerName: "Holler Honda");
+        VehicleEntity vehicle = Vehicle(onlyAt, realCarsComListing);
+
+        Assert.Null(VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, NoCoverage, DaughterZip, DaughterRadiusMiles));
+        Assert.Equal(22000m, VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery, DaughterZip, DaughterRadiusMiles)?.Asking);
     }
 
     [Fact]

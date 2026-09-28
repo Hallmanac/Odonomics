@@ -12,7 +12,10 @@ public static class VehiclePricing
     /// counts, and so does one a later capped walk reached or never reached, or one a run's render wait
     /// gave up on while the ledger already held it (<see cref="PostingEntity.CardUnrenderedSeenAt"/> at or
     /// after the latest full coverage); only a posting whose source/model was fully checked more recently
-    /// without seeing it again, or without its card failing to render again, drops out.
+    /// without seeing it again, or without its card failing to render again, drops out. A cars.com posting
+    /// for one of CarMax's own stores never counts as active at all, however recently it was seen (see
+    /// <see cref="IsCarMaxDealerOnCarsCom"/>): CarMax is walked nationwide by its own site, so the vehicle
+    /// stands on its CarMax posting and any non-CarMax postings instead, never on a redundant cars.com copy.
     /// This is the asking price alone, which is what the price red flags compare; the cost model
     /// uses <see cref="LowestCurrentPurchasePrice"/>.</summary>
     public static decimal? LowestCurrentPrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
@@ -222,11 +225,29 @@ public static class VehiclePricing
     private static IEnumerable<PostingEntity> ActivePostings(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
         vehicle.Postings.Where(p =>
         {
+            if (IsCarMaxDealerOnCarsCom(p))
+            {
+                return false;
+            }
+
             string key = RunSources.Key(p.Source, vehicle.Model);
             return !latestCoverageBySource.TryGetValue(key, out DateTimeOffset latestCoverage)
                 || p.LastSeen >= latestCoverage
                 || p.CardUnrenderedSeenAt >= latestCoverage;
         });
+
+    /// <summary>True when <paramref name="posting"/> is a cars.com posting for one of CarMax's own
+    /// stores: cars.com carries CarMax's whole nationwide inventory on its own search results (a
+    /// "$1,999 delivery to Orlando, FL (14 mi)" card for a car thousands of miles off), which
+    /// CarMax's own walk already covers end to end, and cars.com's delivery offer does not actually
+    /// hold for a car CarMax will only sell "Only at" its one store (see
+    /// <see cref="Walk.CarMaxStores.OnlyAtStoreName"/>). Going forward the cars.com walk skips a
+    /// posting like this outright (see <see cref="WalkSite.IsCarMaxDealer"/> and
+    /// <see cref="Cli.Commands.WalkCommand"/>'s own use of it) rather than saving it, but a posting
+    /// already on the ledger from before that skip existed needs excluding here too, on every run,
+    /// not just once it goes stale.</summary>
+    private static bool IsCarMaxDealerOnCarsCom(PostingEntity posting) =>
+        posting.Source == WalkSites.CarsCom.Name && WalkSites.CarsCom.IsCarMaxDealer(posting.Dealer?.Name);
 
     /// <summary>The posting's most recent asking price, or null when that price is below
     /// <see cref="PlaceholderPrice.Floor"/>: a placeholder already on the ledger is history, never
