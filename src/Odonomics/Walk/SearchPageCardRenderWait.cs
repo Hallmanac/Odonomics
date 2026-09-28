@@ -20,9 +20,11 @@ namespace Odonomics.Walk;
 /// hand the next scan's single scroll on to the next still-unrendered card instead of holding onto it for
 /// every remaining scan. <see cref="RunAsync"/> runs the scan, pauses, and runs it again, up to
 /// <see cref="MaxScans"/> more times, stopping as soon as a scan comes back empty. What it returns after
-/// the last scan is the hrefs still unrendered: the caller keeps those out of the pool (see
-/// <see cref="WalkSearchPages.CollectLinksAsync"/>) rather than letting the ambiguous wrapper-text walk
-/// decide their distance for them.
+/// the last scan is a snapshot, not a verdict: <see cref="StillUnrenderedAsync"/> is what the caller
+/// checks again, right after it has actually read the page's cards, since a card can go on rendering in
+/// the time that takes; only a card still without its own amount at that final check is kept out of the
+/// pool (see <see cref="WalkSearchPages.CollectLinksAsync"/>) rather than let the ambiguous wrapper-text
+/// walk decide its distance for it.
 /// </summary>
 public static class SearchPageCardRenderWait
 {
@@ -41,9 +43,11 @@ public static class SearchPageCardRenderWait
     /// because every call runs against the same live page), so a card that never renders cannot hold onto
     /// the one scroll every scan grants and starve every card after it. Takes the same <c>amount</c> pattern
     /// as <see cref="SearchPageLinks.CardScript"/> (see <see cref="SearchPageLinks.CardAmountPattern"/>), so
-    /// the two agree on what counts as rendered.</summary>
+    /// the two agree on what counts as rendered. <c>scroll</c> defaults true for <see cref="RunAsync"/>'s own
+    /// scanning loop; <see cref="StillUnrenderedAsync"/> passes it false for a check that only reads the
+    /// page's current state without nudging it further.</summary>
     public const string RenderScanScript = """
-        ({ amount }) => {
+        ({ amount, scroll = true }) => {
             const hasAmount = new RegExp(amount);
             const hrefs = [];
             let scrolled = false;
@@ -59,7 +63,7 @@ public static class SearchPageCardRenderWait
                 }
 
                 if (!hasAmount.test(card.innerText || '')) {
-                    if (!scrolled && !card.dataset.walkScrolled) {
+                    if (scroll && !scrolled && !card.dataset.walkScrolled) {
                         card.scrollIntoView({ block: 'center' });
                         card.dataset.walkScrolled = '1';
                         scrolled = true;
@@ -95,6 +99,23 @@ public static class SearchPageCardRenderWait
 
         return unrendered;
     }
+
+    /// <summary>The same per-card check <see cref="RenderScanScript"/> runs, minus the scroll: every
+    /// fuse-card that still carries no dollar amount of its own, right now. A card <see cref="RunAsync"/>
+    /// gave up on can still finish rendering in the moments after its last scan (walk run 20260928-134242,
+    /// whose cars.com pages were rendering enough slower that many cards <see cref="RunAsync"/> reported
+    /// unrendered had already rendered, under their own text rather than a neighbor's, by the time
+    /// <see cref="SearchPageLinks.ReadAsync"/> actually read the page moments later): scrolling again would
+    /// not make that card render any sooner, since it was never the scroll it was waiting on, only more
+    /// real time elapsing. Calling this once more, right after that read, is what tells a card that
+    /// genuinely never rendered from one that simply rendered later than <see cref="RunAsync"/> waited for,
+    /// without trusting <see cref="SearchPageLinks.ReadAsync"/>'s own wider ancestor climb to make that
+    /// call: that climb can still land on a neighboring card's price for a card whose own fuse-card element
+    /// is genuinely still blank, which is exactly the misreading <see cref="RunAsync"/> exists to keep out
+    /// of the pool (see the class summary), so only this narrower, same-element check may downgrade a
+    /// card from unrendered to rendered.</summary>
+    public static async Task<IReadOnlyList<string>> StillUnrenderedAsync(Func<string, object?, Task<string[]>> evaluateAsync) =>
+        await evaluateAsync(RenderScanScript, new { amount = SearchPageLinks.CardAmountPattern, scroll = false });
 
     // Relaxed escaping keeps an href's "&" readable, matching SearchPageLinks.CardsJson.
     private static readonly JsonSerializerOptions HrefsJsonOptions = new()

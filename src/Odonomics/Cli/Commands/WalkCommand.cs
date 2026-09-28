@@ -330,6 +330,16 @@ public static class WalkCommand
 
             IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync((script, arg) => page.EvaluateAsync<string[][]>(script, arg), site);
             await recorder.WriteAsync(WalkPairSearches.CardsFileName(searchIndex, pageNumber, searchUrls.Count), SearchPageLinks.CardsJson(site, links), ct);
+
+            if (site.WaitsForRenderedCards)
+            {
+                // A card the scan loop above gave up on can still finish rendering in the moments since
+                // its last scan (the body-text read and this very card read both take real time too), so
+                // this checks each one's own fuse-card element again, right now, rather than trusting the
+                // loop's stale snapshot (see SearchPageCardRenderWait.StillUnrenderedAsync).
+                unrenderedHrefs = await SearchPageCardRenderWait.StillUnrenderedAsync((script, arg) => page.EvaluateAsync<string[]>(script, arg));
+            }
+
             HashSet<string> unrenderedCanonicalUrls = [.. unrenderedHrefs.Select(WalkSites.CanonicalDetailUrl)];
             foreach (PageLink link in links.Where(l => site.DetailUrlPattern.IsMatch(l.Href) && l.CardText.Length > 0 && !unrenderedCanonicalUrls.Contains(WalkSites.CanonicalDetailUrl(l.Href))))
             {
