@@ -53,22 +53,24 @@ public sealed record VehicleForScoring
     /// ranking or any cost figure.</summary>
     public string? SiteBadge { get; init; }
 
-    /// <summary>What the cheapest posting's own site said about whether the car can actually be
-    /// bought right now (CarMax's "Reserved for another buyer" or "In transit, not yet
-    /// purchasable"), for `odo rank` to show on its own line under the row; null when the ledger holds none.
-    /// This one string is about the cheapest posting alone, so it is still display only: a vehicle whose
-    /// cheapest posting carries this note but has another live posting that doesn't still ranks normally,
-    /// showing the note beside it. <see cref="OnlyReservedOrInTransit"/> is the field the scorer actually
-    /// excludes a vehicle on.</summary>
+    /// <summary>What any of this vehicle's active postings' own site said about whether the car can
+    /// actually be bought right now (CarMax's "Reserved for another buyer" or "In transit, not yet
+    /// purchasable"), for `odo rank` to show on its own line under the row; null when none of them holds one.
+    /// This can name a posting other than the one the vehicle is priced from (see
+    /// <see cref="Ledger.VehiclePricing.LowestCurrentPurchasePosting"/>, which is never itself reserved or
+    /// in transit when a purchasable, priced posting exists), so it is display only: a vehicle with this set
+    /// still ranks and prices normally off its other, purchasable posting. <see cref="OnlyReservedOrInTransit"/>
+    /// below is the field the scorer actually excludes a vehicle on.</summary>
     public string? Availability { get; init; }
 
-    /// <summary>True when every one of this vehicle's live postings currently carries the CarMax
-    /// availability note above: none of them can actually be bought right now. <see cref="Scorer.FilterReasons"/>
-    /// excludes a vehicle this is true for, the same as an over-ceiling price or every posting gone; a
-    /// vehicle with at least one live posting that isn't reserved or in transit keeps this false and ranks
-    /// normally, even when its cheapest posting (<see cref="Availability"/> above) happens to be one of
-    /// the reserved ones. A car whose reservation later clears is ranked again with no manual step: this
-    /// is computed fresh from the ledger's current state every run, not cached from an earlier one.</summary>
+    /// <summary>True when none of this vehicle's live postings is both purchasable (not reserved or in
+    /// transit) and priced: either every live posting carries the CarMax availability note, or the ones that
+    /// don't have no valid price to rank or budget on. <see cref="Scorer.FilterReasons"/> excludes a vehicle
+    /// this is true for, the same as an over-ceiling price or every posting gone; a vehicle with at least one
+    /// live, purchasable, priced posting keeps this false and ranks and prices normally from that posting,
+    /// never from a reserved or in-transit one. A car whose reservation later clears is ranked again with no
+    /// manual step: this is computed fresh from the ledger's current state every run, not cached from an
+    /// earlier one.</summary>
     public bool OnlyReservedOrInTransit { get; init; }
 
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its

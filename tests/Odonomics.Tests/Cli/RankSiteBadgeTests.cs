@@ -207,13 +207,14 @@ public class RankSiteBadgeTests
     }
 
     [Fact]
-    public void Rank_AVehicleWithAnotherLivePostingNotReserved_ShowsTheNoteBesideTheRowAndStillRanksIt()
+    public void Rank_AVehicleWithAnotherLivePostingNotReserved_ShowsTheNoteBesideTheRowAndStillRanksItFromTheLivePosting()
     {
-        // The cheapest posting to take home is still the reserved carmax one (cheaper than the
-        // untouched cars.com posting), so it still drives the price and the note shown, but the
-        // vehicle isn't excluded: it has another live posting (cars.com) that isn't reserved.
+        // The reserved carmax posting is cheaper than the untouched cars.com posting, but it can't
+        // actually be bought, so it must not drive the price: the vehicle still ranks, from the same
+        // $24,000 cars.com price as the unmutated fixture, with the reserved note shown beside it.
         List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
         ledger[0].Postings[0].Source = "carmax";
+        ledger[0].Postings[0].PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 18000m, ObservedAt = RunTime }];
         ledger[0].Postings[0].Attributes =
         [
             .. ledger[0].Postings[0].Attributes,
@@ -226,15 +227,17 @@ public class RankSiteBadgeTests
             Url = $"https://example.com/cars.com/{ledger[0].Vin}",
             FirstSeen = RunTime,
             LastSeen = RunTime,
-            PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 26000m, ObservedAt = RunTime }],
+            PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 24000m, ObservedAt = RunTime }],
         });
 
         string[] plainLines = Render(Rank(FixtureLedger(withBadges: true)));
-        string[] reservedLines = Render(Rank(ledger));
+        List<Score> reservedScores = Rank(ledger);
+        string[] reservedLines = Render(reservedScores);
 
         Assert.Equal(VinOrder(plainLines), VinOrder(reservedLines));
         Assert.Contains(CarMaxStores.Reserved, string.Concat(reservedLines));
         Assert.DoesNotContain(CarMaxStores.Reserved, string.Concat(plainLines));
+        Assert.Equal(24000m, reservedScores.Single(s => s.Vehicle.Vin == ledger[0].Vin).Vehicle.LowestCurrentPrice);
     }
 
     [Fact]
