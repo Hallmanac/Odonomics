@@ -193,7 +193,14 @@ public sealed record WalkSite(
     /// not decide whether a known posting behind it gets touched from the card first: that is
     /// <see cref="WalkSearchPages.CollectLinksAsync"/>'s own job, done before it counts the card as skipped for
     /// its year or mileage. Checked ahead of the radius check above, so a card dropped for its year or mileage
-    /// is never also reported beyond radius or as stating none.</summary>
+    /// is never also reported beyond radius or as stating none. Ahead of all of that, when <paramref name="maxPrice"/>
+    /// is given, a card whose own stated price (see <see cref="ReadCardPrice"/>), plus any shipping or delivery
+    /// fee that same card states (see <see cref="ReadCardFee"/>; not added when <see cref="AskingPriceFromCard"/> is
+    /// set, since such a card's price already has its shipping fee inside it, cargurus's "Price includes $462
+    /// shipping"), comes to more than that ceiling, is told to <paramref name="onOverPriceCeiling"/> instead of
+    /// ever being pooled: the scenario's own price ceiling, checked on every site alike rather than only one with
+    /// a <see cref="CardFacetsReader"/>. A card whose text states no price at all is unaffected, so an unread
+    /// price is never mistaken for one over the ceiling.</summary>
     public IReadOnlyList<PageLink> CollectDetailCards(
         IReadOnlyList<PageLink> links,
         int poolSize,
@@ -204,7 +211,9 @@ public sealed record WalkSite(
         Func<bool, int>? minYearFor = null,
         int? maxMileage = null,
         Action<PageLink>? onBelowYearFloor = null,
-        Action<PageLink>? onOverMileageCap = null)
+        Action<PageLink>? onOverMileageCap = null,
+        int? maxPrice = null,
+        Action<PageLink>? onOverPriceCeiling = null)
     {
         int? statedCount = MatchCountIn(searchPageText);
         if (statedCount is int matchCount)
@@ -232,6 +241,27 @@ public sealed record WalkSite(
                 .Where(g => !skipped.Contains(g.Key))
                 .Select(g => g.First() with { CardText = g.Select(l => l.CardText).FirstOrDefault(t => t.Length > 0) ?? "" })
         ];
+
+        if (maxPrice is int priceCeiling)
+        {
+            List<PageLink> withinCeiling = [];
+            foreach (PageLink card in candidates)
+            {
+                if (ReadCardPrice(card.CardText) is decimal cardPrice)
+                {
+                    decimal shippingFee = AskingPriceFromCard ? 0m : ReadCardFee(card.CardText)?.ShippingFee ?? 0m;
+                    if (cardPrice + shippingFee > priceCeiling)
+                    {
+                        onOverPriceCeiling?.Invoke(card);
+                        continue;
+                    }
+                }
+
+                withinCeiling.Add(card);
+            }
+
+            candidates = withinCeiling;
+        }
 
         if (CardFacetsReader is not null && (minYearFor is not null || maxMileage is not null))
         {
@@ -816,8 +846,9 @@ public static class WalkSites
     /// until the count is covered or nothing new appears (see <see cref="SearchPageLoadMore"/>), so the
     /// site is not paged by URL. A detail link is <c>/car/&lt;digits&gt;</c>, a stock number, and the
     /// detail page's visible text does not print the VIN but its HTML does (see <see cref="CarMaxVin"/>).
-    /// It has no <see cref="WalkSite.CardPriceReader"/>: no recorded card shows which dollar amount on it is
-    /// the price, so a known CarMax listing is seen again from its card without a price until one does.</summary>
+    /// Its <see cref="WalkSite.CardPriceReader"/> (<see cref="CarMaxCards.ReadPrice"/>) reads the first dollar
+    /// amount that isn't its shipping fee or its monthly estimate, so a known CarMax listing is kept current
+    /// from its card, price included, exactly as any other site's is.</summary>
     public static readonly WalkSite CarMax = new(
         "carmax",
         query => [CarMaxSearchUrl(query, TimeProvider.System.GetLocalNow().Year)],
@@ -825,6 +856,7 @@ public static class WalkSites
         DetailLinkOverfetchMultiplier: 2,
         FallbackDealerName: CarMaxDealerName,
         MatchCountPattern: new Regex(@"(?<!Show\s)(?<![\d,])(\d[\d,]*)\s+match(?:es)?\b", RegexOptions.IgnoreCase),
+        CardPriceReader: CarMaxCards.ReadPrice,
         CardFeeReader: CarMaxCards.ReadFee,
         DetailHtmlVinReader: CarMaxVin.Read,
         DetailDealerReader: CarMaxStores.Read,
@@ -832,7 +864,11 @@ public static class WalkSites
         LoadMoreControlPattern: new Regex(@"^\s*(?:Show\s+\d+\s+match(?:es)?|Load\s+more)\s*$", RegexOptions.IgnoreCase),
         DetailTitleModelReader: ReadTitleModel,
         // The search URL's own year range and mileage facet are not actually honored by the site (see
-        // CarMaxCards.ReadVehicleFacets), so a card that already fails either is dropped here.
+        // CarMaxCards.ReadVehicleFacets), so a card that already fails either is dropped here. Its price
+        // facet is unverified too (no live page has confirmed it bounds results, the way the year and
+        // mileage facets were shown not to), so the search URL below never carries one; the scenario's
+        // maxPrice is only ever enforced by the per-card price-ceiling check every site shares (see
+        // CollectDetailCards), which needs no site cooperation at all.
         CardFacetsReader: CarMaxCards.ReadVehicleFacets);
 
     /// <summary>CarGurus: a marketplace of dealers' cars, searched by the ids CarGurus gives the make and model (see

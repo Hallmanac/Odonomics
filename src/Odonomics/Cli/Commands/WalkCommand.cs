@@ -242,6 +242,11 @@ public static class WalkCommand
         int skippedBelowYearFloor = 0;
         int skippedOverMileageCap = 0;
 
+        // A card whose own stated price, plus any shipping or delivery fee the card states, comes to more
+        // than the scenario's own price ceiling (see WalkSite.CollectDetailCards): checked on every site,
+        // not only one with a CardFacetsReader. Zero for a scenario with no ceiling.
+        int skippedOverPriceCeiling = 0;
+
         // A card a site's render wait gave up on within its bounded scans (see
         // WalkSite.WaitsForRenderedCards): never rendered a dollar amount of its own, so never a
         // candidate either. Zero for a site with no such wait.
@@ -361,7 +366,9 @@ public static class WalkCommand
                 query.CardYearFloor,
                 query.MaxMileage,
                 () => skippedBelowYearFloor++,
-                () => skippedOverMileageCap++);
+                () => skippedOverMileageCap++,
+                query.MaxPrice,
+                () => skippedOverPriceCeiling++);
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -607,7 +614,7 @@ public static class WalkCommand
         }
 
         bool capped = linkCollectionCapped || tally.Capped;
-        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, skippedBelowYearFloor, skippedOverMileageCap)}");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, skippedBelowYearFloor, skippedOverMileageCap, skippedOverPriceCeiling)}");
 
         // The Prius pair's own search always mixes Prime candidates into its results (see
         // isPriusPrime above), whether or not one happens to be new this run: a Prime already on

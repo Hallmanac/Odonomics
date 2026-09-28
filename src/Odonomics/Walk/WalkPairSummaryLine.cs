@@ -50,7 +50,11 @@ public static class WalkPairSummaryLine
     /// counts (see <see cref="WalkSearchPages.CollectLinksAsync"/>): cards whose own stated year or mileage
     /// already failed the scenario's facets, which the site's search URL carries but does not actually honor.
     /// Neither was ever a candidate either, and both are named apart from the radius counts above, since they
-    /// are a different check. Zero for a site with no such check.</summary>
+    /// are a different check. Zero for a site with no such check. <paramref name="skippedOverPriceCeiling"/> is
+    /// every site's own count of cards whose own stated price, plus any shipping or delivery fee the card
+    /// states, came to more than the scenario's price ceiling (see <see cref="WalkSearchPages.CollectLinksAsync"/>):
+    /// also never a candidate, and named last, since it is checked on every site rather than only one with a
+    /// year or mileage facet.</summary>
     public static string Format(
         string site,
         string make,
@@ -66,14 +70,16 @@ public static class WalkPairSummaryLine
         int skippedNoDistance = 0,
         int skippedUnrendered = 0,
         int skippedBelowYearFloor = 0,
-        int skippedOverMileageCap = 0)
+        int skippedOverMileageCap = 0,
+        int skippedOverPriceCeiling = 0)
     {
         string cappedSuffix = (capped ? ", capped" : "") + (failedPage is int page ? $", page {page} failed" : "");
         string radiusSuffix = (skippedBeyondRadius > 0 ? $", {skippedBeyondRadius} beyond radius" : "")
             + (skippedNoDistance > 0 ? $", {skippedNoDistance} no distance stated" : "")
             + (skippedUnrendered > 0 ? $", {skippedUnrendered} unrendered" : "")
             + (skippedBelowYearFloor > 0 ? $", {skippedBelowYearFloor} below year floor" : "")
-            + (skippedOverMileageCap > 0 ? $", {skippedOverMileageCap} over mileage cap" : "");
+            + (skippedOverMileageCap > 0 ? $", {skippedOverMileageCap} over mileage cap" : "")
+            + (skippedOverPriceCeiling > 0 ? $", {skippedOverPriceCeiling} over price ceiling" : "");
         string prefix = $"{site} / {make} {model}: {pages} pages, {known} known from cards, {saved} saved, {dropped.Total} dropped";
         string cell = DroppedCell(dropped);
         if (cell.Length == 0)

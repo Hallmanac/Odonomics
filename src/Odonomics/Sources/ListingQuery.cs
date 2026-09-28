@@ -8,8 +8,11 @@ namespace Odonomics.Sources;
 /// is the scenario's own rule (Scenario.HybridOnlyFromModelYear) for this query's model, when it
 /// has one: the model year this base model went hybrid-only, letting a candidate below that year
 /// still fail the hybrid check while one at or above it passes without the listing ever saying
-/// "Hybrid".</summary>
-public sealed record ListingQuery(string Make, string Model, int YearMin, string Zip, int RadiusMiles, int MaxMileage, int? HybridOnlyFromModelYear = null)
+/// "Hybrid". <paramref name="MaxPrice"/> is the scenario's own price ceiling (Scenario.Filters.MaxPrice),
+/// null when the scenario sets none: it is never a search-URL facet (see WalkSites), only the walk's own
+/// per-card check (see WalkSite.CollectDetailCards), since no site's price facet has been verified
+/// against a live page to actually bound its results.</summary>
+public sealed record ListingQuery(string Make, string Model, int YearMin, string Zip, int RadiusMiles, int MaxMileage, int? HybridOnlyFromModelYear = null, int? MaxPrice = null)
 {
     public bool MatchesYear(int? year) => year is not null && year >= YearMin;
 
@@ -208,6 +211,6 @@ public sealed record ListingQuery(string Make, string Model, int YearMin, string
         string make = spaceIndex < 0 ? makeModel : makeModel[..spaceIndex];
         string model = spaceIndex < 0 ? "" : makeModel[(spaceIndex + 1)..];
         int? hybridOnlyFromModelYear = scenario.HybridOnlyFromModelYear.TryGetValue(makeModel, out int hybridYear) ? hybridYear : null;
-        return new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage, hybridOnlyFromModelYear);
+        return new ListingQuery(make, model, scenario.Filters.MinYearFor(makeModel), scenario.Zip, scenario.RadiusMiles, scenario.Filters.MaxMileage, hybridOnlyFromModelYear, scenario.Filters.MaxPrice);
     }
 }

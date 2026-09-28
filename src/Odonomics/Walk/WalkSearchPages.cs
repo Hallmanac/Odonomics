@@ -71,6 +71,12 @@ public static class WalkSearchPages
     /// passing one would be, so this walk declining to spend a detail visit on it never reads, on a later
     /// run, as the car having left the market. <paramref name="onBelowYearFloor"/> or
     /// <paramref name="onOverMileageCap"/> is told about it once that touch is done.
+    /// <paramref name="maxPrice"/> is the scenario's own price ceiling, checked against a card's own stated
+    /// price plus any shipping or delivery fee that same card states, on every site rather than only one
+    /// with a <see cref="WalkSite.CardFacetsReader"/> (see <see cref="WalkSite.CollectDetailCards"/>): a card
+    /// over the ceiling never enters the pool either, but is touched from its card first, the same as a
+    /// below-floor or over-mileage one, and <paramref name="onOverPriceCeiling"/> is told about it once that
+    /// touch is done. A card whose text states no price at all is unaffected, kept exactly as it always was.
     /// A link a page's <see cref="SearchPageContent.UnrenderedHrefs"/> names (see
     /// <see cref="SearchPageCardRenderWait"/>) is dropped from that page before any of that: its card never
     /// rendered within the bounded wait, so it is kept out of <see cref="WalkSite.CollectDetailCards"/> for
@@ -105,7 +111,9 @@ public static class WalkSearchPages
         Func<bool, int>? minYearFor = null,
         int? maxMileage = null,
         Action? onBelowYearFloor = null,
-        Action? onOverMileageCap = null)
+        Action? onOverMileageCap = null,
+        int? maxPrice = null,
+        Action? onOverPriceCeiling = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -167,6 +175,7 @@ public static class WalkSearchPages
             int added = 0;
             List<PageLink> belowFloorCards = [];
             List<PageLink> overMileageCards = [];
+            List<PageLink> overPriceCeilingCards = [];
             foreach (PageLink card in site.CollectDetailCards(
                 renderedLinks,
                 int.MaxValue,
@@ -177,7 +186,9 @@ public static class WalkSearchPages
                 minYearFor,
                 maxMileage,
                 belowFloorCards.Add,
-                overMileageCards.Add))
+                overMileageCards.Add,
+                maxPrice,
+                overPriceCeilingCards.Add))
             {
                 if (considered >= linkBound)
                 {
@@ -226,6 +237,12 @@ public static class WalkSearchPages
             {
                 await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
                 onOverMileageCap?.Invoke();
+            }
+
+            foreach (PageLink card in overPriceCeilingCards)
+            {
+                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                onOverPriceCeiling?.Invoke();
             }
 
             // A page that adds nothing, or a stated count already reached, means the site's results are

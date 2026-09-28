@@ -47,6 +47,31 @@ public static class CarMaxCards
             : null;
     }
 
+    // Every dollar amount on a card except the shipping fee ("$49 shipping") and the monthly payment
+    // estimate ("Est. $311/mo"): a card's own asking price is whichever of those is left. On an older
+    // card the price sits right after the title, ahead of the fee line ("$24,998\n$49 shipping..."); on
+    // a newer one it sits at the very end, after the fee line and the monthly estimate
+    // ("$499 shipping...\nEst. $311/mo\n·\n$19,998"). Either way the price is the first amount this
+    // pattern still matches, since a price-drop card prints its current (lower) price before the old one
+    // it dropped from ("...\n$31,998\n$32,998").
+    // The digit run is wrapped in an atomic group so a full amount that fails the lookaheads (say,
+    // "499" ahead of " shipping") is never retried a digit short ("49", not followed by "9 shipping"
+    // and so a false match): an atomic group commits to the longest run and never backtracks into it.
+    private static readonly Regex PriceAmount = new(
+        @"\$\s*(?>(?<amount>\d[\d,]*(?:\.\d{2})?))(?!\s*shipping\b)(?!/mo\b)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>The card's own asking price: the first dollar amount on it that isn't its shipping fee
+    /// or its monthly payment estimate (see <see cref="PriceAmount"/>). Null when the card states no
+    /// price at all, so an unread price is never mistaken for a stated one.</summary>
+    public static decimal? ReadPrice(string cardText)
+    {
+        Match match = PriceAmount.Match(cardText);
+        return match.Success
+            ? decimal.Parse(match.Groups["amount"].Value, NumberStyles.AllowThousands | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture)
+            : null;
+    }
+
     // The first line of a card that opens a vehicle title: a run of exactly four digits (the model
     // year) followed by more text ("2016 Toyota Camry Hybrid"). CarMax's card carries no condition word
     // or trim on this line (the trim is the line below), unlike a detail page's own title line.
