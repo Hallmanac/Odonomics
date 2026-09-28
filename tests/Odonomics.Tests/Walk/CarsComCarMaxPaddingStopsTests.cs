@@ -12,7 +12,10 @@ namespace Odonomics.Tests.Walk;
 /// falls): page 2 there is nothing but two new CarMax cards and cars already reported beyond radius on
 /// page 1. Every fixture here is cut straight from that recording's own <c>prius/cards.json</c> and
 /// <c>prius/cards-2.json</c>, trimmed to the cards that matter: five in-radius, non-CarMax dealers, two
-/// CarMax delivery cards, and two out-of-radius repeats.</summary>
+/// CarMax delivery cards, two out-of-radius repeats, and (page 1 only) two empty-text links,
+/// <c>02332385</c> and <c>016c322e</c>, that the real recording never resolves within this trimmed
+/// fixture's own two pages: both are real in-radius, non-CarMax cars that only show their own
+/// "(N mi)" card text on pages 3 and 6 of the full recording.</summary>
 public class CarsComCarMaxPaddingStopsTests
 {
     private static string FixturePath(string name) =>
@@ -43,8 +46,16 @@ public class CarsComCarMaxPaddingStopsTests
     private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 
     [Fact]
-    public async Task PriusSearch_StopsAFewPagesPastItsLastNewInRadiusNonCarMaxCar()
+    public async Task PriusSearch_StopsShortOfItsLastRealMatchButIsReportedAmbiguousForTheTwoUnresolvedCards()
     {
+        // Page 1 of the real recording also carries two empty-text links, 02332385 and 016c322e, that
+        // this fixture originally left out: neither is in that page's own unrendered.json (they did
+        // render, just with no card text of their own), and both are real in-radius, non-CarMax cars
+        // that only show their own "(N mi)" text on pages 3 and 6 of the full recording, well past
+        // where this trimmed fixture's own page 2 stops. With them included, the stop this test proves
+        // is not the safe kind: two no-distance cards from page 1 are still unresolved when paging
+        // stops on page 2, so the caller is meant to mark the pair's coverage partial for them, the same
+        // as it would for a failed later page.
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
         {
             [1] = LoadCardsJson("cars-com-prius-carmax-padding-page-1-cards.json"),
@@ -52,6 +63,7 @@ public class CarsComCarMaxPaddingStopsTests
         });
         int carMaxDealer = 0;
         int beyondRadius = 0;
+        int noDistance = 0;
         var stoppedOnPaddingPages = new List<(int Page, bool HadAmbiguousCard)>();
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
@@ -66,13 +78,15 @@ public class CarsComCarMaxPaddingStopsTests
             CancellationToken.None,
             maxDistanceMiles: 50,
             onBeyondRadius: () => beyondRadius++,
+            onNoDistance: () => noDistance++,
             onCarMaxDealer: () => carMaxDealer++,
             onStoppedOnPaddingOnlyPage: (page, hadAmbiguousCard) => stoppedOnPaddingPages.Add((page, hadAmbiguousCard)));
 
-        // Page 1 held five in-radius, non-CarMax cars (this fixture's last new ones), so paging
-        // continued to page 2. Page 2 held only two new CarMax delivery cards and two cars already
-        // reported beyond radius on page 1, so it added nothing new and paging stopped there, one page
-        // past the last real match: a third page was never requested.
+        // Page 1 held five in-radius, non-CarMax cars (this fixture's last new ones) plus the two
+        // no-distance cards above, so paging continued to page 2. Page 2 held only two new CarMax
+        // delivery cards and two cars already reported beyond radius on page 1, so it added nothing new
+        // and paging stopped there: a third page was never requested, even though the two no-distance
+        // cards from page 1 remain unresolved.
         Assert.Equal([1, 2], browser.Loads);
         Assert.Equal(5, pool.Count);
         string[] organicVins = ["c43f28e8", "c820bc6f", "ece1adc9", "4e057e41", "e551849a"];
@@ -82,13 +96,14 @@ public class CarsComCarMaxPaddingStopsTests
 
         Assert.Equal(4, carMaxDealer);
         Assert.Equal(2, beyondRadius);
+        Assert.Equal(2, noDistance);
 
         // The stop happened on page 2 specifically because it held new (if excluded) content, not
-        // because it was literally empty. But that content was only CarMax and beyond-radius cards,
-        // neither of which this walk would ever have kept regardless of what a later page held, so the
-        // stop is reported as unambiguous: the caller is not meant to mark the pair's coverage partial
-        // for it.
-        Assert.Equal([(2, false)], stoppedOnPaddingPages);
+        // because it was literally empty. That content was only CarMax and beyond-radius cards, neither
+        // of which this walk would ever have kept regardless of what a later page held, but the two
+        // no-distance cards reported back on page 1 are still unresolved now that paging has stopped, so
+        // the stop is reported as ambiguous rather than safe to treat as full coverage.
+        Assert.Equal([(2, true)], stoppedOnPaddingPages);
     }
 
     [Fact]
@@ -124,14 +139,19 @@ public class CarsComCarMaxPaddingStopsTests
     }
 
     [Fact]
-    public async Task APageWhoseOnlyNewCardStatesNoDistance_StopsPagingAndIsReportedAmbiguous()
+    public async Task APageWhoseOnlyNewCardStatesNoDistanceForTheFirstTimeHere_StopsPagingButIsNotReportedAmbiguous()
     {
-        // Same page 1 as the other cases here, but page 2 swaps in a wrapper-text card (empty href
-        // text, several neighboring cards' distances bound into one "card" field, see
-        // WalkSite.CollectDetailCards's own CardDistanceReader remarks) in place of one of the CarMax
-        // cards: unlike a CarMax or beyond-radius card, this one's own text never says whether it is in
-        // radius, so the stop it causes must be reported as ambiguous rather than safe to treat as full
-        // coverage.
+        // Page 1 here is trimmed further than the shared fixture: it drops the two no-distance links
+        // (02332385, 016c322e) the other tests in this file pin, so this test is left with exactly one
+        // no-distance card in the whole search, and it is new only on page 2, the very page paging
+        // stops on. That is the shape a padded carousel module can hand cars.com on the one page where a
+        // search's real results happen to run out (the recorded base-model Camry Hybrid search's own
+        // last page does this on every run, see lesson 0cf0661c): the card's own text never says
+        // whether it is in radius, but a card unresolved for the first time on the stopping page proves
+        // nothing either way, so the stop must be reported as safe to treat as full coverage rather than
+        // ambiguous, or a search shaped like Camry Hybrid's would be marked partial every ordinary run.
+        var page1 = LoadCardsJson("cars-com-prius-carmax-padding-page-1-cards.json");
+        page1.RemoveAll(c => c.Href.Contains("02332385", StringComparison.Ordinal) || c.Href.Contains("016c322e", StringComparison.Ordinal));
         var page2 = LoadCardsJson("cars-com-prius-carmax-padding-page-2-stops-here-cards.json");
         page2.RemoveAll(c => c.Href.Contains("16476643", StringComparison.Ordinal));
         page2.Add(new PageLink(
@@ -140,7 +160,7 @@ public class CarsComCarMaxPaddingStopsTests
             "$30,998\n\n22,022 mi.\nEst. $563/mo\nUsed 2025 Toyota Prius LE\n\nSuncoast Toyota\n\n4.6\nTampa, FL (95 mi)\nCheck Availability\n\n$28,998\n\n18,022 mi.\nEst. $511/mo\nUsed 2024 Toyota Prius LE\n\nGulf Coast Toyota\n\n4.2\nSarasota, FL (105 mi)\nCheck Availability"));
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
         {
-            [1] = LoadCardsJson("cars-com-prius-carmax-padding-page-1-cards.json"),
+            [1] = page1,
             [2] = page2,
         });
         var stoppedOnPaddingPages = new List<(int Page, bool HadAmbiguousCard)>();
@@ -162,6 +182,6 @@ public class CarsComCarMaxPaddingStopsTests
 
         Assert.Equal([1, 2], browser.Loads);
         Assert.Equal(1, noDistance);
-        Assert.Equal([(2, true)], stoppedOnPaddingPages);
+        Assert.Equal([(2, false)], stoppedOnPaddingPages);
     }
 }

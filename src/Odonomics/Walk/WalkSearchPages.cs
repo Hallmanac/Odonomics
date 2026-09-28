@@ -116,13 +116,21 @@ public static class WalkSearchPages
     /// adding nothing and ends the paging, the same as a page of nothing but repeats. When that page also
     /// held a genuinely new CarMax, beyond-radius, or no-distance card (as opposed to one truly empty of
     /// anything new), <paramref name="onStoppedOnPaddingOnlyPage"/> is told its number and whether a
-    /// no-distance card was among the reasons: a CarMax or beyond-radius card is never a candidate this
-    /// walk would keep no matter what a later page holds, so a stop caused only by those proves the
-    /// search's real matches are exhausted the same as an empty page would; only a no-distance card is
-    /// genuinely unresolved (its own text never said whether it was in radius), and the caller uses that
-    /// flag to mark the pair's coverage the way a failed later page is only for that case, since cars.com
-    /// states no total match count that would otherwise prove no further in-radius, non-CarMax car sits
-    /// past it.</summary>
+    /// no-distance card reported on some earlier page of this same search is still unresolved now that
+    /// paging has stopped: a CarMax or beyond-radius card is never a candidate this walk would keep no
+    /// matter what a later page holds, so a stop caused only by those proves the search's real matches are
+    /// exhausted the same as an empty page would. A no-distance card is the one genuinely unresolved case
+    /// (its own text never said whether it was in radius, see <see cref="WalkSite.CollectDetailCards"/>'s
+    /// own <see cref="WalkSite.CardDistanceReader"/> remarks), and it can go on to show its own single-card
+    /// text several pages after the one that first read it as a wrapper (a real cars.com recording had one
+    /// resolve five pages later), so the caller uses that flag to mark the pair's coverage the way a failed
+    /// later page is, since cars.com states no total match count that would otherwise prove no further
+    /// in-radius, non-CarMax car sits past it. A no-distance card reported for the very first time on this
+    /// same stopping page is not counted toward that flag, though, even though it too is unresolved: a
+    /// carousel module can hand cars.com a brand-new wrapper card on the one page where a search's real
+    /// results happen to run out, and a search whose padding always looks this way at the end (a recorded
+    /// base-model Camry Hybrid search does, on every run) must not have its coverage marked partial every
+    /// time for it, the same reason a CarMax or beyond-radius card never does.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -155,7 +163,7 @@ public static class WalkSearchPages
         string? pagingToken = null;
         List<string> pool = [];
         HashSet<string> canonicalUrls = [];
-        Dictionary<string, Action?> reportedOutOfRadius = [];
+        Dictionary<string, (Action? Withdraw, bool Ambiguous)> reportedOutOfRadius = [];
         HashSet<string> reportedOverPriceCeiling = [];
         HashSet<string> reportedNoPriceStated = [];
         HashSet<string> reportedCarMaxDealer = [];
@@ -174,24 +182,13 @@ public static class WalkSearchPages
         // held brand-new links this run chose not to treat as added.
         bool pageHadNewExcludedActivity = false;
 
-        // Set alongside pageHadNewExcludedActivity, but only for a no-distance card: a CarMax dealer
-        // card or a beyond-radius card is never a candidate this walk would keep regardless of what a
-        // later page holds, so a page whose only new excluded activity is one of those still proves the
-        // search's real matches are exhausted. A no-distance card is the one genuinely unresolved case
-        // (an ambiguous multi-card wrapper, see WalkSite.CollectDetailCards's own CardDistanceReader
-        // remarks): its own text never said whether it is in radius, so it might be an organic match
-        // this walk would otherwise have kept, and stopping on a page that holds one is the "cannot be
-        // known" case, not a proven-complete one.
-        bool pageHadNewAmbiguousCard = false;
-
         void ReportOnce(PageLink card, Action? report, Action? withdraw, bool ambiguous)
         {
             string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
             if (!canonicalUrls.Contains(canonicalUrl) && !reportedOutOfRadius.ContainsKey(canonicalUrl))
             {
-                reportedOutOfRadius[canonicalUrl] = withdraw;
+                reportedOutOfRadius[canonicalUrl] = (withdraw, ambiguous);
                 pageHadNewExcludedActivity = true;
-                pageHadNewAmbiguousCard = pageHadNewAmbiguousCard || ambiguous;
                 report?.Invoke();
             }
         }
@@ -199,7 +196,20 @@ public static class WalkSearchPages
         for (int pageNumber = 1; ; pageNumber++)
         {
             pageHadNewExcludedActivity = false;
-            pageHadNewAmbiguousCard = false;
+
+            // A snapshot, taken before this page's own cards are read, of every no-distance card still
+            // unresolved from a strictly earlier page. A no-distance card's own text never says whether
+            // it is in radius (an ambiguous multi-card wrapper, see WalkSite.CollectDetailCards's own
+            // CardDistanceReader remarks), so one still outstanding when paging stops might be an organic
+            // match this walk would otherwise have kept; a card first reported no-distance on this same
+            // stopping page proves nothing either way, since a padded carousel module can hand cars.com a
+            // brand-new wrapper card on the very page where the site's real results happen to run out
+            // (the base-model Camry Hybrid search's own last page does this on every recorded run), so
+            // treating that as unresolved would mark an ordinary run's coverage partial every time (see
+            // lesson ffb24708 and 27401539). Only a card that was already unresolved before this page,
+            // and that this page's own cards did not go on to pool, touch, or withdraw, is what the stop
+            // check below treats as genuinely left behind.
+            HashSet<string> ambiguousUnresolvedBeforeThisPage = [.. reportedOutOfRadius.Where(kv => kv.Value.Ambiguous).Select(kv => kv.Key)];
             string pageUrl = pageNumber > 1 && pageUrlFor is not null
                 ? pageUrlFor(searchUrl, pageNumber, pagingToken)
                 : searchUrl;
@@ -268,9 +278,9 @@ public static class WalkSearchPages
                     continue;
                 }
 
-                if (reportedOutOfRadius.Remove(canonicalUrl, out Action? withdrawEarlierReport))
+                if (reportedOutOfRadius.Remove(canonicalUrl, out (Action? Withdraw, bool Ambiguous) earlierReport))
                 {
-                    withdrawEarlierReport?.Invoke();
+                    earlierReport.Withdraw?.Invoke();
                 }
 
                 considered++;
@@ -384,13 +394,17 @@ public static class WalkSearchPages
                 // this run declines to chase further (see pageHadNewExcludedActivity above and
                 // WalkSite.CollectDetailCards). A CarMax or beyond-radius card is never a candidate this
                 // walk would keep regardless of what a later page holds, so the caller only needs to mark
-                // the pair's coverage the way a failed later page does when the page's new excluded
-                // activity included a no-distance card (pageHadNewAmbiguousCard): that is the one case
-                // cars.com's own missing total match count leaves genuinely unresolved, since such a
-                // card's own text never said whether it was in radius.
+                // the pair's coverage the way a failed later page does when a no-distance card reported on
+                // some earlier page is still unresolved now that paging has stopped (see
+                // ambiguousUnresolvedBeforeThisPage above): that is the one case cars.com's own missing
+                // total match count leaves genuinely unresolved, since such a card's own text never said
+                // whether it was in radius, and it may only show its own single-card text several pages
+                // later. A no-distance card reported for the first time on this same stopping page proves
+                // nothing either way, so it is not counted here even though it is still unresolved.
                 if (added == 0 && pageUrlFor is not null && considered < linkBound && pageHadNewExcludedActivity)
                 {
-                    onStoppedOnPaddingOnlyPage?.Invoke(pageNumber, pageHadNewAmbiguousCard);
+                    bool hadUnresolvedEarlierAmbiguousCard = ambiguousUnresolvedBeforeThisPage.Any(reportedOutOfRadius.ContainsKey);
+                    onStoppedOnPaddingOnlyPage?.Invoke(pageNumber, hadUnresolvedEarlierAmbiguousCard);
                 }
 
                 break;

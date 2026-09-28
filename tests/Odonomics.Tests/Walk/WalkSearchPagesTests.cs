@@ -180,9 +180,10 @@ public class WalkSearchPagesTests
         // all-over-ceiling page still does (lesson e975e649 was about a different problem, a CarMax
         // link revisited at the detail page every run for want of being recognized at the card; it
         // never required counting a CarMax card toward this page's own tally). Page 2's one ordinary
-        // card is consequently never found this run: onStoppedOnPaddingOnlyPage below is what lets the
-        // caller mark the pair's coverage partial for it, so a known posting behind that unread page is
-        // never mistaken for one that left cars.com.
+        // card is consequently never found this run, but since page 1 held no no-distance card at all,
+        // onStoppedOnPaddingOnlyPage below reports the stop as safe: a CarMax card is never a candidate
+        // this walk would keep regardless of what a later page holds, so the pair's coverage stays full
+        // even though that one ordinary card was never read.
         const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
         {
