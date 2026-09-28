@@ -307,8 +307,9 @@ public static class WalkCommand
 
         // The result card text of every detail link the search pages showed, by canonical URL, for a site
         // that prints a fee on its cards (see WalkSite.CardFeeReader): the visit of a link has only its
-        // URL, and the card is where that fee is.
-        var cardTextByUrl = new Dictionary<string, string>();
+        // URL, and the card is where that fee is. Never keeps a wrapper's ambiguous text once a later
+        // page shows the link's own clean text (see SearchCardTextByUrl).
+        var cardTextByUrl = new SearchCardTextByUrl();
 
         async Task<SearchPageContent> LoadSearchPageAsync(string pageUrl, string searchLabel, int searchIndex, int pageNumber, CancellationToken ct)
         {
@@ -360,7 +361,8 @@ public static class WalkCommand
             HashSet<string> unrenderedCanonicalUrls = [.. unrenderedHrefs.Select(WalkSites.CanonicalDetailUrl)];
             foreach (PageLink link in links.Where(l => site.DetailUrlPattern.IsMatch(l.Href) && l.CardText.Length > 0 && !unrenderedCanonicalUrls.Contains(WalkSites.CanonicalDetailUrl(l.Href))))
             {
-                cardTextByUrl.TryAdd(WalkSites.CanonicalDetailUrl(link.Href), link.CardText);
+                bool textIsAmbiguous = site.CardDistanceReader is not null && site.CardDistanceReader(link.CardText) is null;
+                cardTextByUrl.Record(WalkSites.CanonicalDetailUrl(link.Href), link.CardText, textIsAmbiguous);
             }
 
             if (unrenderedHrefs.Count > 0)
