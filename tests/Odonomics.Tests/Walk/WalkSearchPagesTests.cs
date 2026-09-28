@@ -132,6 +132,40 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
+    public async Task CarsCom_APaddedPageRepeatingTheSameOverCeilingCards_AddsNothingAndStopsPaging()
+    {
+        // cars.com states no match count, so a page adding nothing new is the only thing that ends its
+        // paging. Before the fix, an over-ceiling card counted toward "added" on every page it appeared
+        // on, uncounted against the URLs already seen, so a padded page repeating the same over-ceiling
+        // cars kept reading as "added something" and the search never stopped (lesson 6be298c0).
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight";
+        List<PageLink> repeatedOverCeilingCards =
+        [
+            .. Enumerable.Range(0, 4).Select(i => new PageLink(
+                $"https://www.cars.com/vehicledetail/far{i}/?sid=x",
+                "",
+                "Used 2022 Honda Insight EX\n$30,998\n90,924 mi.")),
+        ];
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = repeatedOverCeilingCards,
+            [2] = repeatedOverCeilingCards,
+        });
+        int overCeiling = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync,
+            (_, _) => { }, _ => { }, () => { }, CancellationToken.None,
+            maxPrice: 25000, onOverPriceCeiling: () => overCeiling++);
+
+        // Page 2 repeats the same four cards page 1 already reported over the ceiling, so it adds
+        // nothing new and paging stops there: a third page is never requested.
+        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal(4, overCeiling);
+        Assert.Empty(pool);
+    }
+
+    [Fact]
     public async Task Carvana_APoolFilledOnTheLastPageTheSiteHasByItsStatedCount_IsNotCapped()
     {
         const string statedCount = "45 cars\n";

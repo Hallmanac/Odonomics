@@ -193,14 +193,18 @@ public sealed record WalkSite(
     /// not decide whether a known posting behind it gets touched from the card first: that is
     /// <see cref="WalkSearchPages.CollectLinksAsync"/>'s own job, done before it counts the card as skipped for
     /// its year or mileage. Checked ahead of the radius check above, so a card dropped for its year or mileage
-    /// is never also reported beyond radius or as stating none. Ahead of all of that, when <paramref name="maxPrice"/>
-    /// is given, a card whose own stated price (see <see cref="ReadCardPrice"/>), plus any shipping or delivery
-    /// fee that same card states (see <see cref="ReadCardFee"/>; not added when <see cref="AskingPriceFromCard"/> is
-    /// set, since such a card's price already has its shipping fee inside it, cargurus's "Price includes $462
-    /// shipping"), comes to more than that ceiling, is told to <paramref name="onOverPriceCeiling"/> instead of
-    /// ever being pooled: the scenario's own price ceiling, checked on every site alike rather than only one with
-    /// a <see cref="CardFacetsReader"/>. A card whose text states no price at all is unaffected, so an unread
-    /// price is never mistaken for one over the ceiling.</summary>
+    /// is never also reported beyond radius or as stating none. Checked last, after both of those, when
+    /// <paramref name="maxPrice"/> is given, a card whose own stated price (see <see cref="ReadCardPrice"/>),
+    /// plus any shipping or delivery fee that same card states (see <see cref="ReadCardFee"/>; not added when
+    /// <see cref="AskingPriceFromCard"/> is set, since such a card's price already has its shipping fee inside
+    /// it, cargurus's "Price includes $462 shipping"), comes to more than that ceiling, is told to
+    /// <paramref name="onOverPriceCeiling"/> instead of ever being pooled: the scenario's own price ceiling,
+    /// checked on every site alike rather than only one with a <see cref="CardFacetsReader"/>. A card whose
+    /// text states no price at all is unaffected, so an unread price is never mistaken for one over the
+    /// ceiling. Checked after the radius check rather than ahead of it, unlike the facet checks: a card a
+    /// site's own ambiguous multi-card wrapper text already dropped as beyond radius or stating no distance
+    /// (cars.com: see <paramref name="onNoDistance"/> above) never has a neighbouring card's price read as
+    /// its own and mistaken for this card being over or under the ceiling.</summary>
     public IReadOnlyList<PageLink> CollectDetailCards(
         IReadOnlyList<PageLink> links,
         int poolSize,
@@ -242,33 +246,12 @@ public sealed record WalkSite(
                 .Select(g => g.First() with { CardText = g.Select(l => l.CardText).FirstOrDefault(t => t.Length > 0) ?? "" })
         ];
 
-        // A stated count already narrowed poolSize above; taken here, ahead of the price, facet, and radius
+        // A stated count already narrowed poolSize above; taken here, ahead of the facet, radius, and price
         // checks below, so a card one of them drops can never free up room for a padding card beyond the
         // site's own exact matches to backfill into (a carvana page can state "16 cars" and still render 20,
         // the last 4 being other models the search facets never asked for, and letting the price ceiling
         // check run over all 20 would spend a detail visit on those 4 once enough of the real 16 dropped out).
         candidates = [.. candidates.Take(poolSize)];
-
-        if (maxPrice is int priceCeiling)
-        {
-            List<PageLink> withinCeiling = [];
-            foreach (PageLink card in candidates)
-            {
-                if (ReadCardPrice(card.CardText) is decimal cardPrice)
-                {
-                    decimal shippingFee = AskingPriceFromCard ? 0m : ReadCardFee(card.CardText)?.ShippingFee ?? 0m;
-                    if (cardPrice + shippingFee > priceCeiling)
-                    {
-                        onOverPriceCeiling?.Invoke(card);
-                        continue;
-                    }
-                }
-
-                withinCeiling.Add(card);
-            }
-
-            candidates = withinCeiling;
-        }
 
         if (CardFacetsReader is not null && (minYearFor is not null || maxMileage is not null))
         {
@@ -294,30 +277,56 @@ public sealed record WalkSite(
             candidates = withinFacets;
         }
 
-        if (CardDistanceReader is null || maxDistanceMiles is not int radius)
+        if (CardDistanceReader is not null && maxDistanceMiles is int radius)
         {
-            return [.. candidates.Take(poolSize)];
+            List<PageLink> inRadius = [];
+            foreach (PageLink card in candidates)
+            {
+                int? distance = CardDistanceReader(card.CardText);
+                if (distance is null)
+                {
+                    onNoDistance?.Invoke(card);
+                }
+                else if (distance > radius)
+                {
+                    onBeyondRadius?.Invoke(card);
+                }
+                else
+                {
+                    inRadius.Add(card);
+                }
+            }
+
+            candidates = inRadius;
         }
 
-        List<PageLink> inRadius = [];
-        foreach (PageLink card in candidates)
+        // Checked last, after the radius (and no-distance) check above: a card whose text is an
+        // ambiguous multi-card wrapper (see CardDistanceReader's own remarks) reads as stating no
+        // distance and is already dropped by then, so its price, read from a neighbouring card's
+        // text, never reaches this check and never sends a known posting behind it to touchKnownAsync
+        // with another car's figures.
+        if (maxPrice is int priceCeiling)
         {
-            int? distance = CardDistanceReader(card.CardText);
-            if (distance is null)
+            List<PageLink> withinCeiling = [];
+            foreach (PageLink card in candidates)
             {
-                onNoDistance?.Invoke(card);
+                if (ReadCardPrice(card.CardText) is decimal cardPrice)
+                {
+                    decimal shippingFee = AskingPriceFromCard ? 0m : ReadCardFee(card.CardText)?.ShippingFee ?? 0m;
+                    if (cardPrice + shippingFee > priceCeiling)
+                    {
+                        onOverPriceCeiling?.Invoke(card);
+                        continue;
+                    }
+                }
+
+                withinCeiling.Add(card);
             }
-            else if (distance > radius)
-            {
-                onBeyondRadius?.Invoke(card);
-            }
-            else
-            {
-                inRadius.Add(card);
-            }
+
+            candidates = withinCeiling;
         }
 
-        return [.. inRadius.Take(poolSize)];
+        return [.. candidates.Take(poolSize)];
     }
 
     /// <summary>Whether <paramref name="link"/> is the link of a sponsored card (see <see cref="SponsoredLinkPattern"/>). Only that link

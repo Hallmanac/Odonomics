@@ -440,4 +440,30 @@ public class WalkSitesTests
 
         Assert.Single(kept);
     }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_ACardWhoseTextIsAnAmbiguousMultiCardWrapper_IsReportedNoDistanceNeverOverPriceCeiling()
+    {
+        // A multi-card wrapper's text states two distances (belonging to two neighboring cards) and
+        // whichever dollar amount its own first card states, over the ceiling here. Before the radius
+        // and no-distance check ran ahead of the price check, this card's price was read from a
+        // neighboring car's text and could send it to onOverPriceCeiling instead of onNoDistance,
+        // touching a known posting behind it from figures that were never its own.
+        var links = new List<PageLink>
+        {
+            new(
+                "https://www.cars.com/vehicledetail/x/?sid=1",
+                "Used 2020 Honda Insight EX",
+                "$30,998\nOrlando, FL (14 mi)\n$24,998\nSanford, FL (28 mi)"),
+        };
+        List<PageLink> noDistance = [];
+        List<PageLink> overCeiling = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(
+            links, poolSize: 10, maxDistanceMiles: 50, onNoDistance: noDistance.Add, maxPrice: 25000, onOverPriceCeiling: overCeiling.Add);
+
+        Assert.Empty(kept);
+        Assert.Single(noDistance);
+        Assert.Empty(overCeiling);
+    }
 }
