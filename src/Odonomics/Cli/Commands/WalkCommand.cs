@@ -280,6 +280,12 @@ public static class WalkCommand
         // ceiling above (see WalkSite.CollectDetailCards): zero for a site with no such statement to check.
         int skippedNoPriceStated = 0;
 
+        // A cars.com card whose own delivery fee marks it as one of CarMax's own store's listings (see
+        // WalkSite.CollectDetailCards): never a candidate, and never touched even when the ledger already
+        // holds it, so a legacy posting like this stops being kept current here rather than only once the
+        // walk stops visiting its detail page. Zero for a site with SkipsCarMaxDealer unset.
+        int skippedCarMaxDealer = 0;
+
         // A card a site's render wait gave up on within its bounded scans (see
         // WalkSite.WaitsForRenderedCards): never rendered a dollar amount of its own, so never a
         // candidate either. Zero for a site with no such wait.
@@ -449,7 +455,8 @@ public static class WalkCommand
                         }
                     }
                 },
-                onNoPriceStated: () => skippedNoPriceStated++);
+                onNoPriceStated: () => skippedNoPriceStated++,
+                onCarMaxDealer: () => skippedCarMaxDealer++);
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -711,7 +718,7 @@ public static class WalkCommand
             AnsiConsole.MarkupLineInterpolated($"{site.Name} / {make} {model}: {coverageLine}");
         }
 
-        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, skippedBelowYearFloor, skippedOverMileageCap, skippedOverPriceCeiling, skippedNoPriceStated)}");
+        AnsiConsole.MarkupLineInterpolated($"{WalkPairSummaryLine.Format(site.Name, make, model, tally.Visited, knownTouches.Count, tally.Upserted, tally.Dropped, AnsiConsole.Profile.Width, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, skippedBelowYearFloor, skippedOverMileageCap, skippedOverPriceCeiling, skippedNoPriceStated, skippedCarMaxDealer)}");
 
         // The Prius pair's own search always mixes Prime candidates into its results (see
         // isPriusPrime above), whether or not one happens to be new this run: a Prime already on

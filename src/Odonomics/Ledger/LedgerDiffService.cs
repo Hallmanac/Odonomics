@@ -60,9 +60,11 @@ public sealed record SearchDiff(
 /// actually covered) keeps a search from reporting a walk's postings gone and vice versa, and
 /// keeps a run that only covered one model from marking every other model on that same source as
 /// checked too. A cars.com posting for one of CarMax's own stores is exempted before any reason is
-/// even considered, the same way a VIN sighted this run is: the cars.com walk now skips a posting
-/// like this outright (see <see cref="Walk.WalkSite.IsCarMaxDealer"/>) rather than saving it, so an
-/// older one already on the ledger simply stops being touched, never because the car actually left
+/// even considered, the same way a VIN sighted this run is: the cars.com walk skips a card like this
+/// outright, at link collection whenever its own text carries the tell and at the detail page as a
+/// backstop otherwise (see <see cref="Walk.WalkSite.CollectDetailCards"/> and
+/// <see cref="Walk.WalkSite.IsCarMaxDealer"/>), rather than saving or touching it, so an older one
+/// already on the ledger simply stops being kept current, never because the car actually left
 /// cars.com, and reporting it "not on search page" or "beyond the cap" would say otherwise. Every
 /// other "gone" entry carries a reason, checked in order: this run's detail page for it
 /// said the car sold, the vehicle's year is below the scenario's minimum for its model, its mileage
@@ -286,10 +288,11 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
             foreach (PostingEntity posting in stillMarkedFromPreviousCoverage)
             {
                 // A cars.com posting for one of CarMax's own stores is never reported gone: the
-                // cars.com walk now skips a posting like this outright (see WalkSite.IsCarMaxDealer),
-                // so it simply stops being touched, never because the car actually left cars.com, and
-                // Ledger.VehiclePricing already excludes it from every vehicle's active postings on its
-                // own, on every run, whatever this diff reports.
+                // cars.com walk now skips a card like this outright, at link collection or, as a
+                // backstop, at its detail page (see WalkSite.CollectDetailCards and
+                // WalkSite.IsCarMaxDealer), so it simply stops being kept current, never because the
+                // car actually left cars.com, and Ledger.VehiclePricing already excludes it from every
+                // vehicle's active postings on its own, on every run, whatever this diff reports.
                 if (posting.Source == WalkSites.CarsCom.Name && WalkSites.CarsCom.IsCarMaxDealer(posting.Dealer?.Name))
                 {
                     continue;

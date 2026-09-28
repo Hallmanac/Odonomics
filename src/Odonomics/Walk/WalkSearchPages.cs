@@ -104,7 +104,14 @@ public static class WalkSearchPages
     /// no price (cargurus's "No Price Listed"), checked ahead of <paramref name="maxPrice"/> (see
     /// <see cref="WalkSite.CollectDetailCards"/>): such a card is never pooled either, but is touched from
     /// its card first, the same as an over-ceiling one, and counts toward the page's own tally of links
-    /// added, once per canonical URL for the whole search, the same way an over-ceiling card does.</summary>
+    /// added, once per canonical URL for the whole search, the same way an over-ceiling card does.
+    /// <paramref name="onCarMaxDealer"/> is cars.com's own count of cards a delivery fee marks as one of
+    /// CarMax's own store's listings (see <see cref="WalkSite.CollectDetailCards"/>): also never a
+    /// candidate, and, unlike an over-ceiling or no-price card, never touched either, even when the ledger
+    /// already holds it, since it is a redundant copy the walk stopped saving outright rather than one this
+    /// run simply could not measure. Counted the same deduped, once-per-canonical-URL way an over-ceiling
+    /// card is, so a page cars.com pads with dozens of repeats of the same national-inventory card still
+    /// reads as adding something and paging continues past it.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -129,7 +136,8 @@ public static class WalkSearchPages
         int? maxPrice = null,
         Action? onOverPriceCeiling = null,
         Action<int, int?>? onSearchCoverageKnown = null,
-        Action? onNoPriceStated = null)
+        Action? onNoPriceStated = null,
+        Action? onCarMaxDealer = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -138,6 +146,7 @@ public static class WalkSearchPages
         Dictionary<string, Action?> reportedOutOfRadius = [];
         HashSet<string> reportedOverPriceCeiling = [];
         HashSet<string> reportedNoPriceStated = [];
+        HashSet<string> reportedCarMaxDealer = [];
         HashSet<string> everUnrenderedCanonicalUrls = [];
         int linkBound = int.MaxValue;
         int considered = 0;
@@ -195,6 +204,7 @@ public static class WalkSearchPages
             List<PageLink> overMileageCards = [];
             List<PageLink> overPriceCeilingCards = [];
             List<PageLink> noPriceCards = [];
+            List<PageLink> carMaxDealerCards = [];
             foreach (PageLink card in site.CollectDetailCards(
                 renderedLinks,
                 int.MaxValue,
@@ -208,7 +218,8 @@ public static class WalkSearchPages
                 overMileageCards.Add,
                 maxPrice,
                 overPriceCeilingCards.Add,
-                noPriceCards.Add))
+                noPriceCards.Add,
+                carMaxDealerCards.Add))
             {
                 if (considered >= linkBound)
                 {
@@ -300,6 +311,26 @@ public static class WalkSearchPages
                 added++;
                 await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
                 onNoPriceStated?.Invoke();
+            }
+
+            // A CarMax card is counted the same deduped way an over-ceiling or no-price card is, for the
+            // same reason (a padded page repeating the same national-inventory card must not read as adding
+            // nothing), but it is never touched: unlike those two, it is not a car this walk simply couldn't
+            // price or afford, it is a redundant copy of a listing CarMax's own walk already covers, which
+            // the walk stopped saving outright (see WalkSite.CollectDetailCards). A posting already on the
+            // ledger from before this exclusion existed is meant to stop being kept current here, not only
+            // stop being visited, so touchKnownAsync is never even asked about one of these.
+            foreach (PageLink card in carMaxDealerCards)
+            {
+                string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
+                if (canonicalUrls.Contains(canonicalUrl) || !reportedCarMaxDealer.Add(canonicalUrl))
+                {
+                    continue;
+                }
+
+                considered++;
+                added++;
+                onCarMaxDealer?.Invoke();
             }
 
             // A page that adds nothing, or a stated count already reached, means the site's results are
