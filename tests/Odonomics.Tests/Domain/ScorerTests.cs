@@ -223,6 +223,21 @@ public class ScorerTests
     }
 
     [Fact]
+    public void FilterReasons_OnlyReservedOrInTransitWithNullPrice_NeverReportsTheGoneReasonToo()
+    {
+        // A reserved-only vehicle's LowestCurrentPrice is null (VehiclePricing prices it from the
+        // cheapest purchasable posting, and a reserved one is never a candidate), the same as a
+        // vehicle whose every posting is actually gone; the two must still read as one reason, not two.
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, price: null) with { OnlyReservedOrInTransit = true };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.Contains(reasons, r => r.Contains("reserved") && r.Contains("in transit"));
+        Assert.DoesNotContain(reasons, r => r.Contains("gone"));
+    }
+
+    [Fact]
     public void FilterReasons_NotOnlyReservedOrInTransit_NeverReportsTheReservedReason()
     {
         Scenario scenario = BuildScenario();
