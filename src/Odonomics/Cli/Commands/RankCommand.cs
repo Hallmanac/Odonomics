@@ -76,6 +76,7 @@ public static class RankCommand
             OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade?.StartsWith('F') == true),
             SiteBadge = cheapest is null ? null : SiteBadgeText.For(cheapest.Attributes),
             Availability = cheapest?.Attributes.FirstOrDefault(a => a.Name == PostingAttributeNames.Availability)?.Value,
+            OnlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource),
         };
     }
 
