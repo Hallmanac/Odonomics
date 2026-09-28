@@ -337,8 +337,8 @@ public class CarGurusWalkTests
         List<PageLink> basePage1 = Cards("cargurus-camry-search-cards.json");
 
         // Both searches state their own count ("49 vehicles found" for the hybrid model, "394
-        // vehicles found" for the base model, read straight off the recorded pages), so the pair
-        // line can report each search's stated count beside what it actually collected.
+        // vehicles found" for the base model, read straight off the recorded pages); this is what
+        // CollectLinksAsync reads as the bound on each search's own paging.
         Assert.Equal(49, WalkSites.CarGurus.MatchCountIn(hybridPage1Text));
         Assert.Equal(394, WalkSites.CarGurus.MatchCountIn(basePage1Text));
 
@@ -360,12 +360,17 @@ public class CarGurusWalkTests
 
             // Only the base model's first page was recorded live; a second, empty page ends its
             // paging the same way a real page that adds nothing would, well short of its own 394
-            // stated (so this pair's coverage of the base search alone is partial here, a fixture
-            // limit rather than anything the walk itself gets wrong).
+            // stated: a fixture limit, not anything the walk itself gets wrong. CollectLinksAsync
+            // still stops there (WalkSearchPages.CollectLinksAsync's own stop rules are unchanged),
+            // but it now also reports what it actually considered against what the page stated (see
+            // onSearchCoverageKnown below), so the pair's own coverage reads as partial for the
+            // shortfall rather than silently as complete.
             return Task.FromResult(pageNumber == 1
                 ? new SearchPageContent(basePage1, basePage1Text)
                 : new SearchPageContent([]));
         }
+
+        var coverages = new List<SearchCoverage>();
 
         async Task<IReadOnlyList<string>> CollectAsync(string url, int searchIndex, int poolSize, CancellationToken ct) =>
             await WalkSearchPages.CollectLinksAsync(
@@ -377,7 +382,9 @@ public class CarGurusWalkTests
                 (_, _) => { },
                 _ => { },
                 () => { },
-                ct);
+                ct,
+                onSearchCoverageKnown: (considered, stated) =>
+                    coverages.Add(new SearchCoverage(searchIndex == 0 ? "Camry Hybrid" : "Camry from 2025", considered, stated)));
 
         List<string> visited = [];
         Task<DetailPageOutcome> VisitAsync(string link, int index, CancellationToken _)
@@ -398,6 +405,14 @@ public class CarGurusWalkTests
         Assert.Equal(2, loadsBySearch.Count);
         Assert.Equal([1, 2, 3], loadsBySearch[0]);
         Assert.Equal([1, 2], loadsBySearch[1]);
+
+        // The hybrid search reached its own stated count exactly, but the base search's second,
+        // empty page ended its paging at 18 of its own 394 stated, a fixture limit well outside the
+        // tolerance SearchCoverage.IsFull allows: so the pair's own coverage reads as partial, and its
+        // own line names each search's stated count beside what it actually collected.
+        Assert.True(Assert.Single(coverages, c => c.Label == "Camry Hybrid").IsFull);
+        Assert.False(Assert.Single(coverages, c => c.Label == "Camry from 2025").IsFull);
+        Assert.Equal("Camry Hybrid 49 of 49 stated; Camry from 2025 18 of 394 stated", WalkSearchCoverage.PairLine(coverages));
     }
 
     [Fact]
