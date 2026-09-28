@@ -81,6 +81,10 @@ public static class Scorer
         {
             reasons.Add("every posting is reserved for another buyer or in transit, not yet purchasable");
         }
+        else if (vehicle.OnlyCarsComCarMaxPostings)
+        {
+            reasons.Add("no current asking price (only a cars.com copy of a CarMax posting; see the CarMax walk)");
+        }
         else if (vehicle.LowestCurrentPrice is null)
         {
             reasons.Add("no current asking price (every posting is gone)");

@@ -234,7 +234,7 @@ public class ShowRendererMonthlyCostRenderingTests
         // A reserved-only vehicle has a null purchase price for a different reason than "every
         // posting is gone" (see VehiclePricing.OnlyReservedOrInTransit's own doc comment); `odo show`
         // must tell the two apart the same way `odo rank` does.
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: true, BuildScenario());
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: true, onlyCarsComCarMaxPostings: false, BuildScenario());
 
         Assert.Null(cost);
         Assert.Equal("every posting is reserved for another buyer or in transit, not yet purchasable", unavailable);
@@ -243,10 +243,32 @@ public class ShowRendererMonthlyCostRenderingTests
     [Fact]
     public void CostOrReason_NotReservedWithNoCurrentPrice_GivesTheGoneReason()
     {
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: false, BuildScenario());
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: false, onlyCarsComCarMaxPostings: false, BuildScenario());
 
         Assert.Null(cost);
         Assert.Contains("gone", unavailable);
+    }
+
+    [Fact]
+    public void CostOrReason_OnlyCarsComCarMaxPostings_GivesItsOwnReasonNotTheGoneOne()
+    {
+        // A vehicle whose only postings are cars.com copies of a CarMax listing has a null purchase
+        // price for a different reason than "every posting is gone" (see
+        // VehiclePricing.OnlyCarsComCarMaxPostings's own doc comment): it is still listed, just not
+        // priced from a redundant copy CarMax's own walk already covers.
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: false, onlyCarsComCarMaxPostings: true, BuildScenario());
+
+        Assert.Null(cost);
+        Assert.Equal("no current asking price (only a cars.com copy of a CarMax posting; see the CarMax walk)", unavailable);
+    }
+
+    [Fact]
+    public void CostOrReason_OnlyAtOutOfRadiusStoreAndOnlyCarsComCarMaxPostings_TheOnlyAtReasonWins()
+    {
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: false, onlyCarsComCarMaxPostings: true, BuildScenario());
+
+        Assert.Null(cost);
+        Assert.Equal("only at Norco, out of radius", unavailable);
     }
 
     [Fact]
@@ -255,7 +277,7 @@ public class ShowRendererMonthlyCostRenderingTests
         Scenario scenario = BuildScenario() with { Filters = BuildScenario().Filters with { MaxPrice = 25000 } };
         var purchasePrice = new PurchasePrice(25001m, null);
 
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: true, scenario);
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: true, onlyCarsComCarMaxPostings: false, scenario);
 
         Assert.Null(cost);
         Assert.Contains("exceeds the maximum", unavailable);
@@ -266,7 +288,7 @@ public class ShowRendererMonthlyCostRenderingTests
     {
         var purchasePrice = new PurchasePrice(17950m, null);
 
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: false, BuildScenario());
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: false, onlyCarsComCarMaxPostings: false, BuildScenario());
 
         Assert.NotNull(cost);
         Assert.Null(unavailable);
@@ -275,7 +297,7 @@ public class ShowRendererMonthlyCostRenderingTests
     [Fact]
     public void CostOrReason_OnlyAtOutOfRadiusStore_GivesTheOnlyAtReasonNotTheGoneOne()
     {
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: false, BuildScenario());
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: false, onlyCarsComCarMaxPostings: false, BuildScenario());
 
         Assert.Null(cost);
         Assert.Equal("only at Norco, out of radius", unavailable);
@@ -284,7 +306,7 @@ public class ShowRendererMonthlyCostRenderingTests
     [Fact]
     public void CostOrReason_OnlyAtOutOfRadiusStoreAndOnlyReservedOrInTransit_TheOnlyAtReasonWins()
     {
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: true, BuildScenario());
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: true, onlyCarsComCarMaxPostings: false, BuildScenario());
 
         Assert.Null(cost);
         Assert.Equal("only at Norco, out of radius", unavailable);
@@ -296,7 +318,7 @@ public class ShowRendererMonthlyCostRenderingTests
         Scenario scenario = BuildScenario() with { Filters = BuildScenario().Filters with { MaxPrice = 25000 } };
         var purchasePrice = new PurchasePrice(25001m, null);
 
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: false, scenario);
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: false, onlyCarsComCarMaxPostings: false, scenario);
 
         Assert.Null(cost);
         Assert.Contains("exceeds the maximum", unavailable);

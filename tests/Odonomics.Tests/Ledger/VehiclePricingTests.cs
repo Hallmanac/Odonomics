@@ -585,6 +585,42 @@ public class VehiclePricingTests
     }
 
     [Fact]
+    public void OnlyCarsComCarMaxPostings_VehiclesOnlyPostingIsACarsComCarMaxCopy_IsTrue()
+    {
+        // A CarMax car the CarMax walk hasn't reached yet: its only ledger posting is cars.com's own
+        // redundant copy, excluded from pricing outright (Ledger.VehiclePricing.ActivePostings), so the
+        // vehicle would otherwise read as "every posting is gone" even though it is still listed.
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 16998m, dealerName: "CarMax Norco"));
+
+        Assert.True(VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, NoCoverage));
+        Assert.Null(VehiclePricing.LowestCurrentPrice(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void OnlyCarsComCarMaxPostings_VehicleAlsoHasItsOwnCarMaxPosting_IsFalse()
+    {
+        // Once CarMax's own walk reaches the same car, it has a real active posting to price and rank
+        // from, so the cars.com copy alongside it no longer makes this true.
+        PostingEntity ownCarMaxPosting = Posting("carmax", 19998m, dealerName: "CarMax Norco");
+        PostingEntity carsComCopy = Posting("cars.com", 16998m, dealerName: "CarMax Norco");
+        VehicleEntity vehicle = Vehicle(ownCarMaxPosting, carsComCopy);
+
+        Assert.False(VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void OnlyCarsComCarMaxPostings_VehicleActuallyGone_IsFalse()
+    {
+        // A vehicle with no cars.com CarMax posting at all whose only posting has aged out of coverage
+        // is genuinely gone, not this shape.
+        Dictionary<string, DateTimeOffset> coverage = new() { [RunSources.Key("cars.com", "Prius")] = RunTime.AddDays(1) };
+        VehicleEntity vehicle = Vehicle(Posting("cars.com", 22000m, dealerName: "Holler Honda"));
+
+        Assert.False(VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, coverage));
+        Assert.Null(VehiclePricing.LowestCurrentPrice(vehicle, coverage));
+    }
+
+    [Fact]
     public void OnlyAtOutOfRadiusStore_NoZipOrRadiusGiven_NeverExcludes()
     {
         PostingEntity onlyAt = Posting("carmax", 19998m, shippingFee: 0m, pickupLocation: "Only at Norco");
