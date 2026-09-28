@@ -299,21 +299,6 @@ public static class WalkCommand
         // diff read its untouched known postings as gone.
         bool renderingDegraded = false;
 
-        // Set when a search's own paging stopped while a no-distance card reported on some earlier page
-        // was still unresolved (see WalkSearchPages.CollectLinksAsync's own onStoppedOnPaddingOnlyPage):
-        // unlike a CarMax or beyond-radius card, a no-distance card's own text never said whether it was
-        // in radius, so it might be an organic match this walk would otherwise have kept, and it can go on
-        // to show its own single-card text several pages after the one that first read it as a wrapper.
-        // cars.com states no total match count that would otherwise prove no further in-radius, non-CarMax
-        // car sits past that page, so the pair's coverage is recorded as partial for it, the same as a
-        // failed later page. A stop caused only by CarMax or beyond-radius cards, or by a no-distance card
-        // reported for the first time on the very page where paging stops, leaves this false: the first
-        // two are never a candidate this walk would keep no matter what a later page holds, and the third
-        // proves nothing either way (a padded carousel module can hand cars.com a brand-new wrapper card
-        // on the one page where a search's real results happen to run out), so the pair's coverage stays
-        // full for that stop.
-        bool pagingStoppedWithUnresolvedNoDistanceCard = false;
-
         // The canonical URLs, among those, that the ledger already held: never touched, so their
         // LastSeen never moved. Exempted from the diff on their own (see LedgerDiffService.ComputeAsync)
         // rather than marking the whole pair's coverage partial, so every other untouched posting in the
@@ -472,18 +457,8 @@ public static class WalkCommand
                 },
                 onNoPriceStated: () => skippedNoPriceStated++,
                 onCarMaxDealer: () => skippedCarMaxDealer++,
-                onStoppedOnPaddingOnlyPage: (pageNumber, hadUnresolvedEarlierNoDistanceCard) =>
-                {
-                    if (hadUnresolvedEarlierNoDistanceCard)
-                    {
-                        pagingStoppedWithUnresolvedNoDistanceCard = true;
-                        AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings, out-of-radius cars, and repeats are new here, but a card with no stated distance reported on an earlier page is still unresolved; marked unread rather than complete, since cars.com states no total to confirm no organic car sits past this page and that card's own text never said whether it was in radius");
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings, out-of-radius cars, and repeats are new here, with no earlier no-distance card left unresolved; coverage stays complete, since nothing this pair would have kept is behind it");
-                    }
-                });
+                onStoppedOnPaddingOnlyPage: pageNumber =>
+                    AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings, out-of-radius cars, and repeats are new here; coverage stays complete, since a CarMax or beyond-radius card is never kept regardless and any known posting behind a no-distance card was already kept current from its card"));
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -758,8 +733,7 @@ public static class WalkCommand
         return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls,
             AlsoCoveredModel: isPriusPair ? PriusPrimeVariant.StoredModel : null,
             SearchFellShortOfStatedCount: searchFellShortOfStatedCount,
-            RenderingDegraded: renderingDegraded,
-            PagingStoppedWithUnresolvedNoDistanceCard: pagingStoppedWithUnresolvedNoDistanceCard);
+            RenderingDegraded: renderingDegraded);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
@@ -824,7 +798,7 @@ public static class WalkCommand
     private static string StatusCell(WalkPairSummary summary) => summary switch
     {
         { Completed: false } => "[yellow]failed[/]",
-        { FailedPage: not null } or { SearchFellShortOfStatedCount: true } or { RenderingDegraded: true } or { PagingStoppedWithUnresolvedNoDistanceCard: true } => "unread",
+        { FailedPage: not null } or { SearchFellShortOfStatedCount: true } or { RenderingDegraded: true } => "unread",
         { Capped: true } => "capped",
         _ => "ok",
     };
