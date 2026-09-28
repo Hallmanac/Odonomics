@@ -150,6 +150,15 @@ public class CarMaxStoresTests
     }
 
     [Fact]
+    public void DistanceMilesFromZip_ClearwaterStoreFromTheDaughterScenarioZip_IsAboutOneHundredTenMilesAndOverTheFiftyMileRadius()
+    {
+        double? miles = CarMaxStores.DistanceMilesFromZip("Clearwater", "32833");
+
+        Assert.NotNull(miles);
+        Assert.InRange(miles!.Value, 100, 120);
+    }
+
+    [Fact]
     public void DistanceMilesFromZip_UnknownZip_ReturnsNull()
     {
         Assert.Null(CarMaxStores.DistanceMilesFromZip("Norco", "00000"));
