@@ -30,6 +30,10 @@ namespace Odonomics.Walk;
 /// </summary>
 public static class WalkSearchPages
 {
+    /// <summary>The badges passed to <c>touchKnownAsync</c> for a no-distance card's own protective
+    /// touch: its text is never trusted, so it never has badges of its own to offer either.</summary>
+    private static readonly IReadOnlyDictionary<string, string> NoCardBadges = new Dictionary<string, string>();
+
     /// <summary>The candidate links for <paramref name="searchUrl"/>, in page order, one per
     /// canonical URL and at most <paramref name="poolSize"/>, not counting a link
     /// <paramref name="touchKnownAsync"/> takes (it is given the link's canonical URL, the card's
@@ -49,17 +53,25 @@ public static class WalkSearchPages
     /// links the ledger already knows, so a link left out for want of room is a posting the walk did not touch.
     /// <paramref name="maxDistanceMiles"/> is the scenario's own radius, checked against a card's stated
     /// distance for a site with a <see cref="WalkSite.CardDistanceReader"/> (cars.com): a card beyond it, or
-    /// one whose text states no distance at all, never enters the pool and is never handed to
-    /// <paramref name="touchKnownAsync"/>, and is told to <paramref name="onBeyondRadius"/> or
-    /// <paramref name="onNoDistance"/> respectively (see <see cref="WalkSite.CollectDetailCards"/>), once per
-    /// canonical URL for the whole search: a padded site that keeps repeating the same out-of-radius car
-    /// on every later page is counted for it once, not once per page. A link reported beyond radius or as
-    /// stating no distance on one page can still turn up in radius on a later page, off that page's own
-    /// text for it: when that happens the earlier report is withdrawn through
-    /// <paramref name="onBeyondRadiusWithdrawn"/> or <paramref name="onNoDistanceWithdrawn"/> (whichever one
-    /// fired for it) the moment the link is pooled or handed to <paramref name="touchKnownAsync"/>, so a car
-    /// the walk ends up keeping is never left counted as skipped. A page made only of such cards, or of
-    /// links this pool already holds, adds nothing and ends the paging exactly as an empty page does.
+    /// one whose text states no distance at all, never enters the pool, and is told to
+    /// <paramref name="onBeyondRadius"/> or <paramref name="onNoDistance"/> respectively (see
+    /// <see cref="WalkSite.CollectDetailCards"/>), once per canonical URL for the whole search: a padded
+    /// site that keeps repeating the same out-of-radius car on every later page is counted for it once, not
+    /// once per page. A beyond-radius card is never handed to <paramref name="touchKnownAsync"/>, since its
+    /// own text did say where it was; a no-distance card is handed to it anyway, with a null price (its own
+    /// text cannot be trusted to be its own, see <see cref="WalkSite.CollectDetailCards"/>'s own
+    /// <see cref="WalkSite.CardDistanceReader"/> remarks), so a link the ledger already holds is kept
+    /// current from this alone, the same protective reason a below-floor or over-mileage card is touched
+    /// (see <paramref name="minYearFor"/> below): its own status may never be knowable from a search page
+    /// again, and reading it as gone just because this walk could not confirm it would be worse than
+    /// reading its price as unchanged. A link reported beyond radius or as stating no distance on one page
+    /// can still turn up in radius on a later page, off that page's own text for it: when that happens the
+    /// earlier report is withdrawn through <paramref name="onBeyondRadiusWithdrawn"/> or
+    /// <paramref name="onNoDistanceWithdrawn"/> (whichever one fired for it) the moment the link is pooled
+    /// or handed to <paramref name="touchKnownAsync"/> the ordinary way, so a car the walk ends up keeping
+    /// is never left counted as skipped, and its real price replaces the no-distance touch's own null one.
+    /// A page made only of such cards, or of links this pool already holds, adds nothing and ends the
+    /// paging exactly as an empty page does.
     /// <paramref name="minYearFor"/> and <paramref name="maxMileage"/> are the scenario's own facets, checked
     /// against a card's own stated year and mileage for a site with a <see cref="WalkSite.CardFacetsReader"/>
     /// (carmax, whose search URL carries both facets already but does not actually honor the year range): a
@@ -115,22 +127,23 @@ public static class WalkSearchPages
     /// listing on page after page, so a page cars.com pads with nothing but new CarMax cards reads as
     /// adding nothing and ends the paging, the same as a page of nothing but repeats. When that page also
     /// held a genuinely new CarMax, beyond-radius, or no-distance card (as opposed to one truly empty of
-    /// anything new), <paramref name="onStoppedOnPaddingOnlyPage"/> is told its number and whether a
-    /// no-distance card reported on some earlier page of this same search is still unresolved now that
-    /// paging has stopped: a CarMax or beyond-radius card is never a candidate this walk would keep no
-    /// matter what a later page holds, so a stop caused only by those proves the search's real matches are
-    /// exhausted the same as an empty page would. A no-distance card is the one genuinely unresolved case
-    /// (its own text never said whether it was in radius, see <see cref="WalkSite.CollectDetailCards"/>'s
-    /// own <see cref="WalkSite.CardDistanceReader"/> remarks), and it can go on to show its own single-card
-    /// text several pages after the one that first read it as a wrapper (a real cars.com recording had one
-    /// resolve five pages later), so the caller uses that flag to mark the pair's coverage the way a failed
-    /// later page is, since cars.com states no total match count that would otherwise prove no further
-    /// in-radius, non-CarMax car sits past it. A no-distance card reported for the very first time on this
-    /// same stopping page is not counted toward that flag, though, even though it too is unresolved: a
-    /// carousel module can hand cars.com a brand-new wrapper card on the one page where a search's real
-    /// results happen to run out, and a search whose padding always looks this way at the end (a recorded
-    /// base-model Camry Hybrid search does, on every run) must not have its coverage marked partial every
-    /// time for it, the same reason a CarMax or beyond-radius card never does.</summary>
+    /// anything new), <paramref name="onStoppedOnPaddingOnlyPage"/> is told its number: a CarMax or
+    /// beyond-radius card is never a candidate this walk would keep no matter what a later page holds, and
+    /// a no-distance card's own known posting, if it has one, is kept current the same protective way a
+    /// below-floor or over-mileage card's is (see <paramref name="onNoDistance"/> below), so a stop caused
+    /// by any of them proves the search's real matches are exhausted the same as an empty page would, and
+    /// the pair's own coverage stays full for it. A no-distance card is the one case whose own text never
+    /// said whether it was in radius (see <see cref="WalkSite.CollectDetailCards"/>'s own
+    /// <see cref="WalkSite.CardDistanceReader"/> remarks), and it can go on to show its own single-card text
+    /// several pages after the one that first read it as a wrapper (a real cars.com recording had one
+    /// resolve five pages later, and several recorded searches never resolve one at all across the whole
+    /// run): rather than leave that genuinely unknowable case to freeze the pair's own coverage every run it
+    /// recurs on, a no-distance card whose canonical URL the ledger already holds is touched with no price
+    /// of its own the moment it is reported (see <paramref name="onNoDistance"/> below), so its LastSeen
+    /// moves with this run and it is never read, in the diff, as having left the market just because its
+    /// own text could not be trusted. A brand-new no-distance card the ledger has never seen has nothing to
+    /// protect this way, and is simply not a candidate this run; a later run whose padding stops sooner, or
+    /// whose card finally resolves, can still pick it up.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -157,13 +170,13 @@ public static class WalkSearchPages
         Action<int, int?>? onSearchCoverageKnown = null,
         Action? onNoPriceStated = null,
         Action? onCarMaxDealer = null,
-        Action<int, bool>? onStoppedOnPaddingOnlyPage = null)
+        Action<int>? onStoppedOnPaddingOnlyPage = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
         List<string> pool = [];
         HashSet<string> canonicalUrls = [];
-        Dictionary<string, (Action? Withdraw, bool Ambiguous)> reportedOutOfRadius = [];
+        Dictionary<string, Action?> reportedOutOfRadius = [];
         HashSet<string> reportedOverPriceCeiling = [];
         HashSet<string> reportedNoPriceStated = [];
         HashSet<string> reportedCarMaxDealer = [];
@@ -182,12 +195,12 @@ public static class WalkSearchPages
         // held brand-new links this run chose not to treat as added.
         bool pageHadNewExcludedActivity = false;
 
-        void ReportOnce(PageLink card, Action? report, Action? withdraw, bool ambiguous)
+        void ReportOnce(PageLink card, Action? report, Action? withdraw)
         {
             string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
             if (!canonicalUrls.Contains(canonicalUrl) && !reportedOutOfRadius.ContainsKey(canonicalUrl))
             {
-                reportedOutOfRadius[canonicalUrl] = (withdraw, ambiguous);
+                reportedOutOfRadius[canonicalUrl] = withdraw;
                 pageHadNewExcludedActivity = true;
                 report?.Invoke();
             }
@@ -197,19 +210,6 @@ public static class WalkSearchPages
         {
             pageHadNewExcludedActivity = false;
 
-            // A snapshot, taken before this page's own cards are read, of every no-distance card still
-            // unresolved from a strictly earlier page. A no-distance card's own text never says whether
-            // it is in radius (an ambiguous multi-card wrapper, see WalkSite.CollectDetailCards's own
-            // CardDistanceReader remarks), so one still outstanding when paging stops might be an organic
-            // match this walk would otherwise have kept; a card first reported no-distance on this same
-            // stopping page proves nothing either way, since a padded carousel module can hand cars.com a
-            // brand-new wrapper card on the very page where the site's real results happen to run out
-            // (the base-model Camry Hybrid search's own last page does this on every recorded run), so
-            // treating that as unresolved would mark an ordinary run's coverage partial every time (see
-            // lesson ffb24708 and 27401539). Only a card that was already unresolved before this page,
-            // and that this page's own cards did not go on to pool, touch, or withdraw, is what the stop
-            // check below treats as genuinely left behind.
-            HashSet<string> ambiguousUnresolvedBeforeThisPage = [.. reportedOutOfRadius.Where(kv => kv.Value.Ambiguous).Select(kv => kv.Key)];
             string pageUrl = pageNumber > 1 && pageUrlFor is not null
                 ? pageUrlFor(searchUrl, pageNumber, pagingToken)
                 : searchUrl;
@@ -251,13 +251,18 @@ public static class WalkSearchPages
             List<PageLink> overPriceCeilingCards = [];
             List<PageLink> noPriceCards = [];
             List<PageLink> carMaxDealerCards = [];
+            List<PageLink> noDistanceCards = [];
             foreach (PageLink card in site.CollectDetailCards(
                 renderedLinks,
                 int.MaxValue,
                 content.Text,
                 maxDistanceMiles,
-                card => ReportOnce(card, onBeyondRadius, onBeyondRadiusWithdrawn, ambiguous: false),
-                card => ReportOnce(card, onNoDistance, onNoDistanceWithdrawn, ambiguous: true),
+                card => ReportOnce(card, onBeyondRadius, onBeyondRadiusWithdrawn),
+                card =>
+                {
+                    ReportOnce(card, onNoDistance, onNoDistanceWithdrawn);
+                    noDistanceCards.Add(card);
+                },
                 minYearFor,
                 maxMileage,
                 belowFloorCards.Add,
@@ -278,9 +283,9 @@ public static class WalkSearchPages
                     continue;
                 }
 
-                if (reportedOutOfRadius.Remove(canonicalUrl, out (Action? Withdraw, bool Ambiguous) earlierReport))
+                if (reportedOutOfRadius.Remove(canonicalUrl, out Action? earlierWithdraw))
                 {
-                    earlierReport.Withdraw?.Invoke();
+                    earlierWithdraw?.Invoke();
                 }
 
                 considered++;
@@ -314,6 +319,21 @@ public static class WalkSearchPages
             {
                 await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
                 onOverMileageCap?.Invoke();
+            }
+
+            // A no-distance card's own text never says whether it is in radius (an ambiguous multi-card
+            // wrapper, see WalkSite.CollectDetailCards's own CardDistanceReader remarks), and some never
+            // resolve at all across a whole recorded search, so its own text is never trusted for a price
+            // either. But a known posting behind one is still touched here, with a null price, the same
+            // protective reason a below-floor or over-mileage card's is above: its LastSeen moves with this
+            // run, so a card this walk can never resolve never reads, in the diff, as the car having left
+            // the market, and the pair's own coverage never needs marking partial for it (see
+            // onStoppedOnPaddingOnlyPage below). A card that goes on to show its own distance on a later
+            // page is pooled or resolved against the ledger the ordinary way, which overwrites this touch's
+            // own null price with a real one.
+            foreach (PageLink card in noDistanceCards)
+            {
+                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), null, NoCardBadges, cancellationToken);
             }
 
             // An over-ceiling card is still one of the page's exact matches (see WalkSites.CollectDetailCards,
@@ -393,18 +413,13 @@ public static class WalkSearchPages
                 // information, it just held only CarMax cards, beyond-radius cards, or no-distance cards
                 // this run declines to chase further (see pageHadNewExcludedActivity above and
                 // WalkSite.CollectDetailCards). A CarMax or beyond-radius card is never a candidate this
-                // walk would keep regardless of what a later page holds, so the caller only needs to mark
-                // the pair's coverage the way a failed later page does when a no-distance card reported on
-                // some earlier page is still unresolved now that paging has stopped (see
-                // ambiguousUnresolvedBeforeThisPage above): that is the one case cars.com's own missing
-                // total match count leaves genuinely unresolved, since such a card's own text never said
-                // whether it was in radius, and it may only show its own single-card text several pages
-                // later. A no-distance card reported for the first time on this same stopping page proves
-                // nothing either way, so it is not counted here even though it is still unresolved.
+                // walk would keep regardless of what a later page holds, and a no-distance card's own known
+                // posting, if it has one, was already kept current above the moment it was reported, so the
+                // pair's own coverage stays full for this stop the same way it does for an ordinary
+                // empty-page one; onStoppedOnPaddingOnlyPage is only for the console line explaining why.
                 if (added == 0 && pageUrlFor is not null && considered < linkBound && pageHadNewExcludedActivity)
                 {
-                    bool hadUnresolvedEarlierAmbiguousCard = ambiguousUnresolvedBeforeThisPage.Any(reportedOutOfRadius.ContainsKey);
-                    onStoppedOnPaddingOnlyPage?.Invoke(pageNumber, hadUnresolvedEarlierAmbiguousCard);
+                    onStoppedOnPaddingOnlyPage?.Invoke(pageNumber);
                 }
 
                 break;

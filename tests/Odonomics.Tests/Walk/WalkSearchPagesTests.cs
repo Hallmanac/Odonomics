@@ -180,10 +180,10 @@ public class WalkSearchPagesTests
         // all-over-ceiling page still does (lesson e975e649 was about a different problem, a CarMax
         // link revisited at the detail page every run for want of being recognized at the card; it
         // never required counting a CarMax card toward this page's own tally). Page 2's one ordinary
-        // card is consequently never found this run, but since page 1 held no no-distance card at all,
-        // onStoppedOnPaddingOnlyPage below reports the stop as safe: a CarMax card is never a candidate
-        // this walk would keep regardless of what a later page holds, so the pair's coverage stays full
-        // even though that one ordinary card was never read.
+        // card is consequently never found this run, but since a CarMax card is never a candidate this
+        // walk would keep regardless of what a later page holds, onStoppedOnPaddingOnlyPage below still
+        // reports the stop, and the pair's coverage stays full even though that one ordinary card was
+        // never read.
         const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
         {
@@ -191,20 +191,18 @@ public class WalkSearchPagesTests
             [2] = [new("https://www.cars.com/vehicledetail/ord0/?sid=x", "", "Sanford, FL (28 mi)")],
         });
         int carMaxDealer = 0;
-        var stoppedOnPaddingPages = new List<(int Page, bool HadAmbiguousCard)>();
+        var stoppedOnPaddingPages = new List<int>();
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync,
             (_, _) => { }, _ => { }, () => { }, CancellationToken.None,
             onCarMaxDealer: () => carMaxDealer++,
-            onStoppedOnPaddingOnlyPage: (page, hadAmbiguousCard) => stoppedOnPaddingPages.Add((page, hadAmbiguousCard)));
+            onStoppedOnPaddingOnlyPage: page => stoppedOnPaddingPages.Add(page));
 
         Assert.Equal([1], browser.Loads.Select(l => l.PageNumber));
         Assert.Equal(21, carMaxDealer);
         Assert.Empty(pool);
-        // All 21 excluded cards were CarMax delivery cards, none ambiguous, so the stop is reported as
-        // safe to treat as full coverage.
-        Assert.Equal([(1, false)], stoppedOnPaddingPages);
+        Assert.Equal([1], stoppedOnPaddingPages);
     }
 
     [Fact]

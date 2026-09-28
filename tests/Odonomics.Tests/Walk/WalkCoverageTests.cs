@@ -292,39 +292,6 @@ public class WalkCoverageTests
     }
 
     [Fact]
-    public async Task RunAsync_APairWhosePagingStoppedWithUnresolvedNoDistanceCard_StampsAnUnreadTokenBesideItsCoverageToken()
-    {
-        // cars.com states no total match count, so once a search's own paging stops while a no-distance
-        // card reported on some earlier page is still unresolved (see WalkSearchPages.CollectLinksAsync's
-        // own onStoppedOnPaddingOnlyPage), nothing proves no further in-radius, non-CarMax car sits past
-        // it. Treated the same as a failed later page or degraded rendering: partial coverage, so a known
-        // posting behind that unread page is never reported gone just because this run chose not to keep
-        // paging through CarMax's own nationwide inventory.
-        using var testDb = new LedgerTestDatabase();
-        using OdonomicsDbContext db = testDb.CreateContext();
-        RunEntity run = Run(DateTimeOffset.UtcNow);
-        db.Runs.Add(run);
-        await db.SaveChangesAsync(CancellationToken.None);
-
-        List<WalkPairSummary> summaries = await WalkCoverage.RunAsync(
-            run,
-            [SiteA],
-            ["Honda Insight", "Toyota Prius"],
-            (_, model, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), PagingStoppedWithUnresolvedNoDistanceCard: model == "Honda Insight")),
-            (_, _) => { },
-            (_, _, _) => { },
-            _ => Task.CompletedTask,
-            ct => db.SaveChangesAsync(ct),
-            CancellationToken.None);
-
-        Assert.Equal([true, false], summaries.Select(s => s.PagingStoppedWithUnresolvedNoDistanceCard));
-        Assert.Equal([false, false], summaries.Select(s => s.Capped));
-        Assert.Equal("site-a:Insight,unread:site-a:Insight,site-a:Prius", run.Sources);
-        Assert.Equal(["site-a:Insight"], RunSources.UnreadCoverage(run));
-        Assert.Empty(RunSources.PartialCoverage(run));
-    }
-
-    [Fact]
     public async Task RunAsync_APairWhoseFirstPageFailed_IsNotStampedCoveredAtAll()
     {
         using var testDb = new LedgerTestDatabase();
