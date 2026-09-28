@@ -61,7 +61,7 @@ public class CarsComRadiusTests
         }
     }
 
-    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken) => ValueTask.FromResult(false);
+    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, bool cardTextTrusted, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 
     [Fact]
     public async Task RecordedPaddedPages_AddNoLinkAndStopPagingAfterTheFirstOfThem()

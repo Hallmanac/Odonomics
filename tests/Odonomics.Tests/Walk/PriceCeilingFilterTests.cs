@@ -155,7 +155,7 @@ public class PriceCeilingFilterTests
         Assert.Single(overCeiling);
     }
 
-    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken) => ValueTask.FromResult(false);
+    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, bool cardTextTrusted, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 
     [Fact]
     public async Task CollectLinksAsync_OverCeilingCardsNeverEnterThePoolButAreStillCheckedAsKnown()
@@ -169,10 +169,10 @@ public class PriceCeilingFilterTests
         Task<SearchPageContent> LoadPageAsync(string url, int pageNumber, CancellationToken ct) =>
             Task.FromResult(new SearchPageContent(cards));
 
-        ValueTask<bool> TrackTouches(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken ct)
+        ValueTask<bool> TrackTouches(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, bool cardTextTrusted, CancellationToken ct)
         {
             checkedAsKnownOrNew.Add(canonicalUrl);
-            return NoneKnown(canonicalUrl, cardPrice, cardBadges, ct);
+            return NoneKnown(canonicalUrl, cardPrice, cardBadges, cardTextTrusted, ct);
         }
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(

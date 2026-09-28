@@ -12,7 +12,7 @@ public class WalkSearchPagesTests
     private static List<PageLink> CarvanaCards(string prefix, int count) =>
         [.. Enumerable.Range(0, count).Select(i => new PageLink($"https://www.carvana.com/vehicle/{prefix}{i}", ""))];
 
-    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken) => ValueTask.FromResult(false);
+    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, bool cardTextTrusted, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 
     private static string Fixture(string name) =>
         File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", name));
@@ -242,7 +242,7 @@ public class WalkSearchPagesTests
 
         await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool,
-            (_, _, _, _) => { touched = true; return ValueTask.FromResult(true); },
+            (_, _, _, _, _) => { touched = true; return ValueTask.FromResult(true); },
             browser.LoadAsync, (_, _) => { }, _ => { }, () => { }, CancellationToken.None);
 
         Assert.False(touched);
@@ -1019,7 +1019,7 @@ public class WalkSearchPagesTests
             new Dictionary<int, List<PageLink>> { [1] = [new PageLink(knownUnrenderedHref, "", "")] },
             unrenderedHrefs: new Dictionary<int, List<string>> { [1] = [knownUnrenderedHref] });
         List<(string CanonicalUrl, decimal? Price, int BadgeCount)> touches = [];
-        ValueTask<bool> TouchKnownAsync(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken _)
+        ValueTask<bool> TouchKnownAsync(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, bool _, CancellationToken __)
         {
             touches.Add((canonicalUrl, cardPrice, cardBadges.Count));
             return ValueTask.FromResult(true);
