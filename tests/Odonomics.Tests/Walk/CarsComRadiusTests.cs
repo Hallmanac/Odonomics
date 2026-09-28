@@ -93,10 +93,12 @@ public class CarsComRadiusTests
             onNoDistance: () => noDistance++,
             onCarMaxDealer: () => carMaxDealer++);
 
-        // Page 2 held nothing but the same four out-of-radius Florida cards page 1 already carried plus
-        // two fresh, empty-text nationwide links, so it added no new in-radius link and paging stopped
-        // there: page 3 was never requested.
-        Assert.Equal([1, 2], browser.Loads);
+        // Page 1 itself already held nothing that reads as added: its one in-radius card is the CarMax
+        // delivery one (see below), which no longer counts toward a page's own tally, and everything
+        // else is beyond radius or states no distance. So paging stopped right there; page 2, which
+        // holds nothing but the same four out-of-radius Florida cards plus two fresh, empty-text
+        // nationwide links, was never requested at all.
+        Assert.Equal([1], browser.Loads);
 
         // None of the out-of-radius Florida hrefs, nor any page's empty-anchor or nationwide links, ever
         // entered the pool. Page 1 carries three empty-anchor links (af6fb68e, 80a6e699, and the
@@ -118,10 +120,10 @@ public class CarsComRadiusTests
 
         // Page 1 contributes its four out-of-radius Florida cards under "beyond radius" and its three
         // multi-card-wrapper links (a card text naming more than one distance states none) under "no
-        // distance stated". Page 2 repeats the same four Florida cards, already reported once each from
-        // page 1, and adds its own two wrapper links as two more "no distance stated" reports.
+        // distance stated". Page 2's own two wrapper links are never read at all, since page 2 is never
+        // requested.
         Assert.Equal(4, beyondRadius);
-        Assert.Equal(5, noDistance);
+        Assert.Equal(3, noDistance);
     }
 
     [Fact]

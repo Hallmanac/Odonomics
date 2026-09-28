@@ -109,9 +109,15 @@ public static class WalkSearchPages
     /// CarMax's own store's listings (see <see cref="WalkSite.CollectDetailCards"/>): also never a
     /// candidate, and, unlike an over-ceiling or no-price card, never touched either, even when the ledger
     /// already holds it, since it is a redundant copy the walk stopped saving outright rather than one this
-    /// run simply could not measure. Counted the same deduped, once-per-canonical-URL way an over-ceiling
-    /// card is, so a page cars.com pads with dozens of repeats of the same national-inventory card still
-    /// reads as adding something and paging continues past it.</summary>
+    /// run simply could not measure. Deduped once per canonical URL for the whole search, the same way an
+    /// over-ceiling card is, but unlike an over-ceiling or no-price card it never counts toward a page's own
+    /// tally of links added: CarMax's own nationwide inventory hands cars.com a fresh, never-before-seen
+    /// listing on page after page, so a page cars.com pads with nothing but new CarMax cards reads as
+    /// adding nothing and ends the paging, the same as a page of nothing but repeats. When that page also
+    /// held a genuinely new CarMax, beyond-radius, or no-distance card (as opposed to one truly empty of
+    /// anything new), <paramref name="onStoppedOnPaddingOnlyPage"/> is told its number: the caller uses
+    /// this to mark the pair's coverage the way a failed later page is, since cars.com states no total
+    /// match count that would otherwise prove no further in-radius, non-CarMax car sits past it.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -137,7 +143,8 @@ public static class WalkSearchPages
         Action? onOverPriceCeiling = null,
         Action<int, int?>? onSearchCoverageKnown = null,
         Action? onNoPriceStated = null,
-        Action? onCarMaxDealer = null)
+        Action? onCarMaxDealer = null,
+        Action<int>? onStoppedOnPaddingOnlyPage = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -152,18 +159,30 @@ public static class WalkSearchPages
         int considered = 0;
         bool leftBehindForWantOfPoolRoom = false;
 
+        // Set while processing the page currently in hand, and read only at that same page's own
+        // "did this page add anything" check below: true when this page reported a CarMax dealer card,
+        // a beyond-radius card, or a no-distance card for the first time in this whole search (a repeat
+        // of one already reported on an earlier page leaves it false). A page that adds nothing new of
+        // any kind at all (every link a repeat, or the page genuinely empty) leaves this false too, the
+        // same "nothing to learn from stopping here" case the pre-existing empty-page stop already
+        // covered; onStoppedOnPaddingOnlyPage is only ever told about the other case, where the page
+        // held brand-new links this run chose not to treat as added.
+        bool pageHadNewExcludedActivity = false;
+
         void ReportOnce(PageLink card, Action? report, Action? withdraw)
         {
             string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
             if (!canonicalUrls.Contains(canonicalUrl) && !reportedOutOfRadius.ContainsKey(canonicalUrl))
             {
                 reportedOutOfRadius[canonicalUrl] = withdraw;
+                pageHadNewExcludedActivity = true;
                 report?.Invoke();
             }
         }
 
         for (int pageNumber = 1; ; pageNumber++)
         {
+            pageHadNewExcludedActivity = false;
             string pageUrl = pageNumber > 1 && pageUrlFor is not null
                 ? pageUrlFor(searchUrl, pageNumber, pagingToken)
                 : searchUrl;
@@ -313,13 +332,18 @@ public static class WalkSearchPages
                 onNoPriceStated?.Invoke();
             }
 
-            // A CarMax card is counted the same deduped way an over-ceiling or no-price card is, for the
-            // same reason (a padded page repeating the same national-inventory card must not read as adding
-            // nothing), but it is never touched: unlike those two, it is not a car this walk simply couldn't
-            // price or afford, it is a redundant copy of a listing CarMax's own walk already covers, which
-            // the walk stopped saving outright (see WalkSite.CollectDetailCards). A posting already on the
-            // ledger from before this exclusion existed is meant to stop being kept current here, not only
-            // stop being visited, so touchKnownAsync is never even asked about one of these.
+            // Unlike an over-ceiling or no-price card, a CarMax card is never counted toward this page's
+            // own "added" tally, whether it is new or a repeat: CarMax's own nationwide inventory hands
+            // cars.com a fresh, never-before-seen listing URL on page after page (about two a page,
+            // walk 20260928-184522's Prius pair), so counting a new one toward "added" the way a genuine
+            // organic match is would keep paging going for as long as CarMax's own inventory holds out,
+            // dozens of pages past the pair's last real match. It is still deduped and still counted
+            // toward `considered`, and still never touched: it is not a car this walk simply couldn't
+            // price or afford, it is a redundant copy of a listing CarMax's own walk already covers,
+            // which the walk stopped saving outright (see WalkSite.CollectDetailCards). A posting
+            // already on the ledger from before this exclusion existed is meant to stop being kept
+            // current here, not only stop being visited, so touchKnownAsync is never even asked about
+            // one of these.
             foreach (PageLink card in carMaxDealerCards)
             {
                 string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
@@ -329,7 +353,7 @@ public static class WalkSearchPages
                 }
 
                 considered++;
-                added++;
+                pageHadNewExcludedActivity = true;
                 onCarMaxDealer?.Invoke();
             }
 
@@ -337,6 +361,18 @@ public static class WalkSearchPages
             // all read even when the pool happens to be full too; only a full pool with more to read is capped.
             if (pageUrlFor is null || considered >= linkBound || added == 0)
             {
+                // The stop itself is the same "a page that adds nothing ends it" rule as an empty or
+                // all-repeat page; what sets this apart is that the page was not actually empty of new
+                // information, it just held only CarMax cards, beyond-radius cards, or no-distance cards
+                // this run declines to chase further (see pageHadNewExcludedActivity above and
+                // WalkSite.CollectDetailCards). The caller uses this to mark the pair's coverage the same
+                // way a failed later page does, since cars.com states no total match count that would
+                // otherwise prove no further in-radius, non-CarMax car sits past this page.
+                if (added == 0 && pageUrlFor is not null && considered < linkBound && pageHadNewExcludedActivity)
+                {
+                    onStoppedOnPaddingOnlyPage?.Invoke(pageNumber);
+                }
+
                 break;
             }
 
