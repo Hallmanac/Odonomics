@@ -19,6 +19,17 @@ public static class CarGurusCards
         @"^[ \t]*Free home delivery[ \t\r]*$",
         RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
 
+    /// <summary>A card that states plainly it has no price ("No Price Listed", recorded card for
+    /// JTDADABU0T3033887: "Home delivery from Downers Grove, IL / Price includes $1,498 shipping / No
+    /// Rating / No Price Listed / Check availability"), even one that also names a shipping amount of
+    /// its own: that amount is what the delivery costs, not what the car costs, and
+    /// <see cref="IncludedShipping"/> already never reads it as the price, but the card is still no
+    /// candidate for a detail visit, so <see cref="WalkSite.NoPriceCardPattern"/> drops it before one
+    /// is ever spent finding that out the slow way.</summary>
+    public static readonly Regex NoPriceListed = new(
+        @"^[ \t]*No Price Listed[ \t\r]*$",
+        RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
+
     /// <summary>The shipping amount a "Price includes $462 shipping" line names, or null when the card has no such line.</summary>
     public static decimal? IncludedShipping(string cardText)
     {
