@@ -588,6 +588,13 @@ public static class WalkCommand
 
                 CardFee? cardFee = cardText is null ? null : site.ReadCardFee(cardText);
                 ResolvedDealer dealer = site.ResolveDealer(outcome.Result.DealerName, outcome.Result.DealerLocation, bodyText);
+
+                if (site.IsCarMaxDealer(dealer.Name))
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: dropped, {WalkOutcomeWording.DroppedReason(DetailPageOutcome.CarMaxDealer)}[/]");
+                    return DetailPageOutcome.CarMaxDealer;
+                }
+
                 // Whether the page's own header line matched one of this site's recognised store shapes,
                 // independent of what dealer.IsFallback ends up as: that flag can also read false when
                 // extraction (not the page's header) supplied a dealer name, so it cannot stand in for

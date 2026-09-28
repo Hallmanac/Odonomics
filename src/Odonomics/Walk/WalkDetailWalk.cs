@@ -74,6 +74,16 @@ public enum DetailPageOutcome
 
     /// <summary>The page matched, had a VIN, and had every required field; it was upserted.</summary>
     Upserted,
+
+    /// <summary>The page's dealer resolved to one of CarMax's own stores, on a site whose
+    /// <see cref="WalkSite.SkipsCarMaxDealer"/> flag is set (cars.com; see
+    /// <see cref="WalkSite.IsCarMaxDealer"/>): CarMax is walked nationwide by its own site already,
+    /// and cars.com's delivery offer does not actually hold for a car CarMax will only sell "Only
+    /// at" its one store. Like <see cref="NewCar"/> and <see cref="Sold"/>, this never spends the
+    /// per-pair cap and the car is never saved: the search page still linking CarMax's nationwide
+    /// inventory, not cars.com's own real dealers, produced the visit. Decided after extraction and
+    /// dealer resolution, since cars.com names no dealer on its own search cards.</summary>
+    CarMaxDealer,
 }
 
 /// <summary>The reason wording an operator sees for a dropped outcome, shared between the
@@ -92,6 +102,7 @@ public static class WalkOutcomeWording
         DetailPageOutcome.Sold => "listing sold",
         DetailPageOutcome.NoPriceListed => "no price listed",
         DetailPageOutcome.PriusPrime => "Prius Prime, not a candidate",
+        DetailPageOutcome.CarMaxDealer => "carmax, walked by the carmax walk",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
 
@@ -166,9 +177,9 @@ public static class WalkOutcomeWording
 /// was saved, always equals the number of pages visited: NotMatching, Repeat, NewCar, Sold and
 /// NoPriceListed are all included here even though none spends the per-pair cap, since the page was
 /// still visited.</summary>
-public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatching, int Failed, int ExtractionFailed = 0, int Repeat = 0, int NewCar = 0, int Sold = 0, int NoPriceListed = 0, int PriusPrime = 0)
+public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatching, int Failed, int ExtractionFailed = 0, int Repeat = 0, int NewCar = 0, int Sold = 0, int NoPriceListed = 0, int PriusPrime = 0, int CarMaxDealer = 0)
 {
-    public int Total => MissingFields + NoVin + NotMatching + Failed + ExtractionFailed + Repeat + NewCar + Sold + NoPriceListed + PriusPrime;
+    public int Total => MissingFields + NoVin + NotMatching + Failed + ExtractionFailed + Repeat + NewCar + Sold + NoPriceListed + PriusPrime + CarMaxDealer;
 
     public DroppedBreakdown Plus(DroppedBreakdown other) => new(
         MissingFields + other.MissingFields,
@@ -180,7 +191,8 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
         NewCar + other.NewCar,
         Sold + other.Sold,
         NoPriceListed + other.NoPriceListed,
-        PriusPrime + other.PriusPrime);
+        PriusPrime + other.PriusPrime,
+        CarMaxDealer + other.CarMaxDealer);
 
     public int this[DetailPageOutcome outcome] => outcome switch
     {
@@ -194,6 +206,7 @@ public sealed record DroppedBreakdown(int MissingFields, int NoVin, int NotMatch
         DetailPageOutcome.Sold => Sold,
         DetailPageOutcome.NoPriceListed => NoPriceListed,
         DetailPageOutcome.PriusPrime => PriusPrime,
+        DetailPageOutcome.CarMaxDealer => CarMaxDealer,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "not a dropped outcome"),
     };
 }
@@ -208,8 +221,8 @@ public sealed record DetailWalkTally(int Visited, int Upserted, DroppedBreakdown
 {
     /// <summary>How many of the visited pages spent a slot of the per-pair cap: every visit except
     /// the ones dropped as another model, a repeat VIN, a new car, a sold listing, a page with no
-    /// price listed, or a brand-new Prius Prime.</summary>
-    public int SpentOnCap => Visited - Dropped.NotMatching - Dropped.Repeat - Dropped.NewCar - Dropped.Sold - Dropped.NoPriceListed - Dropped.PriusPrime;
+    /// price listed, a brand-new Prius Prime, or a CarMax dealer on a site that skips them.</summary>
+    public int SpentOnCap => Visited - Dropped.NotMatching - Dropped.Repeat - Dropped.NewCar - Dropped.Sold - Dropped.NoPriceListed - Dropped.PriusPrime - Dropped.CarMaxDealer;
 
     public DetailWalkTally Plus(DetailWalkTally other) => new(Visited + other.Visited, Upserted + other.Upserted, Dropped.Plus(other.Dropped), Capped || other.Capped);
 }
@@ -244,6 +257,7 @@ public static class WalkDetailWalk
         int droppedSold = 0;
         int droppedNoPriceListed = 0;
         int droppedPriusPrime = 0;
+        int droppedCarMaxDealer = 0;
         int spentOnCap = 0;
 
         for (int i = 0; i < candidateLinks.Count && spentOnCap < maxDetailPages; i++)
@@ -255,7 +269,7 @@ public static class WalkDetailWalk
 
             visited++;
             DetailPageOutcome outcome = await visitLinkAsync(candidateLinks[i], i, cancellationToken);
-            if (outcome is not (DetailPageOutcome.NotMatching or DetailPageOutcome.Repeat or DetailPageOutcome.NewCar or DetailPageOutcome.Sold or DetailPageOutcome.NoPriceListed or DetailPageOutcome.PriusPrime))
+            if (outcome is not (DetailPageOutcome.NotMatching or DetailPageOutcome.Repeat or DetailPageOutcome.NewCar or DetailPageOutcome.Sold or DetailPageOutcome.NoPriceListed or DetailPageOutcome.PriusPrime or DetailPageOutcome.CarMaxDealer))
             {
                 spentOnCap++;
             }
@@ -295,10 +309,13 @@ public static class WalkDetailWalk
                 case DetailPageOutcome.PriusPrime:
                     droppedPriusPrime++;
                     break;
+                case DetailPageOutcome.CarMaxDealer:
+                    droppedCarMaxDealer++;
+                    break;
             }
         }
 
-        var dropped = new DroppedBreakdown(droppedMissingFields, droppedNoVin, droppedNotMatching, droppedFailed, droppedExtractionFailed, droppedRepeat, droppedNewCar, droppedSold, droppedNoPriceListed, droppedPriusPrime);
+        var dropped = new DroppedBreakdown(droppedMissingFields, droppedNoVin, droppedNotMatching, droppedFailed, droppedExtractionFailed, droppedRepeat, droppedNewCar, droppedSold, droppedNoPriceListed, droppedPriusPrime, droppedCarMaxDealer);
         return new DetailWalkTally(visited, upserted, dropped);
     }
 }

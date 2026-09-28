@@ -166,6 +166,13 @@ public class WalkPairSummaryLineTests
     }
 
     [Fact]
+    public void DroppedCell_CarMaxDealerReason_IsWordedForWhatHappened()
+    {
+        Assert.Equal("carmax, walked by the carmax walk", WalkPairSummaryLine.DroppedCell(new DroppedBreakdown(0, 0, 0, 0, CarMaxDealer: 2)));
+        Assert.Equal("carmax, walked by the carmax walk", WalkOutcomeWording.DroppedReason(DetailPageOutcome.CarMaxDealer));
+    }
+
+    [Fact]
     public void TableCell_OnlyNewCars_NamesTheReasonWithoutARedundantCount()
     {
         Assert.Equal("11 (new-car listing)", WalkPairSummaryLine.TableCell(new DroppedBreakdown(0, 0, 0, 0, NewCar: 11)));

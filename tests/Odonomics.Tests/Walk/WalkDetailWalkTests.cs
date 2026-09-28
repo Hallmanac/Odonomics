@@ -109,7 +109,7 @@ public class WalkDetailWalkTests
     [Fact]
     public async Task RunAsync_EveryOutcomeKind_TalliesEachIntoItsOwnDroppedReason()
     {
-        List<string> links = Links(11);
+        List<string> links = Links(12);
         DetailPageOutcome[] outcomes =
         [
             DetailPageOutcome.NewCar,
@@ -122,17 +122,18 @@ public class WalkDetailWalkTests
             DetailPageOutcome.ExtractionFailed,
             DetailPageOutcome.Repeat,
             DetailPageOutcome.PriusPrime,
+            DetailPageOutcome.CarMaxDealer,
             DetailPageOutcome.Upserted,
         ];
 
         DetailWalkTally tally = await WalkDetailWalk.RunAsync(
             links,
-            maxDetailPages: 11,
+            maxDetailPages: 12,
             (_, i, _) => Task.FromResult(outcomes[i]),
             _ => Task.CompletedTask,
             CancellationToken.None);
 
-        Assert.Equal(11, tally.Visited);
+        Assert.Equal(12, tally.Visited);
         Assert.Equal(1, tally.Upserted);
         Assert.Equal(1, tally.Dropped.NewCar);
         Assert.Equal(1, tally.Dropped.Sold);
@@ -144,7 +145,8 @@ public class WalkDetailWalkTests
         Assert.Equal(1, tally.Dropped.ExtractionFailed);
         Assert.Equal(1, tally.Dropped.Repeat);
         Assert.Equal(1, tally.Dropped.PriusPrime);
-        Assert.Equal(10, tally.Dropped.Total);
+        Assert.Equal(1, tally.Dropped.CarMaxDealer);
+        Assert.Equal(11, tally.Dropped.Total);
         Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
     }
 
@@ -207,6 +209,25 @@ public class WalkDetailWalkTests
         Assert.Equal(8, tally.Visited);
         Assert.Equal(3, tally.Upserted);
         Assert.Equal(5, tally.Dropped.NewCar);
+        Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
+    }
+
+    [Fact]
+    public async Task RunAsync_CarMaxDealerPages_NeverSpendTheCap()
+    {
+        List<string> links = Links(8);
+
+        DetailWalkTally tally = await WalkDetailWalk.RunAsync(
+            links,
+            maxDetailPages: 3,
+            (_, i, _) => Task.FromResult(i < 5 ? DetailPageOutcome.CarMaxDealer : DetailPageOutcome.Upserted),
+            _ => Task.CompletedTask,
+            CancellationToken.None);
+
+        Assert.Equal(8, tally.Visited);
+        Assert.Equal(3, tally.Upserted);
+        Assert.Equal(5, tally.Dropped.CarMaxDealer);
+        Assert.Equal(3, tally.SpentOnCap);
         Assert.Equal(tally.Visited, tally.Upserted + tally.Dropped.Total);
     }
 

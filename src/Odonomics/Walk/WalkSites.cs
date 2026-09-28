@@ -160,7 +160,8 @@ public sealed record WalkSite(
     Func<string, int?>? CardDistanceReader = null,
     bool WaitsForRenderedCards = false,
     Func<string, CardVehicleFacets>? CardFacetsReader = null,
-    Regex? NoPriceCardPattern = null)
+    Regex? NoPriceCardPattern = null,
+    bool SkipsCarMaxDealer = false)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -535,6 +536,23 @@ public sealed record WalkSite(
     private bool NamesNoDealerBeyondTheSite(string? extractedDealerName) =>
         string.IsNullOrWhiteSpace(extractedDealerName)
         || DealerNormalizer.Normalize(extractedDealerName) == DealerNormalizer.Normalize(FallbackDealerName);
+
+    /// <summary>True when <paramref name="dealerName"/> (the dealer <see cref="ResolveDealer"/> just
+    /// resolved) names one of CarMax's own stores, on a site whose <see cref="SkipsCarMaxDealer"/>
+    /// flag is set: cars.com carries CarMax's whole nationwide inventory on its own search results
+    /// (a "$1,999 delivery to Orlando, FL (14 mi)" card for a car thousands of miles off), which
+    /// CarMax's own walk already covers end to end, and cars.com's delivery offer does not actually
+    /// hold for a car CarMax will only sell "Only at" its one store. cars.com has no
+    /// <see cref="DetailDealerReader"/> of its own, so its dealer is whatever extraction read off
+    /// the page verbatim, the same full "CarMax &lt;city&gt;" name <see cref="CarMaxStores.Read"/>
+    /// resolves for CarMax's own pages ("CarMax Tri-Cities Kennewick", "CarMax Norco"), so matching
+    /// on the "CarMax" prefix alone is enough: no curated store list is needed the way
+    /// <see cref="CarMaxStores.OnlyAtStoreName"/>'s distance check needs one, since this only has to
+    /// tell a CarMax store from an ordinary dealer, not measure how far away it is. False for a site
+    /// with the flag unset, or when <paramref name="dealerName"/> is null or does not start with
+    /// "CarMax".</summary>
+    public bool IsCarMaxDealer(string? dealerName) =>
+        SkipsCarMaxDealer && dealerName is not null && dealerName.StartsWith(WalkSites.CarMaxDealerName, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>One anchor read off a search page: its resolved href, its visible text, which on a
@@ -741,7 +759,12 @@ public static class WalkSites
         // A fuse-card can still be empty when the page first loads; reading it then risks the
         // dollar-ancestor walk landing on the results list and misreading a neighbor's distance as
         // this card's (walk run 20260927-113258).
-        WaitsForRenderedCards: true);
+        WaitsForRenderedCards: true,
+        // CarMax is walked nationwide by its own site, and cars.com's own delivery offer does not
+        // hold for an "Only at" CarMax car anyway, so a CarMax dealer on cars.com is always skipped
+        // rather than saved as a second, redundant posting (see WalkCommand.VisitLinkAsync and
+        // Ledger.VehiclePricing).
+        SkipsCarMaxDealer: true);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
