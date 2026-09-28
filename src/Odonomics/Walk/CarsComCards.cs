@@ -41,4 +41,16 @@ public static class CarsComCards
             ? new CardFee(decimal.Parse(match.Groups["fee"].Value, NumberStyles.AllowThousands | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture))
             : null;
     }
+
+    private static readonly Regex DeliveryToLine = new(@"\bdelivery\s+to\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>Whether <paramref name="cardText"/> reads as one of CarMax's own nationwide-inventory
+    /// listings carried on cars.com's own search, rather than an ordinary dealer's card that also happens
+    /// to charge its own delivery fee ("$150 delivery from Palmetto Bay, FL (205 mi)" is still an ordinary
+    /// dealer, 130 miles or more away every time it has turned up in a recorded walk). <see cref="ReadFee"/>
+    /// alone cannot tell the two apart, since both print "$N delivery"; a CarMax card is the one that either
+    /// names CarMax as the dealer right in its own text or reads its fee as delivery <em>to</em> the
+    /// search's own zip rather than <em>from</em> the seller's (lesson 4a2cbaa3).</summary>
+    public static bool ReadsAsCarMax(string cardText) =>
+        DeliveryToLine.IsMatch(cardText) || cardText.Contains(WalkSites.CarMaxDealerName, StringComparison.OrdinalIgnoreCase);
 }

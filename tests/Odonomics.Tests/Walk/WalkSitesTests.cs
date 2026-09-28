@@ -228,6 +228,26 @@ public class WalkSitesTests
     }
 
     [Fact]
+    public void CarsCom_ScrollLoadsMoreCards_IsSetAndOtherSitesAreNot()
+    {
+        Assert.True(WalkSites.CarsCom.ScrollLoadsMoreCards);
+        Assert.False(WalkSites.Carvana.ScrollLoadsMoreCards);
+        Assert.False(WalkSites.Autotrader.ScrollLoadsMoreCards);
+        Assert.False(WalkSites.CarMax.ScrollLoadsMoreCards);
+        Assert.False(WalkSites.CarGurus.ScrollLoadsMoreCards);
+    }
+
+    [Fact]
+    public void CarsCom_CarMaxCardReader_TellsCarMaxDeliveryFromAnOrdinaryDealersOwnDeliveryFee()
+    {
+        Assert.NotNull(WalkSites.CarsCom.CarMaxCardReader);
+        Assert.True(WalkSites.CarsCom.CarMaxCardReader("$249 delivery to Orlando, FL (14 mi)"));
+        Assert.True(WalkSites.CarsCom.CarMaxCardReader("CarMax Town Center\n4.3\nOrlando, FL (5 mi)"));
+        Assert.False(WalkSites.CarsCom.CarMaxCardReader("$150 delivery from Palmetto Bay, FL (205 mi)"));
+        Assert.False(WalkSites.CarsCom.CarMaxCardReader("Sanford, FL (28 mi)"));
+    }
+
+    [Fact]
     public void Carvana_BuildSearchUrls_NonHybridModel_HasNoFuelTypesFilter()
     {
         string url = WalkSites.Carvana.BuildSearchUrls(Query("Honda", "Insight")).Single();
