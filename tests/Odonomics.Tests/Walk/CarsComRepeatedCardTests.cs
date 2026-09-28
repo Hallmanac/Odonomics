@@ -76,7 +76,7 @@ public class CarsComRepeatedCardTests
         // adds nothing new and paging stops there; a fourth page is never requested.
         Assert.Equal([1, 2, 3], browser.Loads);
 
-        // Five organic cards: page 1's Driver's Mart Sanford and Toyota of Melbourne, plus the three that
+        // Six organic cards: page 1's Driver's Mart Sanford and Toyota of Melbourne, plus the three that
         // go on to repeat (Beaver Toyota, Buick Lakeland, Westshore Honda), and page 2's own new Ogden
         // Motors. Two CarMax delivery cards on page 1 and one on page 2 are excluded as CarMax rather than
         // pooled, so they never appear here at all.
