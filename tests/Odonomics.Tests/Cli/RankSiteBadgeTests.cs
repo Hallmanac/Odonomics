@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Odonomics.Cli;
 using Odonomics.Cli.Commands;
 using Odonomics.Domain;
@@ -206,7 +207,38 @@ public class RankSiteBadgeTests
     }
 
     [Fact]
-    public void Rank_AReservedCarMaxPosting_ShowsTheNoteBesideTheRowAndStillRanksIt()
+    public void Rank_AVehicleWithAnotherLivePostingNotReserved_ShowsTheNoteBesideTheRowAndStillRanksIt()
+    {
+        // The cheapest posting to take home is still the reserved carmax one (cheaper than the
+        // untouched cars.com posting), so it still drives the price and the note shown, but the
+        // vehicle isn't excluded: it has another live posting (cars.com) that isn't reserved.
+        List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
+        ledger[0].Postings[0].Source = "carmax";
+        ledger[0].Postings[0].Attributes =
+        [
+            .. ledger[0].Postings[0].Attributes,
+            new PostingAttributeEntity { PostingId = 0, Name = PostingAttributeNames.Availability, Value = CarMaxStores.Reserved, ObservedRunId = 1 },
+        ];
+        ledger[0].Postings.Add(new PostingEntity
+        {
+            VehicleVin = ledger[0].Vin,
+            Source = "cars.com",
+            Url = $"https://example.com/cars.com/{ledger[0].Vin}",
+            FirstSeen = RunTime,
+            LastSeen = RunTime,
+            PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 26000m, ObservedAt = RunTime }],
+        });
+
+        string[] plainLines = Render(Rank(FixtureLedger(withBadges: true)));
+        string[] reservedLines = Render(Rank(ledger));
+
+        Assert.Equal(VinOrder(plainLines), VinOrder(reservedLines));
+        Assert.Contains(CarMaxStores.Reserved, string.Concat(reservedLines));
+        Assert.DoesNotContain(CarMaxStores.Reserved, string.Concat(plainLines));
+    }
+
+    [Fact]
+    public void Rank_AVehicleWithOnlyAReservedCarMaxPosting_IsExcludedWithReason()
     {
         List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
         ledger[0].Postings[0].Source = "carmax";
@@ -216,12 +248,35 @@ public class RankSiteBadgeTests
             new PostingAttributeEntity { PostingId = 0, Name = PostingAttributeNames.Availability, Value = CarMaxStores.Reserved, ObservedRunId = 1 },
         ];
 
-        string[] plainLines = Render(Rank(FixtureLedger(withBadges: true)));
-        string[] reservedLines = Render(Rank(ledger));
+        List<Score> scores = Rank(ledger);
+        string[] lines = Render(scores);
 
-        Assert.Equal(VinOrder(plainLines), VinOrder(reservedLines));
-        Assert.Contains(CarMaxStores.Reserved, string.Concat(reservedLines));
-        Assert.DoesNotContain(CarMaxStores.Reserved, string.Concat(plainLines));
+        Score excludedScore = scores.Single(s => s.Vehicle.Vin == ledger[0].Vin);
+        Assert.False(excludedScore.Passes);
+        Assert.Contains(excludedScore.FailureReasons, r => r.Contains("reserved") && r.Contains("in transit"));
+        Assert.Contains(lines, l => l.Contains("Ranked (3)"));
+        Assert.Contains(lines, l => l.Contains("Excluded (1)"));
+        // The Reasons column wraps a reason this long across several of the table's own printed
+        // lines, each with its own border padding, so the words are only contiguous once that
+        // border noise and the wrap's own line breaks are collapsed back to plain single spaces.
+        string output = Regex.Replace(string.Join(' ', lines).Replace('│', ' '), @"\s+", " ");
+        Assert.Contains(ledger[0].Vin, output);
+        Assert.Contains("every posting is reserved for another buyer or in transit, not yet purchasable", output);
+    }
+
+    [Fact]
+    public void Rank_AVehicleWhoseReservationClears_IsRankedAgainWithNoManualStep()
+    {
+        List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
+        ledger[0].Postings[0].Source = "carmax";
+        ledger[0].Postings[0].Attributes = [];
+        ledger[0].Postings[0].AvailabilityClearedAt = RunTime;
+
+        List<Score> scores = Rank(ledger);
+
+        Score clearedScore = scores.Single(s => s.Vehicle.Vin == ledger[0].Vin);
+        Assert.True(clearedScore.Passes);
+        Assert.Null(clearedScore.Vehicle.Availability);
     }
 
     [Fact]
