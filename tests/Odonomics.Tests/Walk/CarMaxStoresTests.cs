@@ -118,6 +118,37 @@ public class CarMaxStoresTests
         Assert.Null(CarMaxStores.DistanceMilesFromZip("Nowhere", "32833"));
     }
 
+    // Doral and Ft. Lauderdale are the two "Only at" stores the project's own recorded CarMax search
+    // (carmax-camry-hybrid-search.txt) actually shows; Daytona is the one CarMaxBackfillTests shows.
+    // All three were missing from StoreLocations, which silently let a real out-of-radius CarMax car
+    // rank and price as though it were purchasable.
+    [Fact]
+    public void DistanceMilesFromZip_DoralStoreFromTheDaughterScenarioZip_IsWellOverTheFiftyMileRadius()
+    {
+        double? miles = CarMaxStores.DistanceMilesFromZip("Doral", "32833");
+
+        Assert.NotNull(miles);
+        Assert.True(miles > 150, $"expected Doral to be over 150 miles from 32833, was {miles}");
+    }
+
+    [Fact]
+    public void DistanceMilesFromZip_FtLauderdaleStoreFromTheDaughterScenarioZip_IsWellOverTheFiftyMileRadius()
+    {
+        double? miles = CarMaxStores.DistanceMilesFromZip("Ft. Lauderdale", "32833");
+
+        Assert.NotNull(miles);
+        Assert.True(miles > 150, $"expected Ft. Lauderdale to be over 150 miles from 32833, was {miles}");
+    }
+
+    [Fact]
+    public void DistanceMilesFromZip_DaytonaStoreFromTheDaughterScenarioZip_IsWellInsideTheFiftyMileRadius()
+    {
+        double? miles = CarMaxStores.DistanceMilesFromZip("Daytona", "32833");
+
+        Assert.NotNull(miles);
+        Assert.True(miles < 50, $"expected the Daytona store to be under 50 miles from 32833, was {miles}");
+    }
+
     [Fact]
     public void DistanceMilesFromZip_UnknownZip_ReturnsNull()
     {
