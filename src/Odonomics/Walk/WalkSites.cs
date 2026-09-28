@@ -113,7 +113,15 @@ namespace Odonomics.Walk;
 /// <see cref="CollectDetailCards"/>), the same as a beyond-radius or no-distance card, but unlike one of those a
 /// known posting behind it is still kept current from its card (see <see cref="WalkSearchPages.CollectLinksAsync"/>)
 /// rather than left to read as gone for want of a visit this walk was never going to spend on it. Null for a site
-/// whose own search facets are trusted as they come, whose cards are then never checked against them.</summary>
+/// whose own search facets are trusted as they come, whose cards are then never checked against them.
+/// <paramref name="NoPriceCardPattern"/> matches a card that states plainly it has no price (cargurus's "No Price
+/// Listed"), checked ahead of the price-ceiling check so such a card is never pooled and never mistaken for one
+/// whose price this walk simply couldn't read: it is instead told to <c>onNoPriceStated</c> (see
+/// <see cref="CollectDetailCards"/> and <see cref="WalkSearchPages.CollectLinksAsync"/>), the same way a
+/// below-floor or over-ceiling card is, with a known posting behind it still touched current from its card. A
+/// card like this can still carry a shipping-only line ("Price includes $1,498 shipping") that names no price of
+/// its own, which <see cref="ReadCardPrice"/> already never reads as one; null for a site with no such
+/// statement.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -149,7 +157,8 @@ public sealed record WalkSite(
     Func<string, string?, string?, int?, string?>? DetailTitleModelReader = null,
     Func<string, int?>? CardDistanceReader = null,
     bool WaitsForRenderedCards = false,
-    Func<string, CardVehicleFacets>? CardFacetsReader = null)
+    Func<string, CardVehicleFacets>? CardFacetsReader = null,
+    Regex? NoPriceCardPattern = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -204,7 +213,12 @@ public sealed record WalkSite(
     /// ceiling. Checked after the radius check rather than ahead of it, unlike the facet checks: a card a
     /// site's own ambiguous multi-card wrapper text already dropped as beyond radius or stating no distance
     /// (cars.com: see <paramref name="onNoDistance"/> above) never has a neighbouring card's price read as
-    /// its own and mistaken for this card being over or under the ceiling.</summary>
+    /// its own and mistaken for this card being over or under the ceiling. When this site has a
+    /// <see cref="NoPriceCardPattern"/>, checked ahead of the price-ceiling check (and regardless of whether
+    /// <paramref name="maxPrice"/> is given at all), a card its own text matches (cargurus's "No Price Listed") is
+    /// told to <paramref name="onNoPriceStated"/> instead of ever being pooled, so a card cargurus itself says has
+    /// no price never spends a detail visit finding that out the slow way, and its "Price includes $1,498
+    /// shipping" line is never read as if it were the price.</summary>
     public IReadOnlyList<PageLink> CollectDetailCards(
         IReadOnlyList<PageLink> links,
         int poolSize,
@@ -217,7 +231,8 @@ public sealed record WalkSite(
         Action<PageLink>? onBelowYearFloor = null,
         Action<PageLink>? onOverMileageCap = null,
         int? maxPrice = null,
-        Action<PageLink>? onOverPriceCeiling = null)
+        Action<PageLink>? onOverPriceCeiling = null,
+        Action<PageLink>? onNoPriceStated = null)
     {
         int? statedCount = MatchCountIn(searchPageText);
         if (statedCount is int matchCount)
@@ -298,6 +313,27 @@ public sealed record WalkSite(
             }
 
             candidates = inRadius;
+        }
+
+        // Checked ahead of the price ceiling below, and regardless of whether one is even set: a card
+        // that states plainly it has no price (cargurus's "No Price Listed") is dropped here so it is
+        // never pooled and never mistaken, by the ceiling check below, for a card whose price this walk
+        // simply never found a way to read.
+        if (NoPriceCardPattern is not null)
+        {
+            List<PageLink> priced = [];
+            foreach (PageLink card in candidates)
+            {
+                if (NoPriceCardPattern.IsMatch(card.CardText))
+                {
+                    onNoPriceStated?.Invoke(card);
+                    continue;
+                }
+
+                priced.Add(card);
+            }
+
+            candidates = priced;
         }
 
         // Checked last, after the radius (and no-distance) check above: a card whose text is an
@@ -917,7 +953,10 @@ public static class WalkSites
     /// delivered ("Price includes $462 shipping" is inside it), while a store-transfer detail page also lists the dealer's price at its lot
     /// (see <see cref="WalkSite.AskingPriceFromCard"/>). The card also says whether the price includes the dealer's fees
     /// (see <see cref="FeeStatements.ReadCarGurusCard"/>) and carries CarGurus's deal badge (see
-    /// <see cref="CardBadges.CarGurus"/>). The detail page's text prints the VIN, so no HTML reader is needed for it.</summary>
+    /// <see cref="CardBadges.CarGurus"/>). A card can instead state plainly it has none ("No Price Listed"), even
+    /// while it names a shipping amount of its own ("Price includes $1,498 shipping"), and such a card is dropped
+    /// before it is ever a candidate (see <see cref="CarGurusCards.NoPriceListed"/>) rather than spending a detail
+    /// visit finding that out the slow way. The detail page's text prints the VIN, so no HTML reader is needed for it.</summary>
     public static readonly WalkSite CarGurus = new(
         "cargurus",
         query => query.HybridOnlyFromModelYear is int hybridOnlyYear
@@ -937,6 +976,7 @@ public static class WalkSites
         CardBadgeReader: CardBadges.CarGurus,
         CardFeeReader: CarGurusCards.ReadFee,
         CardFeeStatementReader: FeeStatements.ReadCarGurusCard,
+        NoPriceCardPattern: CarGurusCards.NoPriceListed,
         DetailTitleModelReader: ReadTitleModel);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch

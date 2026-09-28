@@ -99,7 +99,12 @@ public static class WalkSearchPages
     /// considered and the count its own first page stated (null when it stated none), so a caller with
     /// more than one search for the pair (a hybrid-only-from-year model's hybrid and base-model searches)
     /// can compare the two against each other and decide whether the pair's own coverage is full or
-    /// partial (see <see cref="WalkSearchCoverage"/>).</summary>
+    /// partial (see <see cref="WalkSearchCoverage"/>).
+    /// <paramref name="onNoPriceStated"/> is every site's own count of cards that state plainly they have
+    /// no price (cargurus's "No Price Listed"), checked ahead of <paramref name="maxPrice"/> (see
+    /// <see cref="WalkSite.CollectDetailCards"/>): such a card is never pooled either, but is touched from
+    /// its card first, the same as an over-ceiling one, and counts toward the page's own tally of links
+    /// added, once per canonical URL for the whole search, the same way an over-ceiling card does.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -123,7 +128,8 @@ public static class WalkSearchPages
         Action? onOverMileageCap = null,
         int? maxPrice = null,
         Action? onOverPriceCeiling = null,
-        Action<int, int?>? onSearchCoverageKnown = null)
+        Action<int, int?>? onSearchCoverageKnown = null,
+        Action? onNoPriceStated = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -131,6 +137,7 @@ public static class WalkSearchPages
         HashSet<string> canonicalUrls = [];
         Dictionary<string, Action?> reportedOutOfRadius = [];
         HashSet<string> reportedOverPriceCeiling = [];
+        HashSet<string> reportedNoPriceStated = [];
         HashSet<string> everUnrenderedCanonicalUrls = [];
         int linkBound = int.MaxValue;
         int considered = 0;
@@ -187,6 +194,7 @@ public static class WalkSearchPages
             List<PageLink> belowFloorCards = [];
             List<PageLink> overMileageCards = [];
             List<PageLink> overPriceCeilingCards = [];
+            List<PageLink> noPriceCards = [];
             foreach (PageLink card in site.CollectDetailCards(
                 renderedLinks,
                 int.MaxValue,
@@ -199,7 +207,8 @@ public static class WalkSearchPages
                 belowFloorCards.Add,
                 overMileageCards.Add,
                 maxPrice,
-                overPriceCeilingCards.Add))
+                overPriceCeilingCards.Add,
+                noPriceCards.Add))
             {
                 if (considered >= linkBound)
                 {
@@ -273,6 +282,24 @@ public static class WalkSearchPages
                 added++;
                 await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
                 onOverPriceCeiling?.Invoke();
+            }
+
+            // A card stating plainly it has no price is still one of the page's exact matches, counted the
+            // same way an over-ceiling one is, and for the same reason: a page made up only of such cards
+            // (or repeats of one a padded later page keeps showing) must still read as adding something, or
+            // paging would stop before the site's real results are read.
+            foreach (PageLink card in noPriceCards)
+            {
+                string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
+                if (canonicalUrls.Contains(canonicalUrl) || !reportedNoPriceStated.Add(canonicalUrl))
+                {
+                    continue;
+                }
+
+                considered++;
+                added++;
+                await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                onNoPriceStated?.Invoke();
             }
 
             // A page that adds nothing, or a stated count already reached, means the site's results are

@@ -62,6 +62,29 @@ public class CarGurusCardsTests
         Assert.Null(CardPrices.CarGurusPrice(card));
     }
 
+    // Recorded card for JTDADABU0T3033887 (walk run 20260928-010506, prius): states plainly it has no
+    // price, even while it names its shipping amount separately.
+    private const string NoPriceCard =
+        "Save this listing\n\n \n\n2026 Toyota Prius\nLearn more about this 2026 Toyota Prius\n\nXLE AWD\n\n1,890 mi\n\n"
+        + "Home delivery from Downers Grove, IL\nPrice includes $1,498 shipping\nNo Rating\nNo Price Listed\nCheck availability";
+
+    [Fact]
+    public void NoPriceListed_RecordedNoPriceCard_Matches()
+    {
+        Assert.Matches(CarGurusCards.NoPriceListed, NoPriceCard);
+        Assert.Null(CardPrices.CarGurusPrice(NoPriceCard));
+        Assert.Equal(1498m, CarGurusCards.IncludedShipping(NoPriceCard));
+    }
+
+    [Theory]
+    [InlineData("457043244")]
+    [InlineData("459400072")]
+    [InlineData("458757260")]
+    public void NoPriceListed_RecordedPricedCard_DoesNotMatch(string listingId)
+    {
+        Assert.DoesNotMatch(CarGurusCards.NoPriceListed, CardOf(listingId));
+    }
+
     [Theory]
     [InlineData("457043244", 462)]
     [InlineData("459400072", 699)]

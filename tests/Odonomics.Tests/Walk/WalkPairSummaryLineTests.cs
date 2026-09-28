@@ -452,4 +452,24 @@ public class WalkPairSummaryLineTests
 
         Assert.Equal("carmax / Toyota Camry Hybrid: 1 pages, 0 known from cards, 1 saved, 0 dropped, 298 over price ceiling, capped", line);
     }
+
+    [Fact]
+    public void Format_SkippedNoPriceStated_IsNamedAfterTheDroppedTotal()
+    {
+        string line = WalkPairSummaryLine.Format("cargurus", "Toyota", "Prius", pages: 20, known: 18, saved: 18, new DroppedBreakdown(0, 0, 0, 0), skippedNoPriceStated: 2);
+
+        Assert.Equal("cargurus / Toyota Prius: 20 pages, 18 known from cards, 18 saved, 0 dropped, 2 no price stated", line);
+    }
+
+    [Fact]
+    public void Format_SkippedNoPriceStated_IsNamedLastAfterOverPriceCeiling()
+    {
+        string line = WalkPairSummaryLine.Format(
+            "cargurus", "Toyota", "Prius", pages: 20, known: 18, saved: 18, new DroppedBreakdown(0, 0, 0, 0),
+            skippedOverPriceCeiling: 3, skippedNoPriceStated: 2);
+
+        Assert.Equal(
+            "cargurus / Toyota Prius: 20 pages, 18 known from cards, 18 saved, 0 dropped, 3 over price ceiling, 2 no price stated",
+            line);
+    }
 }

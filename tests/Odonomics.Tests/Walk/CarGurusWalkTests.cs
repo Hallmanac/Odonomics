@@ -547,4 +547,62 @@ public class CarGurusWalkTests
     {
         Assert.Equal(new ResolvedDealer(null, "Sanford, FL", IsFallback: false), WalkSites.CarGurus.ResolveDealer(null, "Sanford, FL"));
     }
+
+    [Fact]
+    public void NoPriceCardPattern_RecordedNoPriceCard_Matches()
+    {
+        string card = Assert.Single(Cards("cargurus-prius-no-price-card.json")).CardText;
+
+        Assert.Matches(WalkSites.CarGurus.NoPriceCardPattern!, card);
+        Assert.Null(WalkSites.CarGurus.ReadCardPrice(card));
+        Assert.Equal(1498m, CarGurusCards.IncludedShipping(card));
+    }
+
+    [Fact]
+    public void CollectDetailCards_RecordedNoPriceCardForJTDADABU0T3033887_IsSkippedAndItsShippingAmountIsNeverTakenAsThePrice()
+    {
+        List<PageLink> cards = Cards("cargurus-prius-no-price-card.json");
+        List<PageLink> noPriceStated = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarGurus.CollectDetailCards(
+            cards, poolSize: 60, onNoPriceStated: noPriceStated.Add);
+
+        Assert.Empty(kept);
+        PageLink dropped = Assert.Single(noPriceStated);
+        Assert.Null(WalkSites.CarGurus.ReadCardPrice(dropped.CardText));
+    }
+
+    [Fact]
+    public async Task CollectLinksAsync_RecordedNoPriceCard_IsSkippedButAKnownPostingBehindItIsStillTouched()
+    {
+        List<PageLink> cards = Cards("cargurus-prius-no-price-card.json");
+        int noPriceStated = 0;
+        var checkedAsKnownOrNew = new List<string>();
+
+        Task<SearchPageContent> LoadPageAsync(string url, int pageNumber, CancellationToken ct) =>
+            Task.FromResult(new SearchPageContent(cards));
+
+        ValueTask<bool> TrackTouches(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken ct)
+        {
+            checkedAsKnownOrNew.Add(canonicalUrl);
+            Assert.Null(cardPrice);
+            return NoneKnown(canonicalUrl, cardPrice, cardBadges, ct);
+        }
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarGurus,
+            "https://www.cargurus.com/search?zip=32833&distance=50&makeModelTrimPaths=m7%2Cm7%2Fd15&startYear=2019&maxMileage=100000",
+            WalkPairSearches.UnboundedPool,
+            TrackTouches,
+            LoadPageAsync,
+            (_, _) => { },
+            _ => { },
+            () => { },
+            CancellationToken.None,
+            onNoPriceStated: () => noPriceStated++);
+
+        Assert.Empty(pool);
+        Assert.Equal(1, noPriceStated);
+        Assert.Contains(WalkSites.CanonicalDetailUrl(cards[0].Href), checkedAsKnownOrNew);
+    }
 }
