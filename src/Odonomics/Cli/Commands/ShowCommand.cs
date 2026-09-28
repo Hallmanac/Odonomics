@@ -47,9 +47,30 @@ public static class ShowCommand
         IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment)];
 
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, scenario.Fulfillment);
-        (CostBreakdown? monthlyCost, string? unavailable) = MonthlyCostFor($"{vehicle.Make} {vehicle.Model}", purchasePrice?.Total, scenario);
+        (CostBreakdown? monthlyCost, string? unavailable) = OverPriceCeiling(purchasePrice, scenario.Filters.MaxPrice) is string ceilingReason
+            ? (null, ceilingReason)
+            : MonthlyCostFor($"{vehicle.Make} {vehicle.Model}", purchasePrice?.Total, scenario);
         ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice);
         return 0;
+    }
+
+    /// <summary>Why <paramref name="purchasePrice"/>'s vehicle can't be priced because of the scenario's own
+    /// price ceiling (see <see cref="Domain.HardFilters.MaxPrice"/>), the same figure `odo rank` and `odo budget`
+    /// check against (see <see cref="Scorer.FilterReasons"/>): its asking price plus its shipping fee, unless
+    /// that fee is already in the asking price (see <see cref="PurchasePrice.ShippingIncluded"/>). Null when the
+    /// scenario sets no ceiling, there's no current price to check, or the price is within it, so `odo show`'s
+    /// cost line is unaffected until then.</summary>
+    public static string? OverPriceCeiling(PurchasePrice? purchasePrice, int? maxPrice)
+    {
+        if (purchasePrice is not PurchasePrice price || maxPrice is not int ceiling)
+        {
+            return null;
+        }
+
+        decimal priceWithShipping = price.Asking + (price.ShippingIncluded ? 0m : price.ShippingFee ?? 0m);
+        return priceWithShipping > ceiling
+            ? $"price ${priceWithShipping:N0} exceeds the maximum ${ceiling:N0}"
+            : null;
     }
 
     /// <summary>Prices one vehicle the way `odo rank` does (see <see cref="Scorer.ComputeCost"/>), but
@@ -60,7 +81,9 @@ public static class ShowCommand
     /// relabelled it: the scenario carries no insurance or mpg line for it at all now that it's
     /// excluded, so its monthly cost is never computed, the same as any other model missing that
     /// data. <paramref name="purchasePrice"/> is what the car costs to take home, its asking price
-    /// plus the fee for the scenario's fulfillment and any itemized fees (see <see cref="PurchasePrice.Total"/>).</summary>
+    /// plus the fee for the scenario's fulfillment and any itemized fees (see <see cref="PurchasePrice.Total"/>).
+    /// The price ceiling is checked ahead of this, in <see cref="RunAsync"/>, since it needs the asking price
+    /// and shipping fee separately rather than this method's already-totaled figure.</summary>
     public static (CostBreakdown? Cost, string? Unavailable) MonthlyCostFor(string makeModel, decimal? purchasePrice, Scenario scenario)
     {
         if (purchasePrice is not decimal price)

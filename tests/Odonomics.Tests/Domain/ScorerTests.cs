@@ -38,6 +38,7 @@ public class ScorerTests
             MinModelYearOverrides = new Dictionary<string, int> { ["Toyota Camry Hybrid"] = 2018 },
             MaxMileage = 100000,
             AllowedModels = ["Toyota Prius", "Honda Insight", "Toyota Camry Hybrid"],
+            MaxPrice = 25000,
         },
         TargetMonthlyBudgets = [300, 400],
     };
@@ -94,6 +95,74 @@ public class ScorerTests
         IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
 
         Assert.Contains(reasons, r => r.Contains("mileage"));
+    }
+
+    [Fact]
+    public void FilterReasons_CurrentPriceAboveTheCeiling_ReportsReason()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 25001m);
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.Contains(reasons, r => r.Contains("price") && r.Contains("exceeds the maximum"));
+    }
+
+    [Fact]
+    public void FilterReasons_CurrentPriceAtTheCeiling_Passes()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 25000m);
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.Empty(reasons);
+    }
+
+    [Fact]
+    public void FilterReasons_PriceUnderTheCeilingButShippingFeePushesItOver_ReportsReason()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 24998m) with { ShippingFee = 499m };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.Contains(reasons, r => r.Contains("price") && r.Contains("exceeds the maximum"));
+    }
+
+    [Fact]
+    public void FilterReasons_PriceOverTheCeilingButShippingFeeIsAlreadyIncluded_Passes()
+    {
+        // A cargurus-style all-in listing: its asking price already has the shipping fee inside it,
+        // so the fee is shown but never added a second time, the same as the cost model itself.
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 24998m) with { ShippingFee = 499m, ShippingIncluded = true };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.Empty(reasons);
+    }
+
+    [Fact]
+    public void FilterReasons_NoCurrentPrice_NeverReportsThePriceCeilingReason()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, price: null);
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.DoesNotContain(reasons, r => r.Contains("exceeds the maximum $"));
+    }
+
+    [Fact]
+    public void FilterReasons_ScenarioSetsNoPriceCeiling_NeverReportsThePriceCeilingReason()
+    {
+        Scenario scenario = BuildScenario() with { Filters = BuildScenario().Filters with { MaxPrice = null } };
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 99999m);
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.DoesNotContain(reasons, r => r.Contains("exceeds the maximum $"));
     }
 
     [Fact]

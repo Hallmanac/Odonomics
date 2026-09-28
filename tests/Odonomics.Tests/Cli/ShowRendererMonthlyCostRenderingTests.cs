@@ -187,6 +187,48 @@ public class ShowRendererMonthlyCostRenderingTests
     }
 
     [Fact]
+    public void OverPriceCeiling_AskingPriceAboveTheCeiling_ExplainsInsteadOfPricing()
+    {
+        string? reason = ShowCommand.OverPriceCeiling(new PurchasePrice(25001m, null), maxPrice: 25000);
+
+        Assert.Contains("exceeds the maximum", reason);
+    }
+
+    [Fact]
+    public void OverPriceCeiling_AskingPriceAtTheCeiling_IsNull()
+    {
+        Assert.Null(ShowCommand.OverPriceCeiling(new PurchasePrice(25000m, null), maxPrice: 25000));
+    }
+
+    [Fact]
+    public void OverPriceCeiling_ShippingFeePushesThePriceOverTheCeiling_ExplainsInsteadOfPricing()
+    {
+        string? reason = ShowCommand.OverPriceCeiling(new PurchasePrice(24998m, 499m), maxPrice: 25000);
+
+        Assert.Contains("exceeds the maximum", reason);
+    }
+
+    [Fact]
+    public void OverPriceCeiling_ShippingFeeAlreadyIncludedInThePrice_IsNotAddedAgain()
+    {
+        var purchasePrice = new PurchasePrice(24998m, 499m, ShippingIncluded: true);
+
+        Assert.Null(ShowCommand.OverPriceCeiling(purchasePrice, maxPrice: 25000));
+    }
+
+    [Fact]
+    public void OverPriceCeiling_ScenarioSetsNoCeiling_IsNull()
+    {
+        Assert.Null(ShowCommand.OverPriceCeiling(new PurchasePrice(99999m, null), maxPrice: null));
+    }
+
+    [Fact]
+    public void OverPriceCeiling_NoCurrentPurchasePrice_IsNull()
+    {
+        Assert.Null(ShowCommand.OverPriceCeiling(null, maxPrice: 25000));
+    }
+
+    [Fact]
     public void RenderMonthlyCost_VehicleWithAShippingFee_PrintsTheFeeOnItsOwnLineUnderTheAskingPrice()
     {
         var purchasePrice = new PurchasePrice(16360m, 1590m);

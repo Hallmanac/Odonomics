@@ -57,6 +57,15 @@ public static class Scorer
             reasons.Add($"mileage {vehicle.Mileage:N0} exceeds the maximum {scenario.Filters.MaxMileage:N0}");
         }
 
+        if (scenario.Filters.MaxPrice is int maxPrice && vehicle.LowestCurrentPrice is decimal currentPrice)
+        {
+            decimal priceWithShipping = currentPrice + (vehicle.ShippingIncluded ? 0m : vehicle.ShippingFee ?? 0m);
+            if (priceWithShipping > maxPrice)
+            {
+                reasons.Add($"price ${priceWithShipping:N0} exceeds the maximum ${maxPrice:N0}");
+            }
+        }
+
         // Spike finding: exclude new stock, since this scenario is shopping used. A vehicle with
         // under 500 miles or a model year beyond the current year is new inventory, not used.
         if (vehicle.Mileage < 500 || vehicle.Year > DateTime.UtcNow.Year)

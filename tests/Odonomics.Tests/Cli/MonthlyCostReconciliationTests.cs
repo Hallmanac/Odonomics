@@ -199,7 +199,10 @@ public class MonthlyCostReconciliationTests
     {
         Scenario scenario = Shipped();
 
-        for (decimal price = 6000m; price <= 35000m; price += 37m)
+        // Capped at the shipped scenario's own price ceiling: a price above it fails Scorer.FilterReasons
+        // and scores with no cost breakdown at all, which this sweep isn't testing.
+        decimal ceiling = scenario.Filters.MaxPrice ?? 35000m;
+        for (decimal price = 6000m; price <= ceiling; price += 37m)
         {
             Score score = ScoreAt(scenario, price);
             IReadOnlyList<RoundedLine> lines = Format.DuringLoanLines(score.Cost!);

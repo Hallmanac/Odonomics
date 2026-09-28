@@ -59,7 +59,7 @@ public class RankSiteBadgeTests
             Vehicle("4T1G11AK0LU000002", 2020, "Prius", 42000,
                 Posting("autotrader", "4T1G11AK0LU000002", 19000m, null, Only(Deal("Good Price"), (PostingAttributeNames.Paperwork, "Online Paperwork")))),
             Vehicle("4T1G11AK0LU000003", 2022, "Prius", 21000,
-                Posting("carvana", "4T1G11AK0LU000003", 26000m, 690m, Only(Deal("Great Deal"), (PostingAttributeNames.Shipping, "Free shipping")))),
+                Posting("carvana", "4T1G11AK0LU000003", 20000m, 690m, Only(Deal("Great Deal"), (PostingAttributeNames.Shipping, "Free shipping")))),
             Vehicle("4T1G11AK0LU000004", 2019, "Corolla Hybrid", 55000,
                 Posting("cars.com", "4T1G11AK0LU000004", 17000m, null, Only(Rating("3.3")))),
         ];
