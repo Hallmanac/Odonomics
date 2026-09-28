@@ -21,10 +21,10 @@ namespace Odonomics.Walk;
 /// every remaining scan. <see cref="RunAsync"/> runs the scan, pauses, and runs it again, up to
 /// <see cref="MaxScans"/> more times, stopping as soon as a scan comes back empty. What it returns after
 /// the last scan is a snapshot, not a verdict: <see cref="StillUnrenderedAsync"/> is what the caller
-/// checks again, right after it has actually read the page's cards, since a card can go on rendering in
-/// the time that takes; only a card still without its own amount at that final check is kept out of the
-/// pool (see <see cref="WalkSearchPages.CollectLinksAsync"/>) rather than let the ambiguous wrapper-text
-/// walk decide its distance for it.
+/// checks again, right before it actually reads the page's cards, since a card can go on rendering in
+/// the time since the scan loop's own last check; only a card still without its own amount at that final
+/// check is kept out of the pool (see <see cref="WalkSearchPages.CollectLinksAsync"/>) rather than let
+/// the ambiguous wrapper-text walk decide its distance for it.
 /// </summary>
 public static class SearchPageCardRenderWait
 {
@@ -105,9 +105,9 @@ public static class SearchPageCardRenderWait
     /// gave up on can still finish rendering in the moments after its last scan (walk run 20260928-134242,
     /// whose cars.com pages were rendering enough slower that many cards <see cref="RunAsync"/> reported
     /// unrendered had already rendered, under their own text rather than a neighbor's, by the time
-    /// <see cref="SearchPageLinks.ReadAsync"/> actually read the page moments later): scrolling again would
+    /// <see cref="SearchPageLinks.ReadAsync"/> went on to actually read the page): scrolling again would
     /// not make that card render any sooner, since it was never the scroll it was waiting on, only more
-    /// real time elapsing. Calling this once more, right after that read, is what tells a card that
+    /// real time elapsing. Calling this once more, right before that read, is what tells a card that
     /// genuinely never rendered from one that simply rendered later than <see cref="RunAsync"/> waited for,
     /// without trusting <see cref="SearchPageLinks.ReadAsync"/>'s own wider ancestor climb to make that
     /// call: that climb can still land on a neighboring card's price for a card whose own fuse-card element
