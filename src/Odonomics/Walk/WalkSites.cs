@@ -93,8 +93,10 @@ namespace Odonomics.Walk;
 /// <paramref name="AskingPriceFromCard"/> says the card's price is the one to store, for a site whose card shows what the buyer pays
 /// delivered (cargurus, whose detail page also lists the dealer's price at its lot, shipping not in it, in a store-transfer breakdown).
 /// <paramref name="DetailDealerReader"/> reads the dealer a detail page names, ahead of the extraction, for a site whose
-/// dealer is one of many stores under a single name that the extraction does not reliably tell from the site itself
-/// (carmax, see <see cref="CarMaxStores"/>); null for a site whose dealer the extraction reads.
+/// dealer is either one of many stores under a single name that the extraction does not reliably tell from the site
+/// itself (carmax, see <see cref="CarMaxStores"/>), or a site with no fallback dealer whose own text names both parts
+/// deterministically enough to read without the extraction (cargurus, see <see cref="CarGurusDealer"/>); null for a
+/// site whose dealer the extraction reads unaided.
 /// <paramref name="DetailTitleModelReader"/> reads the model off a detail page's own title line ("2026 Toyota Camry SE Sedan
 /// 4D"), for a site whose extraction can leave the model blank on a page that prints it there (every site sets this; see
 /// <see cref="ReadTitleModel"/>); null for a site whose extraction is taken as it comes.
@@ -494,7 +496,13 @@ public sealed record WalkSite(
     /// no location instead: the extraction would read a person's name and city off it, and a person is
     /// not a dealer row. That name is a fact the page states, not a fallback, so it is not flagged as one.
     /// A store the site's <see cref="DetailDealerReader"/> finds in <paramref name="pageText"/> is the dealer, whatever
-    /// extraction returned, and is not a fallback either.</summary>
+    /// extraction returned, and is not a fallback either. When the reader names only a name or only a
+    /// location (a delivery-only CarGurus page whose "Dealer" block gives a name but whose only city is
+    /// in a street address the reader does not parse, or a page whose "Dealer" block names nobody but
+    /// whose description names one in free text the reader does not look at), the half it left null is
+    /// filled from the extraction rather than dropped: taking the reader's result whole even when it is
+    /// half empty would otherwise send the posting to a dealer row missing the half the extraction did
+    /// read, which is exactly the "partial reading replaces a better one" this method exists to avoid.</summary>
     public ResolvedDealer ResolveDealer(string? extractedDealerName, string? extractedDealerLocation, string? pageText = null)
     {
         if (ReadsAsPrivateSeller(pageText))
@@ -504,7 +512,13 @@ public sealed record WalkSite(
 
         if (pageText is not null && DetailDealerReader?.Invoke(pageText) is { } pageDealer)
         {
-            return pageDealer;
+            return pageDealer.Name is not null && pageDealer.Location is not null
+                ? pageDealer
+                : pageDealer with
+                {
+                    Name = pageDealer.Name ?? ResolveDealerName(extractedDealerName),
+                    Location = pageDealer.Location ?? extractedDealerLocation,
+                };
         }
 
         return FallbackDealerName is not null && NamesNoDealerBeyondTheSite(extractedDealerName)

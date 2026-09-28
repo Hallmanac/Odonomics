@@ -642,6 +642,39 @@ public class CarGurusWalkTests
     }
 
     [Fact]
+    public void ResolveDealer_PageNamingOnlyADealerName_FillsTheLocationFromTheExtraction()
+    {
+        // A "Free Delivery to <city>" page (recorded detail for HGreg Nissan Kendall): the Dealer block
+        // gives a name, but neither the pickup line nor the mileage-away line is present, since the
+        // title line under it names the buyer's delivery destination instead. The only city on the page
+        // is the street address under the Dealer name, which CarGurusDealer does not parse, so the
+        // reader alone would return the name with no location. The extraction reads that same address
+        // city in free text, and ResolveDealer must fill the half the reader left null from it rather
+        // than send the posting to a dealer row with no location.
+        string pageText = "Mileage: 50,722 · Free Delivery to Orlando, FL\n\nDealer\nHGreg Nissan Kendall\n\nOpen • Closes at 9:00 PM\n\n(551) 553-7269\n17305 S Dixie Hwy, Palmetto Bay, FL 33157\nView inventory\n";
+
+        ResolvedDealer dealer = WalkSites.CarGurus.ResolveDealer("HGreg Nissan Kendall", "Palmetto Bay, FL", pageText);
+
+        Assert.Equal(new ResolvedDealer("HGreg Nissan Kendall", "Palmetto Bay, FL", IsFallback: false), dealer);
+    }
+
+    [Fact]
+    public void ResolveDealer_PageNamingOnlyALocation_FillsTheNameFromTheExtraction()
+    {
+        // JTDBCMFE8S3078635: the "Dealer" heading is followed directly by "Dealer reviews", so
+        // CarGurusDealer names no dealer, even though the page's "Dealer's description" text further
+        // down names one in free text the reader does not look at (the shape recorded for prius/
+        // detail-17.txt's "Take The Key", named only in its Spanish-language description). The
+        // extraction reads the whole page and can still find that name; ResolveDealer must keep the
+        // reader's own city rather than let it get dropped along with the name.
+        string pageText = Fixture("cargurus-detail-corolla-hybrid-no-dealer-block.txt");
+
+        ResolvedDealer dealer = WalkSites.CarGurus.ResolveDealer("Take The Key", "some other city", pageText);
+
+        Assert.Equal(new ResolvedDealer("Take The Key", "Clermont, FL", IsFallback: false), dealer);
+    }
+
+    [Fact]
     public void ResolveDealer_PageTextNamingNeitherDealerNorLocation_FallsBackToTheExtraction()
     {
         ResolvedDealer dealer = WalkSites.CarGurus.ResolveDealer("Extraction Dealer", "Extraction City, FL", "no Dealer heading anywhere on this page");
