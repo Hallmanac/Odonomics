@@ -33,12 +33,14 @@ namespace Odonomics.Walk;
 /// not merely slow to render) is invisible to it the same way. This run did not actually measure everything
 /// the pair's own search would ordinarily show, so it is treated the same way a failed later page is, with
 /// the same "pages unread" reason. <see cref="PagingStoppedOnCarMaxPadding"/> is true when a search's own
-/// paging ended because a result page held only CarMax cards, beyond-radius cards, or no-distance cards it
-/// had never seen before (see <see cref="WalkSearchPages.CollectLinksAsync"/>'s own
-/// <c>onStoppedOnPaddingOnlyPage</c>): none of those is ever a candidate this walk would keep, but cars.com
-/// states no total match count that would otherwise prove no further in-radius, non-CarMax car sits past
-/// that page, so this is treated the same way a failed later page is too, with the same "pages unread"
-/// reason.</summary>
+/// paging ended because a result page held a new no-distance card it had never seen before (see
+/// <see cref="WalkSearchPages.CollectLinksAsync"/>'s own <c>onStoppedOnPaddingOnlyPage</c>): unlike a
+/// CarMax or beyond-radius card, a no-distance card's own text never said whether it was in radius, so it
+/// might be an organic match this walk would otherwise have kept, and cars.com states no total match count
+/// that would otherwise prove no further in-radius, non-CarMax car sits past that page, so this is treated
+/// the same way a failed later page is too, with the same "pages unread" reason. A stop caused only by new
+/// CarMax or beyond-radius cards leaves this false: neither is ever a candidate this walk would keep no
+/// matter what a later page holds, so the pair's coverage stays full for that stop.</summary>
 public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false, bool PagingStoppedOnCarMaxPadding = false);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>

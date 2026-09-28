@@ -115,9 +115,14 @@ public static class WalkSearchPages
     /// listing on page after page, so a page cars.com pads with nothing but new CarMax cards reads as
     /// adding nothing and ends the paging, the same as a page of nothing but repeats. When that page also
     /// held a genuinely new CarMax, beyond-radius, or no-distance card (as opposed to one truly empty of
-    /// anything new), <paramref name="onStoppedOnPaddingOnlyPage"/> is told its number: the caller uses
-    /// this to mark the pair's coverage the way a failed later page is, since cars.com states no total
-    /// match count that would otherwise prove no further in-radius, non-CarMax car sits past it.</summary>
+    /// anything new), <paramref name="onStoppedOnPaddingOnlyPage"/> is told its number and whether a
+    /// no-distance card was among the reasons: a CarMax or beyond-radius card is never a candidate this
+    /// walk would keep no matter what a later page holds, so a stop caused only by those proves the
+    /// search's real matches are exhausted the same as an empty page would; only a no-distance card is
+    /// genuinely unresolved (its own text never said whether it was in radius), and the caller uses that
+    /// flag to mark the pair's coverage the way a failed later page is only for that case, since cars.com
+    /// states no total match count that would otherwise prove no further in-radius, non-CarMax car sits
+    /// past it.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -144,7 +149,7 @@ public static class WalkSearchPages
         Action<int, int?>? onSearchCoverageKnown = null,
         Action? onNoPriceStated = null,
         Action? onCarMaxDealer = null,
-        Action<int>? onStoppedOnPaddingOnlyPage = null)
+        Action<int, bool>? onStoppedOnPaddingOnlyPage = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -169,13 +174,24 @@ public static class WalkSearchPages
         // held brand-new links this run chose not to treat as added.
         bool pageHadNewExcludedActivity = false;
 
-        void ReportOnce(PageLink card, Action? report, Action? withdraw)
+        // Set alongside pageHadNewExcludedActivity, but only for a no-distance card: a CarMax dealer
+        // card or a beyond-radius card is never a candidate this walk would keep regardless of what a
+        // later page holds, so a page whose only new excluded activity is one of those still proves the
+        // search's real matches are exhausted. A no-distance card is the one genuinely unresolved case
+        // (an ambiguous multi-card wrapper, see WalkSite.CollectDetailCards's own CardDistanceReader
+        // remarks): its own text never said whether it is in radius, so it might be an organic match
+        // this walk would otherwise have kept, and stopping on a page that holds one is the "cannot be
+        // known" case, not a proven-complete one.
+        bool pageHadNewAmbiguousCard = false;
+
+        void ReportOnce(PageLink card, Action? report, Action? withdraw, bool ambiguous)
         {
             string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
             if (!canonicalUrls.Contains(canonicalUrl) && !reportedOutOfRadius.ContainsKey(canonicalUrl))
             {
                 reportedOutOfRadius[canonicalUrl] = withdraw;
                 pageHadNewExcludedActivity = true;
+                pageHadNewAmbiguousCard = pageHadNewAmbiguousCard || ambiguous;
                 report?.Invoke();
             }
         }
@@ -183,6 +199,7 @@ public static class WalkSearchPages
         for (int pageNumber = 1; ; pageNumber++)
         {
             pageHadNewExcludedActivity = false;
+            pageHadNewAmbiguousCard = false;
             string pageUrl = pageNumber > 1 && pageUrlFor is not null
                 ? pageUrlFor(searchUrl, pageNumber, pagingToken)
                 : searchUrl;
@@ -229,8 +246,8 @@ public static class WalkSearchPages
                 int.MaxValue,
                 content.Text,
                 maxDistanceMiles,
-                card => ReportOnce(card, onBeyondRadius, onBeyondRadiusWithdrawn),
-                card => ReportOnce(card, onNoDistance, onNoDistanceWithdrawn),
+                card => ReportOnce(card, onBeyondRadius, onBeyondRadiusWithdrawn, ambiguous: false),
+                card => ReportOnce(card, onNoDistance, onNoDistanceWithdrawn, ambiguous: true),
                 minYearFor,
                 maxMileage,
                 belowFloorCards.Add,
@@ -365,12 +382,15 @@ public static class WalkSearchPages
                 // all-repeat page; what sets this apart is that the page was not actually empty of new
                 // information, it just held only CarMax cards, beyond-radius cards, or no-distance cards
                 // this run declines to chase further (see pageHadNewExcludedActivity above and
-                // WalkSite.CollectDetailCards). The caller uses this to mark the pair's coverage the same
-                // way a failed later page does, since cars.com states no total match count that would
-                // otherwise prove no further in-radius, non-CarMax car sits past this page.
+                // WalkSite.CollectDetailCards). A CarMax or beyond-radius card is never a candidate this
+                // walk would keep regardless of what a later page holds, so the caller only needs to mark
+                // the pair's coverage the way a failed later page does when the page's new excluded
+                // activity included a no-distance card (pageHadNewAmbiguousCard): that is the one case
+                // cars.com's own missing total match count leaves genuinely unresolved, since such a
+                // card's own text never said whether it was in radius.
                 if (added == 0 && pageUrlFor is not null && considered < linkBound && pageHadNewExcludedActivity)
                 {
-                    onStoppedOnPaddingOnlyPage?.Invoke(pageNumber);
+                    onStoppedOnPaddingOnlyPage?.Invoke(pageNumber, pageHadNewAmbiguousCard);
                 }
 
                 break;
