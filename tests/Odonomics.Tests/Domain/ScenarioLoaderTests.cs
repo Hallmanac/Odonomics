@@ -17,7 +17,7 @@ public class ScenarioLoaderTests
         Assert.Equal(50, scenario.RadiusMiles);
         Assert.Equal(10, scenario.HoldYears);
         Assert.Equal(120, scenario.HoldMonths);
-        Assert.Equal(60, scenario.TermMonths);
+        Assert.Equal(72, scenario.TermMonths);
         Assert.True(scenario.Apr.IsLoose);
         Assert.Equal(0.065m, scenario.Apr.Low);
         Assert.Equal(0.095m, scenario.Apr.High);
