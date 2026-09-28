@@ -190,18 +190,20 @@ public class WalkSearchPagesTests
             [2] = [new("https://www.cars.com/vehicledetail/ord0/?sid=x", "", "Sanford, FL (28 mi)")],
         });
         int carMaxDealer = 0;
-        var stoppedOnPaddingPages = new List<int>();
+        var stoppedOnPaddingPages = new List<(int Page, bool HadAmbiguousCard)>();
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync,
             (_, _) => { }, _ => { }, () => { }, CancellationToken.None,
             onCarMaxDealer: () => carMaxDealer++,
-            onStoppedOnPaddingOnlyPage: stoppedOnPaddingPages.Add);
+            onStoppedOnPaddingOnlyPage: (page, hadAmbiguousCard) => stoppedOnPaddingPages.Add((page, hadAmbiguousCard)));
 
         Assert.Equal([1], browser.Loads.Select(l => l.PageNumber));
         Assert.Equal(21, carMaxDealer);
         Assert.Empty(pool);
-        Assert.Equal([1], stoppedOnPaddingPages);
+        // All 21 excluded cards were CarMax delivery cards, none ambiguous, so the stop is reported as
+        // safe to treat as full coverage.
+        Assert.Equal([(1, false)], stoppedOnPaddingPages);
     }
 
     [Fact]

@@ -299,12 +299,15 @@ public static class WalkCommand
         // diff read its untouched known postings as gone.
         bool renderingDegraded = false;
 
-        // Set when a search's own paging stopped because a result page held only CarMax cards,
-        // beyond-radius cards, or no-distance cards it had never seen before (see
-        // WalkSearchPages.CollectLinksAsync's own onStoppedOnPaddingOnlyPage): none of those is ever a
-        // candidate this walk would keep, but cars.com states no total match count that would otherwise
-        // prove no further in-radius, non-CarMax car sits past that page, so the pair's coverage is
-        // recorded as partial for it, the same as a failed later page.
+        // Set when a search's own paging stopped because a result page held a new no-distance card it
+        // had never seen before (see WalkSearchPages.CollectLinksAsync's own
+        // onStoppedOnPaddingOnlyPage): unlike a CarMax or beyond-radius card, a no-distance card's own
+        // text never said whether it was in radius, so it might be an organic match this walk would
+        // otherwise have kept. cars.com states no total match count that would otherwise prove no
+        // further in-radius, non-CarMax car sits past that page, so the pair's coverage is recorded as
+        // partial for it, the same as a failed later page. A stop caused only by CarMax or beyond-radius
+        // cards leaves this false: neither is ever a candidate this walk would keep no matter what a
+        // later page holds, so the pair's coverage stays full for that stop.
         bool pagingStoppedOnCarMaxPadding = false;
 
         // The canonical URLs, among those, that the ledger already held: never touched, so their
@@ -465,10 +468,17 @@ public static class WalkCommand
                 },
                 onNoPriceStated: () => skippedNoPriceStated++,
                 onCarMaxDealer: () => skippedCarMaxDealer++,
-                onStoppedOnPaddingOnlyPage: pageNumber =>
+                onStoppedOnPaddingOnlyPage: (pageNumber, hadAmbiguousCard) =>
                 {
-                    pagingStoppedOnCarMaxPadding = true;
-                    AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings and out-of-radius cars are new here, so paging stops; marked unread rather than complete, since cars.com states no total to confirm no organic car sits past this page, but neither kind is ever saved here anyway, so nothing this pair would have kept is behind it");
+                    if (hadAmbiguousCard)
+                    {
+                        pagingStoppedOnCarMaxPadding = true;
+                        AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings, out-of-radius cars, and a card with no stated distance are new here, so paging stops; marked unread rather than complete, since cars.com states no total to confirm no organic car sits past this page and the no-distance card's own text never said whether it was in radius");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings and out-of-radius cars are new here, so paging stops; coverage stays complete, since neither kind is ever saved here anyway, so nothing this pair would have kept is behind it");
+                    }
                 });
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
