@@ -268,6 +268,8 @@ public sealed class VinRecordEntity
     public string? SafetyCouldNotFetchReason { get; set; }
     public string? HistoryRawJson { get; set; }
     public int? CurrentListingDaysOnMarket { get; set; }
+    public DateTimeOffset? HistoryFetchedAt { get; set; }
+    public string? HistoryCouldNotFetchReason { get; set; }
 
     public VehicleEntity? Vehicle { get; set; }
 }

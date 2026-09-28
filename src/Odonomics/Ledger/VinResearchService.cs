@@ -32,10 +32,12 @@ public sealed record ResearchStatus(bool Researched, DateTimeOffset? ResearchedA
 /// <summary>Fetches and caches the research lookup `odo show` and `odo research` both run: NHTSA
 /// decode, recalls, complaints, and safety ratings, plus the Marketcheck VIN history. Refreshed on
 /// request, when the cached record is older than <see cref="RefreshInterval"/> (the seven-day refresh
-/// rule), when the Marketcheck VIN history was never successfully fetched (a missing key or a failed
-/// call leaves <see cref="VinRecordEntity.HistoryRawJson"/> null), or when recalls, complaints, or
-/// safety ratings previously could not be fetched, so a batch retries only the pieces that failed
-/// last time rather than waiting out the seven-day window or re-fetching everything.</summary>
+/// rule), when the Marketcheck VIN history was never successfully fetched or previously could not be
+/// fetched (a missing key or a failed call leaves <see cref="VinRecordEntity.HistoryRawJson"/> null
+/// the first time, or sets <see cref="VinRecordEntity.HistoryCouldNotFetchReason"/> on a later
+/// attempt against an otherwise-cached vehicle), or when recalls, complaints, or safety ratings
+/// previously could not be fetched, so a batch retries only the pieces that failed last time rather
+/// than waiting out the seven-day window or re-fetching everything.</summary>
 public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClient marketcheck)
 {
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromDays(7);
@@ -44,6 +46,7 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
         refresh
         || record?.ResearchedAt is not DateTimeOffset researchedAt
         || record.HistoryRawJson is null
+        || record.HistoryCouldNotFetchReason is not null
         || record.RecallsCouldNotFetchReason is not null
         || record.ComplaintsCouldNotFetchReason is not null
         || record.SafetyCouldNotFetchReason is not null
@@ -61,10 +64,15 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
     /// silently disappears just because that round's retry failed. <see cref="VinRecordEntity.ResearchedAt"/>
     /// is stamped only when the batch was stale or forced AND at least one of recalls, complaints, or
     /// safety ratings actually succeeded, so a vehicle NHTSA could not answer at all is not recorded as
-    /// researched. A Marketcheck fetch failure (including a missing
-    /// key) never throws either: <see cref="MarketcheckHistoryClient"/> already degrades that to
-    /// <see cref="VinHistoryResult.CouldNotFetchReason"/>, and the vehicle's previously cached
-    /// history (if any) is left untouched rather than being overwritten with nothing.</summary>
+    /// researched. The Marketcheck VIN history call runs every time this method does, independent of
+    /// <c>staleOrForced</c>, since a history-only retry (see <see cref="NeedsRefresh"/>) must not also
+    /// re-fetch the NHTSA pieces just because the batch itself is otherwise fresh. A Marketcheck fetch
+    /// failure (including a missing key, or an HTTP 429 that outlasts <see cref="MarketcheckHistoryClient"/>'s
+    /// own retries) never throws either: it degrades to <see cref="VinHistoryResult.CouldNotFetchReason"/>,
+    /// persisted onto <see cref="VinRecordEntity.HistoryCouldNotFetchReason"/> the same way recalls,
+    /// complaints, and safety ratings already record their own could-not-fetch reason, and the
+    /// vehicle's previously cached history (if any) is left untouched rather than being overwritten
+    /// with nothing.</summary>
     public async Task<VinResearchResult> RefreshAsync(OdonomicsDbContext db, VehicleEntity vehicle, bool refresh, CancellationToken cancellationToken)
     {
         VinRecordEntity? existing = vehicle.VinRecord;
@@ -139,6 +147,8 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
             }
         }
 
+        record.HistoryFetchedAt = DateTimeOffset.UtcNow;
+        record.HistoryCouldNotFetchReason = history.CouldNotFetchReason;
         if (history.CouldNotFetchReason is null)
         {
             record.HistoryRawJson = JsonSerializer.Serialize(history.PriorListings);
@@ -200,7 +210,8 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
         VinHistoryResult history = new(
             priorListings,
             record.CurrentListingDaysOnMarket,
-            record.HistoryRawJson is null ? "no Marketcheck VIN history fetched yet" : null);
+            record.HistoryCouldNotFetchReason
+                ?? (record.HistoryRawJson is null ? "no Marketcheck VIN history fetched yet" : null));
 
         return new VinResearchResult(decode, recalls, complaints, safety, history);
     }
