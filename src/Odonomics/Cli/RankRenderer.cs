@@ -70,6 +70,7 @@ public static class RankRenderer
         RenderMissingScenarioData(console, missingScenarioData);
         RenderExcluded(console, excluded);
         RenderFGradedOnly(console, scores);
+        RenderUnmeasuredOnlyAtDistance(console, scores);
     }
 
     /// <summary>Says plainly, above the Ranked section, which of the scenario's target monthly
@@ -407,6 +408,39 @@ public static class RankRenderer
         foreach (Score score in flagged)
         {
             AddVehiclePriceRow(table, score, includeGrade: true, defaultGrade: "F");
+        }
+
+        console.Write(table);
+    }
+
+    /// <summary>A vehicle counting as purchasable, or priced, off a CarMax "Only at" posting whose
+    /// distance from the scenario's zip this project's curated store and zip tables cannot measure (see
+    /// <see cref="VehiclePricing.UnmeasuredOnlyAtStore"/>): the gap reads as "not out of radius" rather
+    /// than a confirmed in-radius distance, so this is a warning lens over the ranking, the same as
+    /// <see cref="RenderFGradedOnly"/>, not another filter.</summary>
+    private static void RenderUnmeasuredOnlyAtDistance(IAnsiConsole console, IReadOnlyList<Score> scores)
+    {
+        List<Score> flagged = [.. scores.Where(s => s.Vehicle.UnmeasuredOnlyAtStore is not null)];
+        if (flagged.Count == 0)
+        {
+            return;
+        }
+
+        console.WriteLine();
+        console.MarkupLine($"[bold yellow]Only at a store this project can't yet measure, treated as in radius ({flagged.Count})[/]");
+
+        var table = new Table { Border = TableBorder.Minimal };
+        table.Width(80);
+        table.AddColumn(new TableColumn("VIN") { Width = VinColumnWidth, NoWrap = true });
+        table.AddColumn(new TableColumn("Vehicle") { Width = ExcludedVehicleColumnWidth, NoWrap = true });
+        table.AddColumn("Store");
+
+        foreach (Score score in flagged)
+        {
+            table.AddRow(
+                Format.Cell(score.Vehicle.Vin),
+                Format.Cell(Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", ExcludedVehicleColumnWidth)),
+                Format.Cell(score.Vehicle.UnmeasuredOnlyAtStore!));
         }
 
         console.Write(table);

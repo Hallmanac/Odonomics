@@ -84,6 +84,7 @@ public static class RankCommand
             Availability = VehiclePricing.ReservedOrInTransitNote(vehicle, latestCoverageBySource),
             OnlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource, zip, radiusMiles),
             OnlyAtOutOfRadiusStore = VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, latestCoverageBySource, zip, radiusMiles),
+            UnmeasuredOnlyAtStore = VehiclePricing.UnmeasuredOnlyAtStore(vehicle, latestCoverageBySource, zip, radiusMiles),
         };
     }
 

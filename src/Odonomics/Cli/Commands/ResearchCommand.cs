@@ -28,8 +28,11 @@ public static class ResearchCommand
         List<RunEntity> runs = await db.Runs.ToListAsync(cancellationToken);
         Dictionary<string, DateTimeOffset> latestCoverageBySource = RunSources.LatestCoverageBySource(runs);
 
-        // Explicit VINs need no scenario, so the fee flag's posting is chosen under delivery unless one was loaded.
+        // Explicit VINs need no scenario, so the fee flag's posting is chosen under delivery unless one was loaded,
+        // and no zip or radius is known to judge a CarMax "Only at" posting's distance by.
         Fulfillment fulfillment = Fulfillment.Delivery;
+        string? zip = null;
+        int? radiusMiles = null;
         List<VehicleEntity> vehicles;
         if (vins.Count > 0)
         {
@@ -50,6 +53,8 @@ public static class ResearchCommand
         {
             Scenario scenario = ScenarioLoader.Load(scenarioPath);
             fulfillment = scenario.Fulfillment;
+            zip = scenario.Zip;
+            radiusMiles = scenario.RadiusMiles;
             vehicles = SelectVehiclesToResearch(allVehicles, scenario, latestCoverageBySource);
         }
 
@@ -96,7 +101,7 @@ public static class ResearchCommand
                     }
 
                     decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-                    IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment)];
+                    IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles)];
 
                     bool anyPieceFailed = IsPartiallyResearched(research);
 
@@ -284,13 +289,45 @@ public static class ResearchCommand
     /// would exclude for its price is never researched either. Missing-price is excluded on purpose, and so is
     /// every posting being reserved, in transit, or an out-of-radius CarMax "Only at" posting: a vehicle in
     /// any of those shapes is still worth researching (safety ratings and VIN history don't depend on today's
-    /// availability), and <see cref="Scorer.FilterReasons"/> would otherwise reject it outright.</summary>
+    /// availability), and <see cref="Scorer.FilterReasons"/> would otherwise reject it outright. The
+    /// out-of-radius shape gets one more check first: it is exactly the shape that makes
+    /// <see cref="VehicleForScoring.LowestCurrentPrice"/> null (nothing is purchasable to price it from), which
+    /// would otherwise silently skip the price ceiling too and spend a research call on a car that could never
+    /// pass it, so that ceiling is checked here against the store's own asking price before the "out of radius"
+    /// tolerance below lets the vehicle through.</summary>
     private static bool PassesScenarioFilters(VehicleEntity vehicle, Scenario scenario, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
     {
         VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
+        if (forScoring.OnlyAtOutOfRadiusStore is not null && ExceedsMaxPriceIgnoringOutOfRadius(vehicle, scenario, latestCoverageBySource))
+        {
+            return false;
+        }
+
         return Scorer.FilterReasons(forScoring, scenario).All(reason =>
             reason.Contains("no current asking price")
             || reason.Contains("reserved for another buyer or in transit")
             || reason.Contains("out of radius"));
+    }
+
+    /// <summary>True when the scenario has a price ceiling and the cheapest posting `odo rank` would have
+    /// priced this vehicle from if its out-of-radius CarMax "Only at" posting still counted as purchasable
+    /// (see <see cref="VehiclePricing.LowestPriceIncludingOutOfRadius"/>) costs more than it, the same
+    /// asking-plus-shipping formula <see cref="Scorer.FilterReasons"/> uses. False when the scenario sets no
+    /// ceiling or no such posting has a price to compare.</summary>
+    private static bool ExceedsMaxPriceIgnoringOutOfRadius(VehicleEntity vehicle, Scenario scenario, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
+    {
+        if (scenario.Filters.MaxPrice is not int maxPrice)
+        {
+            return false;
+        }
+
+        PurchasePrice? price = VehiclePricing.LowestPriceIncludingOutOfRadius(vehicle, latestCoverageBySource, scenario.Fulfillment);
+        if (price is not PurchasePrice purchasePrice)
+        {
+            return false;
+        }
+
+        decimal priceWithShipping = purchasePrice.Asking + (purchasePrice.ShippingIncluded ? 0m : purchasePrice.ShippingFee ?? 0m);
+        return priceWithShipping > maxPrice;
     }
 }
