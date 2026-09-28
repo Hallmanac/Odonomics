@@ -291,14 +291,12 @@ public static class WalkCommand
         // candidate either. Zero for a site with no such wait.
         int skippedUnrendered = 0;
 
-        // Set when this pair's own rendering looked degraded, for either of two reasons: a card the render
-        // wait still gave up on even after LoadSearchPageAsync's final re-check (see
-        // SearchPageCardRenderWait.StillUnrenderedAsync) turned out to be a known posting (see the
-        // onUnrendered callback below), or a site whose page mounts more cards only as it is scrolled (see
-        // WalkSite.ScrollLoadsMoreCards) was still finding new ones when ScrollLoadMoreCardsAsync's own
-        // scroll cap ended the run. Either way this run did not actually measure everything the pair's own
-        // search would ordinarily show, so the pair's coverage is recorded as partial for it, the same as a
-        // failed later page, rather than let the diff read its untouched known postings as gone.
+        // Set when this pair's own rendering looked degraded: a card the render wait still gave up on
+        // even after LoadSearchPageAsync's final re-check (see SearchPageCardRenderWait.StillUnrenderedAsync)
+        // turned out to be a known posting (see the onUnrendered callback below). That means this run did
+        // not actually measure everything the pair's own search would ordinarily show, so the pair's
+        // coverage is recorded as partial for it, the same as a failed later page, rather than let the
+        // diff read its untouched known postings as gone.
         bool renderingDegraded = false;
 
         // The canonical URLs, among those, that the ledger already held: never touched, so their
@@ -331,22 +329,6 @@ public static class WalkCommand
                 if (!await LoadMoreCardsAsync(page, site, site.LoadMoreControlPattern, pacing, ct))
                 {
                     linkCollectionCapped = true;
-                }
-            }
-
-            if (site.ScrollLoadsMoreCards)
-            {
-                // A card WaitsForRenderedCards's own scan would hydrate has to actually be in the DOM
-                // first; this is what puts it there, before that scan ever runs.
-                LoadMoreResult scrollResult = await ScrollLoadMoreCardsAsync(page, site, pacing, ct);
-                AnsiConsole.MarkupLineInterpolated($"scrolled to {scrollResult.Cards} card(s) on the page ({scrollResult.Presses} scroll(s))");
-                if (!scrollResult.LoadedAll(null))
-                {
-                    // The count was still growing the moment scrolling gave up, so this page's own full
-                    // count was never actually seen; treated the same as a card the render wait never even
-                    // saw as a link at all (see renderingDegraded above).
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]the page's card count was still growing when scrolling stopped, so this page's own full count is not read and the pair's coverage is partial[/]");
-                    renderingDegraded = true;
                 }
             }
 
@@ -870,35 +852,6 @@ public static class WalkCommand
         }
 
         return result.LoadedAll(statedCount);
-    }
-
-    /// <summary>Keeps scrolling a search page (cars.com: see <see cref="WalkSite.ScrollLoadsMoreCards"/>)
-    /// for as long as doing so mounts more result cards into the DOM, the same stall <see cref="SearchPageLoadMore"/>
-    /// already uses to know a "show more" control has nothing left to add: there is no control here to press, so
-    /// every "press" is instead a further scroll, which always succeeds, and the run ends once a scroll adds no new
-    /// card even after a second look, or after <see cref="SearchPageLoadMore.MaxPresses"/> scrolls. The site states
-    /// no count of its own, so <see cref="LoadMoreResult.LoadedAll"/> with a null stated count is exactly "the count
-    /// stopped growing before the scroll cap did": that is what tells a page whose true count this run never actually
-    /// reached (still growing at the cap) from a page whose true count, however small, this run did reach (stalled on
-    /// its own), without ever comparing the count this page reached against some other page's or site's own size.</summary>
-    private static async Task<LoadMoreResult> ScrollLoadMoreCardsAsync(IPage page, WalkSite site, WalkPacing pacing, CancellationToken cancellationToken)
-    {
-        async Task<int> CountCardsAsync(CancellationToken ct) =>
-            SearchPageLinks.CountDistinctDetailLinks(await page.EvaluateAsync<string[][]>(SearchPageLinks.AnchorScript), site);
-
-        async Task<bool> ScrollFurtherAsync(CancellationToken ct)
-        {
-            await page.EvaluateAsync("() => window.scrollBy(0, window.innerHeight * 0.8)");
-            return true;
-        }
-
-        async Task PauseAsync(CancellationToken ct)
-        {
-            await Task.Delay(pacing.RandomScrollPause(), ct);
-            await CdpConnection.HandleChallengeIfPresentAsync(page, ct);
-        }
-
-        return await SearchPageLoadMore.RunAsync(null, CountCardsAsync, ScrollFurtherAsync, PauseAsync, cancellationToken);
     }
 
     private const float ControlClickTimeoutMs = 10_000;

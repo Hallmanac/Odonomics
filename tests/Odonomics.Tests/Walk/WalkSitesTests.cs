@@ -228,16 +228,6 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void CarsCom_ScrollLoadsMoreCards_IsSetAndOtherSitesAreNot()
-    {
-        Assert.True(WalkSites.CarsCom.ScrollLoadsMoreCards);
-        Assert.False(WalkSites.Carvana.ScrollLoadsMoreCards);
-        Assert.False(WalkSites.Autotrader.ScrollLoadsMoreCards);
-        Assert.False(WalkSites.CarMax.ScrollLoadsMoreCards);
-        Assert.False(WalkSites.CarGurus.ScrollLoadsMoreCards);
-    }
-
-    [Fact]
     public void CarsCom_CarMaxCardReader_TellsCarMaxDeliveryFromAnOrdinaryDealersOwnDeliveryFee()
     {
         Assert.NotNull(WalkSites.CarsCom.CarMaxCardReader);
