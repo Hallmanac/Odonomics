@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 
 namespace Odonomics.Marketcheck;
@@ -27,6 +29,15 @@ public sealed record VinHistoryResult(
 /// spike's MarketcheckSource pattern of degrading to a reported reason rather than throwing.</summary>
 public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
 {
+    /// <summary>Marketcheck rate-limits under load with HTTP 429; observed alongside the 158-VIN
+    /// outage of 2026-09-28 where every VIN-history call in a batch came back 429 and was recorded
+    /// as a permanent could-not-fetch rather than retried. Bounded so a sustained outage still
+    /// degrades gracefully instead of retrying forever.</summary>
+    private const int MaxAttempts = 4;
+
+    /// <summary>Used when a 429 response carries no Retry-After header.</summary>
+    private static readonly TimeSpan DefaultRetryPause = TimeSpan.FromSeconds(1);
+
     public async Task<VinHistoryResult> GetHistoryAsync(string vin, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -49,11 +60,10 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
     private async Task<IReadOnlyList<VinHistoryListing>> FetchPriorListingsAsync(string vin, CancellationToken cancellationToken)
     {
         string url = $"https://mc-api.marketcheck.com/v2/history/car/{Uri.EscapeDataString(vin)}?api_key={apiKey}";
-        using HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
-        string body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        (HttpStatusCode status, string body) = await GetWithRetryOn429Async(url, cancellationToken);
+        if (!IsSuccess(status))
         {
-            throw new InvalidOperationException($"Marketcheck VIN history: HTTP {(int)response.StatusCode}");
+            throw new InvalidOperationException($"Marketcheck VIN history: HTTP {(int)status}");
         }
 
         using JsonDocument doc = JsonDocument.Parse(body);
@@ -77,11 +87,10 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
     private async Task<int?> FetchCurrentDaysOnMarketAsync(string vin, CancellationToken cancellationToken)
     {
         string url = $"https://mc-api.marketcheck.com/v2/search/car/active?api_key={apiKey}&vin={Uri.EscapeDataString(vin)}";
-        using HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
-        string body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        (HttpStatusCode status, string body) = await GetWithRetryOn429Async(url, cancellationToken);
+        if (!IsSuccess(status))
         {
-            throw new InvalidOperationException($"Marketcheck current listing lookup: HTTP {(int)response.StatusCode}");
+            throw new InvalidOperationException($"Marketcheck current listing lookup: HTTP {(int)status}");
         }
 
         using JsonDocument doc = JsonDocument.Parse(body);
@@ -92,6 +101,52 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
 
         return GetInt(listings[0], "dom");
     }
+
+    /// <summary>Runs one GET against <paramref name="url"/>, retrying up to <see cref="MaxAttempts"/>
+    /// times when the response is HTTP 429: Marketcheck's rate-limit response, honoring the
+    /// response's Retry-After header (either a delta-seconds or an HTTP-date form) when present and
+    /// falling back to <see cref="DefaultRetryPause"/> otherwise. Any other status, success or
+    /// failure, is returned immediately on the first attempt: only 429 is worth waiting out.</summary>
+    private async Task<(HttpStatusCode Status, string Body)> GetWithRetryOn429Async(string url, CancellationToken cancellationToken)
+    {
+        int attempt = 0;
+        while (true)
+        {
+            attempt++;
+            using HttpResponseMessage response = await http.GetAsync(url, cancellationToken);
+            string body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= MaxAttempts)
+            {
+                return (response.StatusCode, body);
+            }
+
+            await Task.Delay(RetryAfterDelay(response) ?? DefaultRetryPause, cancellationToken);
+        }
+    }
+
+    private static TimeSpan? RetryAfterDelay(HttpResponseMessage response)
+    {
+        RetryConditionHeaderValue? retryAfter = response.Headers.RetryAfter;
+        if (retryAfter is null)
+        {
+            return null;
+        }
+
+        if (retryAfter.Delta is TimeSpan delta)
+        {
+            return delta;
+        }
+
+        if (retryAfter.Date is DateTimeOffset date)
+        {
+            TimeSpan untilDate = date - DateTimeOffset.UtcNow;
+            return untilDate > TimeSpan.Zero ? untilDate : TimeSpan.Zero;
+        }
+
+        return null;
+    }
+
+    private static bool IsSuccess(HttpStatusCode status) => (int)status is >= 200 and < 300;
 
     private static string? GetString(JsonElement element, string property) =>
         element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
