@@ -262,6 +262,37 @@ public class WalkCoverageTests
     }
 
     [Fact]
+    public async Task RunAsync_APairWhoseRenderingLookedDegraded_StampsAnUnreadTokenBesideItsCoverageToken()
+    {
+        // cars.com's own render wait can give up on a card, or a page can come back far short of the
+        // site's typical size, without any page ever actually failing to load (walk run 20260928-134242);
+        // either is treated the same as a failed later page, since this run did not actually measure
+        // everything the pair's own search would ordinarily show.
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<WalkPairSummary> summaries = await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight", "Toyota Prius"],
+            (_, model, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), RenderingDegraded: model == "Honda Insight")),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Equal([true, false], summaries.Select(s => s.RenderingDegraded));
+        Assert.Equal([false, false], summaries.Select(s => s.Capped));
+        Assert.Equal("site-a:Insight,unread:site-a:Insight,site-a:Prius", run.Sources);
+        Assert.Equal(["site-a:Insight"], RunSources.UnreadCoverage(run));
+        Assert.Empty(RunSources.PartialCoverage(run));
+    }
+
+    [Fact]
     public async Task RunAsync_APairWhoseFirstPageFailed_IsNotStampedCoveredAtAll()
     {
         using var testDb = new LedgerTestDatabase();

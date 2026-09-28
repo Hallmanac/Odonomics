@@ -172,6 +172,20 @@ public class WalkSummaryTableRenderingTests
     }
 
     [Fact]
+    public void BuildSummaryTable_APairWhoseRenderingLookedDegraded_ShowsUnreadInItsStatusColumn()
+    {
+        List<WalkPairSummary> summaries =
+        [
+            new("cars.com", "Toyota Prius", 5, 5, new DroppedBreakdown(0, 0, 0, 0), Completed: true, RenderingDegraded: true),
+            new("cars.com", "Toyota Camry Hybrid", 5, 5, new DroppedBreakdown(0, 0, 0, 0), Completed: true),
+        ];
+        string[] lines = Render(summaries);
+
+        Assert.Contains("unread", Assert.Single(lines, l => l.Contains("Prius")));
+        Assert.DoesNotContain("unread", Assert.Single(lines, l => l.Contains("Camry Hybrid")));
+    }
+
+    [Fact]
     public void BuildSummaryTable_APairWithAnUnrenderedKnownUrlButNotCapped_ShowsOkNotCappedInItsStatusColumn()
     {
         List<WalkPairSummary> summaries =

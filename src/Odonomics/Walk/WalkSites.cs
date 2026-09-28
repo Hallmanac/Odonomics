@@ -108,6 +108,14 @@ namespace Odonomics.Walk;
 /// card still empty when the page first loads leaves <see cref="SearchPageLinks.CardScript"/>'s dollar-ancestor walk
 /// nothing of its own to stop at, so it climbs to the results list and can read a neighboring card's own stated
 /// distance as this card's. False for a site whose cards are there by the time the walk reads them.
+/// <paramref name="TypicalResultsPerPage"/> is how many cards a healthy page of this site's results holds
+/// (cars.com pads every page to about thirty regardless of a search's real match count, since it states no
+/// match count of its own for <see cref="MatchCountPattern"/> to bound collection against): a later page of
+/// the same search whose own card count comes in far short of it, or of that search's own first page,
+/// whichever is smaller, is read as this run's own rendering having degraded rather than as the search
+/// having genuinely run out of results (see <see cref="Cli.Commands.WalkCommand"/>). Null for a site whose
+/// <see cref="MatchCountPattern"/> already bounds collection against a real stated count, which needs no
+/// second, page-size-shaped signal.
 /// <paramref name="CardFacetsReader"/> reads a result card's own stated model year, mileage, and whether its model
 /// text says "Hybrid" (carmax, see <see cref="CarMaxCards.ReadVehicleFacets"/>), for a site whose search URL carries
 /// the scenario's minimum year and maximum mileage as facets but does not actually honor them: a card whose stated
@@ -160,7 +168,8 @@ public sealed record WalkSite(
     Func<string, int?>? CardDistanceReader = null,
     bool WaitsForRenderedCards = false,
     Func<string, CardVehicleFacets>? CardFacetsReader = null,
-    Regex? NoPriceCardPattern = null)
+    Regex? NoPriceCardPattern = null,
+    int? TypicalResultsPerPage = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -741,7 +750,12 @@ public static class WalkSites
         // A fuse-card can still be empty when the page first loads; reading it then risks the
         // dollar-ancestor walk landing on the results list and misreading a neighbor's distance as
         // this card's (walk run 20260927-113258).
-        WaitsForRenderedCards: true);
+        WaitsForRenderedCards: true,
+        // cars.com pads a page to about thirty cards regardless of the search's real match count and
+        // states no count of its own, so this is the only way to tell a later page that is genuinely
+        // running out of results from one this run's own throttled rendering left far short of its
+        // usual size (walk run 20260928-134242).
+        TypicalResultsPerPage: 30);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),
