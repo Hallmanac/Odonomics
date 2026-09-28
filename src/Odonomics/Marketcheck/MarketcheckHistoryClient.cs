@@ -38,6 +38,14 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
     /// <summary>Used when a 429 response carries no Retry-After header.</summary>
     private static readonly TimeSpan DefaultRetryPause = TimeSpan.FromSeconds(1);
 
+    /// <summary>The longest this client waits out a single Retry-After, however long the header
+    /// itself asks for. Marketcheck's own quota-exhausted 429 has been observed carrying a
+    /// Retry-After well over an hour; honoring that verbatim would stall a whole `odo research`
+    /// batch on the first rate-limited vehicle, since <see cref="MaxAttempts"/> bounds only the
+    /// attempt count, not the wait between them. Past this cap, the wait is no longer "worth
+    /// retrying" in a batch's timeframe, so it degrades to a could-not-fetch reason instead.</summary>
+    private static readonly TimeSpan MaxRetryPause = TimeSpan.FromSeconds(5);
+
     public async Task<VinHistoryResult> GetHistoryAsync(string vin, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -105,8 +113,9 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
     /// <summary>Runs one GET against <paramref name="url"/>, retrying up to <see cref="MaxAttempts"/>
     /// times when the response is HTTP 429: Marketcheck's rate-limit response, honoring the
     /// response's Retry-After header (either a delta-seconds or an HTTP-date form) when present and
-    /// falling back to <see cref="DefaultRetryPause"/> otherwise. Any other status, success or
-    /// failure, is returned immediately on the first attempt: only 429 is worth waiting out.</summary>
+    /// falling back to <see cref="DefaultRetryPause"/> otherwise, capped at <see cref="MaxRetryPause"/>
+    /// either way. Any other status, success or failure, is returned immediately on the first
+    /// attempt: only 429 is worth waiting out.</summary>
     private async Task<(HttpStatusCode Status, string Body)> GetWithRetryOn429Async(string url, CancellationToken cancellationToken)
     {
         int attempt = 0;
@@ -120,7 +129,8 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
                 return (response.StatusCode, body);
             }
 
-            await Task.Delay(RetryAfterDelay(response) ?? DefaultRetryPause, cancellationToken);
+            TimeSpan delay = RetryAfterDelay(response) ?? DefaultRetryPause;
+            await Task.Delay(delay > MaxRetryPause ? MaxRetryPause : delay, cancellationToken);
         }
     }
 
