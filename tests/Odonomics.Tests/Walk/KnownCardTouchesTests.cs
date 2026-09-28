@@ -73,7 +73,7 @@ public class KnownCardTouchesTests
             WalkSites.Carvana,
             Search,
             poolSize,
-            touches.TryTouchAsync,
+            (canonicalUrl, cardPrice, cardBadges, _, ct) => touches.TryTouchAsync(canonicalUrl, cardPrice, cardBadges, ct),
             (_, pageNumber, _) =>
             {
                 loadedPages?.Add(pageNumber);
@@ -272,7 +272,7 @@ public class KnownCardTouchesTests
             WalkSites.Carvana,
             Search,
             60,
-            touches.TryTouchAsync,
+            (canonicalUrl, cardPrice, cardBadges, _, ct) => touches.TryTouchAsync(canonicalUrl, cardPrice, cardBadges, ct),
             (_, _, _) => Task.FromResult(page),
             (_, _) => { },
             _ => { },
@@ -360,7 +360,7 @@ public class KnownCardTouchesTests
             siteWithNoCardPriceReader,
             "https://www.cars.com/shopping/results/?makes[]=toyota&models[]=toyota-prius",
             60,
-            touches.TryTouchAsync,
+            (canonicalUrl, cardPrice, cardBadges, _, ct) => touches.TryTouchAsync(canonicalUrl, cardPrice, cardBadges, ct),
             (_, _, _) => Task.FromResult(page),
             (_, _) => { },
             _ => { },
@@ -409,7 +409,7 @@ public class KnownCardTouchesTests
             WalkSites.Autotrader,
             "https://www.autotrader.com/cars-for-sale/used-cars/honda/insight",
             60,
-            touches.TryTouchAsync,
+            (canonicalUrl, cardPrice, cardBadges, _, ct) => touches.TryTouchAsync(canonicalUrl, cardPrice, cardBadges, ct),
             (_, _, _) => Task.FromResult(page),
             (_, _) => { },
             _ => { },

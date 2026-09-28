@@ -1181,7 +1181,7 @@ public class LedgerDiffServiceTests
                     site,
                     "https://www.carvana.com/cars/filters?zip=32833",
                     WalkPairSearches.UnboundedPool,
-                    async (url, _, _, touchCt) =>
+                    async (url, _, _, _, touchCt) =>
                     {
                         // The ledger holds page 1's posting, which the walk keeps current from its card.
                         if (url != onPageOne.Url)
@@ -1251,7 +1251,7 @@ public class LedgerDiffServiceTests
                     site,
                     "https://www.autotrader.com/cars-for-sale/used-cars/toyota/prius?zip=32833",
                     WalkPairSearches.UnboundedPool,
-                    async (url, _, _, touchCt) =>
+                    async (url, _, _, _, touchCt) =>
                     {
                         // The ledger holds page 1's posting, which the walk keeps current from its card.
                         if (url != onPageOne.Url)

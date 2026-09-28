@@ -54,7 +54,7 @@ public class CarsComRepeatedCardTests
         var touched = new List<string>();
         int carMaxDealer = 0;
 
-        ValueTask<bool> TrackTouches(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken ct)
+        ValueTask<bool> TrackTouches(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, bool cardTextTrusted, CancellationToken ct)
         {
             touched.Add(canonicalUrl);
             return ValueTask.FromResult(false);

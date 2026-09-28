@@ -393,10 +393,14 @@ public static class WalkCommand
                 site,
                 searchUrl,
                 linkPoolSize,
-                async (canonicalUrl, cardPrice, cardBadges, touchCt) =>
+                async (canonicalUrl, cardPrice, cardBadges, cardTextTrusted, touchCt) =>
                 {
                     bool known = await knownTouches.TryTouchAsync(canonicalUrl, cardPrice, cardBadges, touchCt);
-                    if (known && cardTextByUrl.TryGetValue(canonicalUrl, out string? knownCardText))
+                    // A no-distance card's own card text is an ambiguous multi-card wrapper that can belong
+                    // to a neighboring card (see WalkSearchPages.CollectLinksAsync's own touchKnownAsync
+                    // remarks), so it is never trusted enough to read a fee from, even for a link the ledger
+                    // already holds: the fee below would then risk being a stranger's, not this posting's own.
+                    if (known && cardTextTrusted && cardTextByUrl.TryGetValue(canonicalUrl, out string? knownCardText))
                     {
                         knownTouches.RememberCardFee(canonicalUrl, site.ReadCardFee(knownCardText));
                         knownTouches.RememberCardFeeStatement(canonicalUrl, site.ReadCardFeeStatement(knownCardText));

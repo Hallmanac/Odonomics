@@ -55,25 +55,28 @@ public class CarsComCarMaxPaddingStopsTests
         }
     }
 
-    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken) => ValueTask.FromResult(false);
+    private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, bool cardTextTrusted, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 
     /// <summary>A <c>touchKnownAsync</c> fake that treats <paramref name="knownUrls"/> as the ledger's
     /// own holdings, and records every touch it takes so a test can assert what price (or lack of one)
-    /// and badges a no-distance card's own protective touch carried.</summary>
+    /// and badges a no-distance card's own protective touch carried, and whether that touch's card text
+    /// was trusted: a caller (<see cref="Cli.Commands.WalkCommand"/>) must not read a fee off a link's own
+    /// raw card text when this is false, since a no-distance card's own text is an ambiguous multi-card
+    /// wrapper that can belong to a neighboring card instead.</summary>
     private sealed class RecordingTouches(IReadOnlyCollection<string> knownUrls)
     {
         private readonly HashSet<string> _knownUrls = [.. knownUrls];
 
-        public List<(string Url, decimal? Price, IReadOnlyDictionary<string, string> Badges)> Touches { get; } = [];
+        public List<(string Url, decimal? Price, IReadOnlyDictionary<string, string> Badges, bool CardTextTrusted)> Touches { get; } = [];
 
-        public ValueTask<bool> TouchAsync(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken)
+        public ValueTask<bool> TouchAsync(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, bool cardTextTrusted, CancellationToken cancellationToken)
         {
             if (!_knownUrls.Contains(canonicalUrl))
             {
                 return ValueTask.FromResult(false);
             }
 
-            Touches.Add((canonicalUrl, cardPrice, cardBadges));
+            Touches.Add((canonicalUrl, cardPrice, cardBadges, cardTextTrusted));
             return ValueTask.FromResult(true);
         }
     }
@@ -146,6 +149,39 @@ public class CarsComCarMaxPaddingStopsTests
         Assert.Equal([2], stoppedOnPaddingPages);
         Assert.Equal(unresolvedCanonicalUrls.OrderBy(u => u, StringComparer.Ordinal), touches.Touches.Select(t => t.Url).OrderBy(u => u, StringComparer.Ordinal));
         Assert.All(touches.Touches, t => Assert.Null(t.Price));
+        // Neither card's own wrapper text is trusted, so a caller must not read a fee off it either
+        // (see WalkCommand's own touchKnownAsync wrapper): this is the finding a CarMax neighbor's
+        // "$249 delivery" text bleeding into an ordinary car's stored ShippingFee.
+        Assert.All(touches.Touches, t => Assert.False(t.CardTextTrusted));
+    }
+
+    [Fact]
+    public async Task AnOrdinaryInRadiusKnownCard_IsTouchedWithItsOwnCardTextTrusted()
+    {
+        // Unlike a no-distance card's ambiguous wrapper, an ordinary in-radius card's own card text
+        // is its own: a caller (WalkCommand's touchKnownAsync wrapper) may read a fee off it.
+        const string knownCanonicalUrl = "https://www.cars.com/vehicledetail/c43f28e8-7125-45be-8654-c704f7205172/";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = LoadCardsJson("cars-com-prius-carmax-padding-page-1-cards.json"),
+        });
+        var touches = new RecordingTouches([knownCanonicalUrl]);
+
+        await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom,
+            "https://www.cars.com/shopping/results/?models[]=toyota-prius&zip=32833&maximum_distance=50",
+            WalkPairSearches.UnboundedPool,
+            touches.TouchAsync,
+            browser.LoadAsync,
+            (_, _) => { },
+            _ => { },
+            () => { },
+            CancellationToken.None,
+            maxDistanceMiles: 50);
+
+        (string Url, decimal? Price, IReadOnlyDictionary<string, string> Badges, bool CardTextTrusted) touch = Assert.Single(touches.Touches);
+        Assert.Equal(knownCanonicalUrl, touch.Url);
+        Assert.True(touch.CardTextTrusted);
     }
 
     [Fact]
@@ -229,5 +265,6 @@ public class CarsComCarMaxPaddingStopsTests
         Assert.Equal([2], stoppedOnPaddingPages);
         Assert.Equal([ambiguousCanonicalUrl], touches.Touches.Select(t => t.Url));
         Assert.Null(touches.Touches[0].Price);
+        Assert.False(touches.Touches[0].CardTextTrusted);
     }
 }

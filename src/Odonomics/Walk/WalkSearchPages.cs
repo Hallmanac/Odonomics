@@ -37,9 +37,14 @@ public static class WalkSearchPages
     /// <summary>The candidate links for <paramref name="searchUrl"/>, in page order, one per
     /// canonical URL and at most <paramref name="poolSize"/>, not counting a link
     /// <paramref name="touchKnownAsync"/> takes (it is given the link's canonical URL, the card's
-    /// asking price, or null when the card shows none, and the site's badges the card shows, empty when
-    /// it shows none, and returns true for a link it took; it is asked about every distinct link, so a
-    /// link it does not take is where a caller keeps the card's badges for the detail visit). <paramref name="loadPageAsync"/> is
+    /// asking price, or null when the card shows none, the site's badges the card shows, empty when
+    /// it shows none, and whether that price and those badges came from the link's own trustworthy card
+    /// text, false only for a no-distance card's protective touch (see <paramref name="onNoDistance"/>
+    /// below): a caller must not re-derive anything else, such as a delivery fee, from that same link's
+    /// raw card text when this is false, since a no-distance card's text is an ambiguous multi-card
+    /// wrapper that can belong to a neighboring card instead. Returns true for a link it took; it is
+    /// asked about every distinct link, so a link it does not take is where a caller keeps the card's
+    /// badges for the detail visit). <paramref name="loadPageAsync"/> is
     /// given a page's URL and its 1-based number, and does everything a person would on that page
     /// (open it, scroll, dwell, record it) before returning its anchors and text, so the pacing between
     /// pages is the pacing between any two page loads. When a page after the first throws (other than
@@ -148,7 +153,7 @@ public static class WalkSearchPages
         WalkSite site,
         string searchUrl,
         int poolSize,
-        Func<string, decimal?, IReadOnlyDictionary<string, string>, CancellationToken, ValueTask<bool>> touchKnownAsync,
+        Func<string, decimal?, IReadOnlyDictionary<string, string>, bool, CancellationToken, ValueTask<bool>> touchKnownAsync,
         Func<string, int, CancellationToken, Task<SearchPageContent>> loadPageAsync,
         Action<int, Exception> onLaterPageFailed,
         Action<int> onSearchExhausted,
@@ -290,7 +295,7 @@ public static class WalkSearchPages
 
                 considered++;
                 added++;
-                if (await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken))
+                if (await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), true, cancellationToken))
                 {
                     continue;
                 }
@@ -311,13 +316,13 @@ public static class WalkSearchPages
             // visit on it.
             foreach (PageLink card in belowFloorCards)
             {
-                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), true, cancellationToken);
                 onBelowYearFloor?.Invoke();
             }
 
             foreach (PageLink card in overMileageCards)
             {
-                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), true, cancellationToken);
                 onOverMileageCap?.Invoke();
             }
 
@@ -333,7 +338,7 @@ public static class WalkSearchPages
             // own null price with a real one.
             foreach (PageLink card in noDistanceCards)
             {
-                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), null, NoCardBadges, cancellationToken);
+                await touchKnownAsync(WalkSites.CanonicalDetailUrl(card.Href), null, NoCardBadges, false, cancellationToken);
             }
 
             // An over-ceiling card is still one of the page's exact matches (see WalkSites.CollectDetailCards,
@@ -357,7 +362,7 @@ public static class WalkSearchPages
 
                 considered++;
                 added++;
-                await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), true, cancellationToken);
                 onOverPriceCeiling?.Invoke();
             }
 
@@ -375,7 +380,7 @@ public static class WalkSearchPages
 
                 considered++;
                 added++;
-                await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), cancellationToken);
+                await touchKnownAsync(canonicalUrl, site.ReadCardPrice(card.CardText), site.ReadCardBadges(card.CardText), true, cancellationToken);
                 onNoPriceStated?.Invoke();
             }
 
