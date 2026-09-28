@@ -55,11 +55,20 @@ public sealed record CarMaxBackfillTally(int Filled, int AlreadySet, int CouldNo
 /// page in the set carries the candidate's own canonical URL, so all of them are certainly its own car,
 /// and a disagreement between them is simply the car changing between runs, not proof of anything else.</para>
 ///
+/// <para>A missing <see cref="PostingAttributeNames.Availability"/> attribute is not always "never read",
+/// though: an ordinary walk clears it outright the moment a revisited detail page shows a recognized store
+/// with no reservation text (see <c>WalkCommand</c> and <see cref="LedgerUpsertService.ApplyAttributes"/>),
+/// leaving no attribute row behind either way. <see cref="PostingEntity.AvailabilityClearedAt"/> is the
+/// trace that clear leaves, so a candidate whose availability was cleared at or after the anchored match's
+/// own run is left alone rather than filled: the matched page's reservation is older news than the
+/// ledger's own most recent read, and writing it back would restore a state a newer visit already ended.</para>
+///
 /// <para>Nothing here is ever deleted, and a posting whose dealer is already a real store and whose
 /// availability is already set is never even considered: this only ever fills a gap, never
 /// reconciles one.</para></summary>
 public static class CarMaxBackfill
 {
+    private const string RunFolderTimestampFormat = "yyyyMMdd-HHmmss";
     public static async Task<CarMaxBackfillTally> RunAsync(
         string dataDirectory,
         IReadOnlyList<PostingEntity> carMaxPostings,
@@ -125,7 +134,7 @@ public static class CarMaxBackfill
             }
 
             bool wroteAvailability = false;
-            if (!candidate.HasAvailability && match.Availability is string availability)
+            if (!candidate.HasAvailability && match.Availability is string availability && !ClearedSinceMatch(candidate, match))
             {
                 await upsertService.SetPostingAttributesAsync(
                     candidate.PostingId,
@@ -161,7 +170,7 @@ public static class CarMaxBackfill
                 && string.IsNullOrEmpty(posting.Dealer.Location));
         bool hasAvailability = posting.Attributes.Any(a => a.Name == PostingAttributeNames.Availability);
 
-        return new Candidate(posting.Id, posting.Url, isBareDealer, hasAvailability);
+        return new Candidate(posting.Id, posting.Url, isBareDealer, hasAvailability, posting.AvailabilityClearedAt);
     }
 
     private static readonly JsonSerializerOptions CardEntryOptions = new() { PropertyNameCaseInsensitive = true };
@@ -298,11 +307,20 @@ public static class CarMaxBackfill
         }
 
         RecordedPage newest = anchoredMatches.Aggregate((a, b) => string.CompareOrdinal(a.RunFolder, b.RunFolder) >= 0 ? a : b);
-        match = new RecordedMatch(newest.Store, newest.Availability);
+        match = new RecordedMatch(newest.Store, newest.Availability, newest.RunFolder);
         return true;
     }
 
-    private readonly record struct Candidate(int PostingId, string Url, bool IsBareDealer, bool HasAvailability)
+    /// <summary>Whether <paramref name="candidate"/>'s availability was explicitly read as clear (see
+    /// <see cref="PostingEntity.AvailabilityClearedAt"/>) at or after <paramref name="match"/>'s own run,
+    /// meaning a visit newer than the matched page already ended whatever reservation or in-transit state
+    /// it shows: filling that state back in now would reconcile a gap the ledger has already closed, which
+    /// this backfill never does.</summary>
+    private static bool ClearedSinceMatch(Candidate candidate, RecordedMatch match) =>
+        candidate.AvailabilityClearedAt is { } clearedAt
+        && string.CompareOrdinal(clearedAt.ToString(RunFolderTimestampFormat), match.RunFolder) >= 0;
+
+    private readonly record struct Candidate(int PostingId, string Url, bool IsBareDealer, bool HasAvailability, DateTimeOffset? AvailabilityClearedAt)
     {
         /// <summary>Whether this posting is missing anything a recorded page could fill: a real
         /// store (it is still on the bare "CarMax" fallback) or an availability reading. A posting
@@ -318,5 +336,5 @@ public static class CarMaxBackfill
 
     private readonly record struct RecordedPage(string RunFolder, ResolvedDealer? Store, string? Availability);
 
-    private readonly record struct RecordedMatch(ResolvedDealer? Store, string? Availability);
+    private readonly record struct RecordedMatch(ResolvedDealer? Store, string? Availability, string RunFolder);
 }

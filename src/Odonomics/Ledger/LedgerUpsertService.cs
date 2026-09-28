@@ -138,11 +138,11 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     /// saved, and the posting must exist.</summary>
     public async Task SetPostingAttributesAsync(int postingId, IReadOnlyDictionary<string, string> attributes, IReadOnlyCollection<string> attributesToClear, RunEntity run, CancellationToken cancellationToken)
     {
-        List<PostingAttributeEntity> existing = await db.PostingAttributes
-            .Where(a => a.PostingId == postingId)
-            .ToListAsync(cancellationToken);
+        PostingEntity posting = await db.Postings
+            .Include(p => p.Attributes)
+            .FirstAsync(p => p.Id == postingId, cancellationToken);
 
-        ApplyAttributes(postingId, existing, attributes, attributesToClear, run);
+        ApplyAttributes(posting, [.. posting.Attributes], attributes, attributesToClear, run);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -162,7 +162,7 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
 
         foreach (PostingEntity posting in postings)
         {
-            ApplyAttributes(posting.Id, [.. posting.Attributes], attributesByUrl[posting.Url], [], run);
+            ApplyAttributes(posting, [.. posting.Attributes], attributesByUrl[posting.Url], [], run);
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -208,7 +208,7 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private void ApplyAttributes(int postingId, List<PostingAttributeEntity> existing, IReadOnlyDictionary<string, string> attributes, IReadOnlyCollection<string> attributesToClear, RunEntity run)
+    private void ApplyAttributes(PostingEntity posting, List<PostingAttributeEntity> existing, IReadOnlyDictionary<string, string> attributes, IReadOnlyCollection<string> attributesToClear, RunEntity run)
     {
         foreach (string rawName in attributesToClear)
         {
@@ -218,6 +218,15 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
             {
                 db.PostingAttributes.Remove(cleared);
                 existing.Remove(cleared);
+            }
+
+            // The only trace left on disk that this posting's availability was positively read as
+            // clear at this time, since removing the row above (or finding none to remove) looks
+            // identical to "never read" otherwise; CarMaxBackfill relies on this to avoid restoring a
+            // reservation an unrecorded, newer detail visit already cleared.
+            if (name == PostingAttributeNames.Availability)
+            {
+                posting.AvailabilityClearedAt = run.StartedAt;
             }
         }
 
@@ -235,7 +244,7 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
             {
                 var added = new PostingAttributeEntity
                 {
-                    PostingId = postingId,
+                    PostingId = posting.Id,
                     Name = name,
                     Value = value,
                     ObservedRunId = run.Id,
