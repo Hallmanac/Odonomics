@@ -234,7 +234,7 @@ public class ShowRendererMonthlyCostRenderingTests
         // A reserved-only vehicle has a null purchase price for a different reason than "every
         // posting is gone" (see VehiclePricing.OnlyReservedOrInTransit's own doc comment); `odo show`
         // must tell the two apart the same way `odo rank` does.
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyReservedOrInTransit: true, BuildScenario());
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: true, BuildScenario());
 
         Assert.Null(cost);
         Assert.Equal("every posting is reserved for another buyer or in transit, not yet purchasable", unavailable);
@@ -243,7 +243,7 @@ public class ShowRendererMonthlyCostRenderingTests
     [Fact]
     public void CostOrReason_NotReservedWithNoCurrentPrice_GivesTheGoneReason()
     {
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyReservedOrInTransit: false, BuildScenario());
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: false, BuildScenario());
 
         Assert.Null(cost);
         Assert.Contains("gone", unavailable);
@@ -255,7 +255,7 @@ public class ShowRendererMonthlyCostRenderingTests
         Scenario scenario = BuildScenario() with { Filters = BuildScenario().Filters with { MaxPrice = 25000 } };
         var purchasePrice = new PurchasePrice(25001m, null);
 
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyReservedOrInTransit: true, scenario);
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: true, scenario);
 
         Assert.Null(cost);
         Assert.Contains("exceeds the maximum", unavailable);
@@ -266,10 +266,40 @@ public class ShowRendererMonthlyCostRenderingTests
     {
         var purchasePrice = new PurchasePrice(17950m, null);
 
-        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyReservedOrInTransit: false, BuildScenario());
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: null, onlyReservedOrInTransit: false, BuildScenario());
 
         Assert.NotNull(cost);
         Assert.Null(unavailable);
+    }
+
+    [Fact]
+    public void CostOrReason_OnlyAtOutOfRadiusStore_GivesTheOnlyAtReasonNotTheGoneOne()
+    {
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: false, BuildScenario());
+
+        Assert.Null(cost);
+        Assert.Equal("only at Norco, out of radius", unavailable);
+    }
+
+    [Fact]
+    public void CostOrReason_OnlyAtOutOfRadiusStoreAndOnlyReservedOrInTransit_TheOnlyAtReasonWins()
+    {
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice: null, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: true, BuildScenario());
+
+        Assert.Null(cost);
+        Assert.Equal("only at Norco, out of radius", unavailable);
+    }
+
+    [Fact]
+    public void CostOrReason_OverTheCeilingAndOnlyAtOutOfRadiusStore_TheCeilingReasonWins()
+    {
+        Scenario scenario = BuildScenario() with { Filters = BuildScenario().Filters with { MaxPrice = 25000 } };
+        var purchasePrice = new PurchasePrice(25001m, null);
+
+        (CostBreakdown? cost, string? unavailable) = ShowCommand.CostOrReason("Toyota Prius", purchasePrice, onlyAtOutOfRadiusStore: "Norco", onlyReservedOrInTransit: false, scenario);
+
+        Assert.Null(cost);
+        Assert.Contains("exceeds the maximum", unavailable);
     }
 
     [Fact]

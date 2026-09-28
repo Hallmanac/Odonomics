@@ -38,12 +38,12 @@ public static class RankCommand
         var research = new Dictionary<string, ResearchStatus>();
         foreach (VehicleEntity vehicle in vehicles)
         {
-            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment);
+            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
             scores.Add(Scorer.Score(forScoring, scenario));
             research[vehicle.Vin] = ResearchStatusFor(
                 vinRecordsByVin.GetValueOrDefault(vehicle.Vin),
                 VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource),
-                FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment));
+                FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles));
         }
 
         RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets, detail);
@@ -53,13 +53,16 @@ public static class RankCommand
     /// <summary>The slice of a ledger vehicle the scorer reads, plus the site badge rank shows beside
     /// it. The price, the fees, and the badge all come from the same posting: the cheapest purchasable
     /// one to take home under <paramref name="fulfillment"/> (see
-    /// <see cref="VehiclePricing.LowestCurrentPurchasePosting"/>), never a reserved or in-transit one.
-    /// The availability note is the one exception: it comes from any of the vehicle's active postings,
-    /// not only that cheapest one (see <see cref="VehiclePricing.ReservedOrInTransitNote"/>).</summary>
-    public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment)
+    /// <see cref="VehiclePricing.LowestCurrentPurchasePosting"/>), never a reserved, in-transit, or
+    /// out-of-radius "Only at" one. The availability note is the one exception: it comes from any of the
+    /// vehicle's active postings, not only that cheapest one (see
+    /// <see cref="VehiclePricing.ReservedOrInTransitNote"/>). <paramref name="zip"/> and
+    /// <paramref name="radiusMiles"/> are the scenario's own, for judging whether a CarMax "Only at"
+    /// posting's store is close enough to still purchase.</summary>
+    public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string zip, int radiusMiles)
     {
-        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, fulfillment);
-        PostingEntity? cheapest = VehiclePricing.LowestCurrentPurchasePosting(vehicle, latestCoverageBySource, fulfillment);
+        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles);
+        PostingEntity? cheapest = VehiclePricing.LowestCurrentPurchasePosting(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles);
         return new VehicleForScoring
         {
             Vin = vehicle.Vin,
@@ -79,7 +82,8 @@ public static class RankCommand
             OnlyFGradedDealers = vehicle.Postings.Count > 0 && vehicle.Postings.All(p => p.Dealer?.Grade?.StartsWith('F') == true),
             SiteBadge = cheapest is null ? null : SiteBadgeText.For(cheapest.Attributes),
             Availability = VehiclePricing.ReservedOrInTransitNote(vehicle, latestCoverageBySource),
-            OnlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource),
+            OnlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource, zip, radiusMiles),
+            OnlyAtOutOfRadiusStore = VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, latestCoverageBySource, zip, radiusMiles),
         };
     }
 

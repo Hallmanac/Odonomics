@@ -281,13 +281,16 @@ public static class ResearchCommand
     /// <summary>The scenario's non-price hard filters (allowed model, minimum year, maximum mileage, not new
     /// stock) plus the price ceiling, checked against the same cheapest-to-take-home posting `odo rank` scores
     /// (see <see cref="RankCommand.ForScoring"/>), asking price and shipping fee together, so a car `odo rank`
-    /// would exclude for its price is never researched either. Missing-price is excluded on purpose: a
-    /// vehicle that has no current asking price is still worth researching (safety ratings and VIN history
-    /// don't depend on today's price), and <see cref="Scorer.FilterReasons"/> would otherwise reject every
-    /// unpriced vehicle outright.</summary>
+    /// would exclude for its price is never researched either. Missing-price is excluded on purpose, and so is
+    /// every posting being reserved, in transit, or an out-of-radius CarMax "Only at" posting: a vehicle in
+    /// any of those shapes is still worth researching (safety ratings and VIN history don't depend on today's
+    /// availability), and <see cref="Scorer.FilterReasons"/> would otherwise reject it outright.</summary>
     private static bool PassesScenarioFilters(VehicleEntity vehicle, Scenario scenario, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
     {
-        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment);
-        return Scorer.FilterReasons(forScoring, scenario).All(reason => reason.Contains("no current asking price"));
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
+        return Scorer.FilterReasons(forScoring, scenario).All(reason =>
+            reason.Contains("no current asking price")
+            || reason.Contains("reserved for another buyer or in transit")
+            || reason.Contains("out of radius"));
     }
 }
