@@ -180,8 +180,11 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
         SafetyRatingsResult safetyForCaller = safety.CouldNotFetchReason is null
             ? safety
             : cached.Safety with { CouldNotFetchReason = safety.CouldNotFetchReason };
+        VinHistoryResult historyForCaller = history.CouldNotFetchReason is null
+            ? history
+            : cached.History with { CouldNotFetchReason = history.CouldNotFetchReason };
 
-        return new VinResearchResult(decode, recallsForCaller, complaintsForCaller, safetyForCaller, history);
+        return new VinResearchResult(decode, recallsForCaller, complaintsForCaller, safetyForCaller, historyForCaller);
     }
 
     /// <summary>Rebuilds a <see cref="VinResearchResult"/> from a cached record's raw JSON, without
