@@ -264,10 +264,9 @@ public class WalkCoverageTests
     [Fact]
     public async Task RunAsync_APairWhoseRenderingLookedDegraded_StampsAnUnreadTokenBesideItsCoverageToken()
     {
-        // cars.com's own render wait can give up on a card, or a page can come back far short of the
-        // site's typical size, without any page ever actually failing to load (walk run 20260928-134242);
-        // either is treated the same as a failed later page, since this run did not actually measure
-        // everything the pair's own search would ordinarily show.
+        // cars.com's own render wait can give up on a known posting's card without any page ever actually
+        // failing to load; that is treated the same as a failed later page, since this run did not actually
+        // measure everything the pair's own search would ordinarily show.
         using var testDb = new LedgerTestDatabase();
         using OdonomicsDbContext db = testDb.CreateContext();
         RunEntity run = Run(DateTimeOffset.UtcNow);

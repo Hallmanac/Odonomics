@@ -286,21 +286,12 @@ public static class WalkCommand
         int skippedUnrendered = 0;
 
         // Set when this pair's own rendering looked degraded: a card the render wait still gave up on
-        // even after LoadSearchPageAsync's final re-check (see SearchPageCardRenderWait.StillUnrenderedAsync),
-        // or a later page of a site with a known typical page size (see WalkSite.TypicalResultsPerPage)
-        // came back with far fewer cards than a healthy page of it (walk run 20260928-134242, whose
-        // cars.com pages were throttled well below their usual card count without ever failing to load
-        // outright). Either symptom means this run did not actually measure everything the pair's own
-        // search would ordinarily show, so the pair's coverage is recorded as partial for it, the same as
-        // a failed later page, rather than let the diff read its untouched known postings as gone.
+        // even after LoadSearchPageAsync's final re-check (see SearchPageCardRenderWait.StillUnrenderedAsync)
+        // turned out to be a known posting (see the onUnrendered callback below). That means this run did
+        // not actually measure everything the pair's own search would ordinarily show, so the pair's
+        // coverage is recorded as partial for it, the same as a failed later page, rather than let the
+        // diff read its untouched known postings as gone.
         bool renderingDegraded = false;
-
-        // The raw count of detail-matching links LoadSearchPageAsync's own first page of each search
-        // found, by search index: the baseline a later page of the same search is checked against (see
-        // renderingDegraded above). Recorded once, from the first page read, since cars.com pads every
-        // page to its typical size regardless of the search's real match count, so the first page a
-        // search's own facet actually renders is as good a "healthy" reading as any later one.
-        var firstPageCardCountBySearch = new Dictionary<int, int>();
 
         // The canonical URLs, among those, that the ledger already held: never touched, so their
         // LastSeen never moved. Exempted from the diff on their own (see LedgerDiffService.ComputeAsync)
@@ -345,30 +336,20 @@ public static class WalkCommand
             string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
             await recorder.WriteAsync(WalkPairSearches.SearchFileName(searchIndex, pageNumber, searchUrls.Count), searchBodyText, ct);
 
-            IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync((script, arg) => page.EvaluateAsync<string[][]>(script, arg), site);
-            await recorder.WriteAsync(WalkPairSearches.CardsFileName(searchIndex, pageNumber, searchUrls.Count), SearchPageLinks.CardsJson(site, links), ct);
-
             if (site.WaitsForRenderedCards)
             {
                 // A card the scan loop above gave up on can still finish rendering in the moments since
-                // its last scan (the body-text read and this very card read both take real time too), so
-                // this checks each one's own fuse-card element again, right now, rather than trusting the
-                // loop's stale snapshot (see SearchPageCardRenderWait.StillUnrenderedAsync).
+                // its last scan (the body-text read just above takes real time too), so this checks each
+                // one's own fuse-card element again, right now, before the cards are actually read, rather
+                // than trusting the loop's stale snapshot (see SearchPageCardRenderWait.StillUnrenderedAsync).
+                // Running this before SearchPageLinks.ReadAsync, not after, is what keeps a card from
+                // finishing rendering in between the two calls and being read with a neighbor's price and
+                // distance while still counting as rendered.
                 unrenderedHrefs = await SearchPageCardRenderWait.StillUnrenderedAsync((script, arg) => page.EvaluateAsync<string[]>(script, arg));
             }
 
-            if (site.TypicalResultsPerPage is int typicalResultsPerPage)
-            {
-                int rawCardCount = links.Count(l => site.DetailUrlPattern.IsMatch(l.Href));
-                if (!firstPageCardCountBySearch.TryGetValue(searchIndex, out int firstPageCardCount))
-                {
-                    firstPageCardCountBySearch[searchIndex] = rawCardCount;
-                }
-                else if (WalkPageYield.FellFar(rawCardCount, firstPageCardCount, typicalResultsPerPage))
-                {
-                    renderingDegraded = true;
-                }
-            }
+            IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync((script, arg) => page.EvaluateAsync<string[][]>(script, arg), site);
+            await recorder.WriteAsync(WalkPairSearches.CardsFileName(searchIndex, pageNumber, searchUrls.Count), SearchPageLinks.CardsJson(site, links), ct);
 
             HashSet<string> unrenderedCanonicalUrls = [.. unrenderedHrefs.Select(WalkSites.CanonicalDetailUrl)];
             foreach (PageLink link in links.Where(l => site.DetailUrlPattern.IsMatch(l.Href) && l.CardText.Length > 0 && !unrenderedCanonicalUrls.Contains(WalkSites.CanonicalDetailUrl(l.Href))))

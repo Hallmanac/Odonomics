@@ -26,15 +26,13 @@ namespace Odonomics.Walk;
 /// the tolerance <see cref="WalkSearchCoverage"/> allows: the pages that would have closed that gap were
 /// never read, so this is treated the same way a failed later page is, with the same "pages unread" reason
 /// (see <see cref="FailedPage"/> and <see cref="Ledger.LedgerDiffService"/>). <see cref="RenderingDegraded"/>
-/// is true when this pair's own rendering looked degraded (walk run 20260928-134242): a card its site's
-/// render wait still gave up on even after a final re-check (see
-/// <see cref="SearchPageCardRenderWait.StillUnrenderedAsync"/>), unlike <see cref="UnrenderedKnownUrls"/>'s
-/// own per-URL exemption, this cannot say which specific known posting was affected, since a card the
-/// render wait never saw as a link at all (throttled off the page entirely, not merely slow to render) is
-/// invisible to it the same way; or a later page of a site with a known typical page size (see
-/// <see cref="WalkSite.TypicalResultsPerPage"/>) came back with far fewer cards than a healthy one. Either
-/// way this run did not actually measure everything the pair's own search would ordinarily show, so it is
-/// treated the same way a failed later page is, with the same "pages unread" reason.</summary>
+/// is true when a known posting's card was among those its site's render wait still gave up on even after
+/// a final re-check (see <see cref="SearchPageCardRenderWait.StillUnrenderedAsync"/>): unlike
+/// <see cref="UnrenderedKnownUrls"/>'s own per-URL exemption, this cannot say which specific known posting
+/// was affected, since a card the render wait never saw as a link at all (throttled off the page entirely,
+/// not merely slow to render) is invisible to it the same way. This run did not actually measure everything
+/// the pair's own search would ordinarily show, so it is treated the same way a failed later page is, with
+/// the same "pages unread" reason.</summary>
 public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
