@@ -46,6 +46,31 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
     /// retrying" in a batch's timeframe, so it degrades to a could-not-fetch reason instead.</summary>
     private static readonly TimeSpan MaxRetryPause = TimeSpan.FromSeconds(5);
 
+    /// <summary>After this many vehicles in a row each end in HTTP 429 that outlasts
+    /// <see cref="MaxAttempts"/>'s own retries, <see cref="GetHistoryAsync"/> stops calling
+    /// Marketcheck at all for the rest of this client's lifetime (one `odo research` run). Observed
+    /// in the 2026-09-28 outage: a plain run 40 minutes after the first one still 429'd on every one
+    /// of 158 vehicles, which points at an exhausted daily or monthly allowance rather than a burst
+    /// limit <see cref="MaxAttempts"/>'s own backoff can wait out, so retrying every remaining
+    /// vehicle the same way only spends the same bounded wait again for nothing. A later plain `odo
+    /// research` starts a new process, and with it a new client with this count back at zero.</summary>
+    public const int ConsecutiveFailuresBeforeAllowanceExhausted = 3;
+
+    /// <summary>The <see cref="VinHistoryResult.CouldNotFetchReason"/> stamped on every vehicle from
+    /// the moment <see cref="AllowanceExhausted"/> flips true onward, without another HTTP call.</summary>
+    public const string AllowanceExhaustedReason =
+        "Marketcheck VIN history: HTTP 429 (allowance exhausted; skipped for the rest of this run)";
+
+    private int _consecutive429Count;
+
+    /// <summary>True once <see cref="ConsecutiveFailuresBeforeAllowanceExhausted"/> vehicles in a row
+    /// each ended in HTTP 429; <see cref="GetHistoryAsync"/> checks this before making any HTTP call.
+    /// A non-429 failure, or a success, resets the streak the same as a success does: only an
+    /// unbroken run of 429s is evidence of an exhausted allowance, so an unrelated failure (a bad key,
+    /// a timeout) must not be lumped in with it. ResearchCommand reads this once per vehicle to print
+    /// its own one-line notice the moment it flips true.</summary>
+    public bool AllowanceExhausted { get; private set; }
+
     public async Task<VinHistoryResult> GetHistoryAsync(string vin, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -53,14 +78,33 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
             return new VinHistoryResult([], null, "no key: Marketcheck:ApiKey not set in user-secrets id odonomics and MARKETCHECK__APIKEY not set in the environment");
         }
 
+        if (AllowanceExhausted)
+        {
+            return new VinHistoryResult([], null, AllowanceExhaustedReason);
+        }
+
         try
         {
             IReadOnlyList<VinHistoryListing> priorListings = await FetchPriorListingsAsync(vin, cancellationToken);
             int? daysOnMarket = await FetchCurrentDaysOnMarketAsync(vin, cancellationToken);
+            _consecutive429Count = 0;
             return new VinHistoryResult(priorListings, daysOnMarket, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            if (ex is MarketcheckRateLimitExceededException)
+            {
+                _consecutive429Count++;
+                if (_consecutive429Count >= ConsecutiveFailuresBeforeAllowanceExhausted)
+                {
+                    AllowanceExhausted = true;
+                }
+            }
+            else
+            {
+                _consecutive429Count = 0;
+            }
+
             return new VinHistoryResult([], null, ex.Message);
         }
     }
@@ -71,7 +115,7 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
         (HttpStatusCode status, string body) = await GetWithRetryOn429Async(url, cancellationToken);
         if (!IsSuccess(status))
         {
-            throw new InvalidOperationException($"Marketcheck VIN history: HTTP {(int)status}");
+            throw FailureFor(status, "Marketcheck VIN history");
         }
 
         using JsonDocument doc = JsonDocument.Parse(body);
@@ -98,7 +142,7 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
         (HttpStatusCode status, string body) = await GetWithRetryOn429Async(url, cancellationToken);
         if (!IsSuccess(status))
         {
-            throw new InvalidOperationException($"Marketcheck current listing lookup: HTTP {(int)status}");
+            throw FailureFor(status, "Marketcheck current listing lookup");
         }
 
         using JsonDocument doc = JsonDocument.Parse(body);
@@ -157,6 +201,17 @@ public sealed class MarketcheckHistoryClient(string? apiKey, HttpClient http)
     }
 
     private static bool IsSuccess(HttpStatusCode status) => (int)status is >= 200 and < 300;
+
+    /// <summary>An HTTP 429 that outlasted <see cref="GetWithRetryOn429Async"/>'s own retries becomes
+    /// a distinct exception type so <see cref="GetHistoryAsync"/> can track it toward
+    /// <see cref="ConsecutiveFailuresBeforeAllowanceExhausted"/> separately from any other failed
+    /// status, which resets that count instead.</summary>
+    private static Exception FailureFor(HttpStatusCode status, string what) =>
+        status == HttpStatusCode.TooManyRequests
+            ? new MarketcheckRateLimitExceededException($"{what}: HTTP {(int)status}")
+            : new InvalidOperationException($"{what}: HTTP {(int)status}");
+
+    private sealed class MarketcheckRateLimitExceededException(string message) : Exception(message);
 
     private static string? GetString(JsonElement element, string property) =>
         element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
