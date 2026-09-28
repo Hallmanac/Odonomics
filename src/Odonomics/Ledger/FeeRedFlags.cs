@@ -11,9 +11,9 @@ public static class FeeRedFlags
     /// posting the vehicle is priced at under <paramref name="fulfillment"/> (see <see cref="VehiclePricing.LowestCurrentPurchasePosting"/>), as a
     /// list of zero or one so a caller can append it to the flags a research result already has. The
     /// posting must have its <see cref="PostingEntity.Dealer"/> loaded.</summary>
-    public static IReadOnlyList<RedFlag> For(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment)
+    public static IReadOnlyList<RedFlag> For(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string? zip = null, int? radiusMiles = null)
     {
-        PostingEntity? cheapest = VehiclePricing.LowestCurrentPurchasePosting(vehicle, latestCoverageBySource, fulfillment);
+        PostingEntity? cheapest = VehiclePricing.LowestCurrentPurchasePosting(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles);
         RedFlag? flag = cheapest is null
             ? null
             : RedFlagsEvaluator.AddOnsDealer(

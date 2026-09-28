@@ -67,7 +67,7 @@ public class RankSiteBadgeTests
     }
 
     private static List<Score> Rank(IEnumerable<VehicleEntity> ledger) =>
-        [.. ledger.Select(v => Scorer.Score(RankCommand.ForScoring(v, NoCoverage, Fulfillment.Delivery), DaughterScenario))];
+        [.. ledger.Select(v => Scorer.Score(RankCommand.ForScoring(v, NoCoverage, Fulfillment.Delivery, DaughterScenario.Zip, DaughterScenario.RadiusMiles), DaughterScenario))];
 
     private static string[] Render(IReadOnlyList<Score> scores)
     {
@@ -188,7 +188,7 @@ public class RankSiteBadgeTests
             Posting("carvana", "4T1G11AK0LU000009", 20000m, 1590m, Deal("Great Deal")),
             Posting("autotrader", "4T1G11AK0LU000009", 21000m, null, Deal("Good Price")));
 
-        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery);
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery, DaughterScenario.Zip, DaughterScenario.RadiusMiles);
 
         Assert.Equal(21000m, forScoring.LowestCurrentPrice);
         Assert.Equal("GP", forScoring.SiteBadge);
@@ -201,7 +201,7 @@ public class RankSiteBadgeTests
             "4T1G11AK0LU000009", 2021, "Prius", 30000,
             Posting("carmax", "4T1G11AK0LU000009", 20000m, null, (PostingAttributeNames.Availability, CarMaxStores.Reserved)));
 
-        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery);
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery, DaughterScenario.Zip, DaughterScenario.RadiusMiles);
 
         Assert.Equal(CarMaxStores.Reserved, forScoring.Availability);
     }
@@ -269,6 +269,76 @@ public class RankSiteBadgeTests
     }
 
     [Fact]
+    public void Rank_AVehicleWithOnlyAnOutOfRadiusOnlyAtCarMaxPosting_IsExcludedWithReason()
+    {
+        // Norco, CA is nowhere near the daughter scenario's own zip, 32833 (Orlando, FL); CarMax
+        // will not transfer a car like this to a nearby store, so it stays unranked (see
+        // CarMaxStoresTests for the distance figures this and the sibling tests below pin).
+        List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
+        ledger[0].Postings[0].Source = "carmax";
+        ledger[0].Postings[0].ShippingFee = 0m;
+        ledger[0].Postings[0].PickupLocation = "Only at Norco";
+
+        List<Score> scores = Rank(ledger);
+        string[] lines = Render(scores);
+
+        Score excludedScore = scores.Single(s => s.Vehicle.Vin == ledger[0].Vin);
+        Assert.False(excludedScore.Passes);
+        Assert.Contains(excludedScore.FailureReasons, r => r.Contains("only at Norco") && r.Contains("out of radius"));
+        Assert.Contains(lines, l => l.Contains("Ranked (3)"));
+        Assert.Contains(lines, l => l.Contains("Excluded (1)"));
+        string output = Regex.Replace(string.Join(' ', lines).Replace('│', ' '), @"\s+", " ");
+        Assert.Contains(ledger[0].Vin, output);
+        Assert.Contains("only at Norco, out of radius", output);
+    }
+
+    [Fact]
+    public void Rank_AVehicleWithAnInRadiusOnlyAtCarMaxPosting_StaysRankedFromItsOwnPrice()
+    {
+        // The Orlando store sits well inside the daughter scenario's 50-mile radius of 32833, so
+        // this posting is still purchasable and ranks the vehicle normally.
+        List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
+        ledger[0].Postings[0].Source = "carmax";
+        ledger[0].Postings[0].ShippingFee = 0m;
+        ledger[0].Postings[0].PickupLocation = "Only at Orlando";
+
+        List<Score> scores = Rank(ledger);
+        string[] lines = Render(scores);
+
+        Score score = scores.Single(s => s.Vehicle.Vin == ledger[0].Vin);
+        Assert.True(score.Passes);
+        Assert.Equal(24000m, score.Vehicle.LowestCurrentPrice);
+        Assert.Contains(lines, l => l.Contains("Ranked (4)"));
+    }
+
+    [Fact]
+    public void Rank_AVehicleWithAnotherPurchasablePostingBesideAnOutOfRadiusOnlyAtOne_StaysRankedFromTheOtherPosting()
+    {
+        List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
+        ledger[0].Postings[0].Source = "carmax";
+        ledger[0].Postings[0].ShippingFee = 0m;
+        ledger[0].Postings[0].PickupLocation = "Only at Norco";
+        ledger[0].Postings[0].PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 18000m, ObservedAt = RunTime }];
+        ledger[0].Postings.Add(new PostingEntity
+        {
+            VehicleVin = ledger[0].Vin,
+            Source = "cars.com",
+            Url = $"https://example.com/cars.com/{ledger[0].Vin}",
+            FirstSeen = RunTime,
+            LastSeen = RunTime,
+            PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 24000m, ObservedAt = RunTime }],
+        });
+
+        List<Score> scores = Rank(ledger);
+        string[] lines = Render(scores);
+
+        Score score = scores.Single(s => s.Vehicle.Vin == ledger[0].Vin);
+        Assert.True(score.Passes);
+        Assert.Equal(24000m, score.Vehicle.LowestCurrentPrice);
+        Assert.Contains(lines, l => l.Contains("Ranked (4)"));
+    }
+
+    [Fact]
     public void Rank_AVehicleWhoseReservationClears_IsRankedAgainWithNoManualStep()
     {
         List<VehicleEntity> ledger = FixtureLedger(withBadges: true);
@@ -289,7 +359,7 @@ public class RankSiteBadgeTests
         VehicleEntity vehicle = Vehicle("4T1G11AK0LU000009", 2021, "Prius", 30000, Posting("carvana", "4T1G11AK0LU000009", 20000m, null, Deal("Great Deal")));
         var covered = new Dictionary<string, DateTimeOffset> { [RunSources.Key("carvana", "Prius")] = RunTime.AddDays(1) };
 
-        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, covered, Fulfillment.Delivery);
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, covered, Fulfillment.Delivery, DaughterScenario.Zip, DaughterScenario.RadiusMiles);
 
         Assert.Null(forScoring.LowestCurrentPrice);
         Assert.Null(forScoring.SiteBadge);

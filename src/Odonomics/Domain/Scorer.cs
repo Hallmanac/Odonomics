@@ -73,7 +73,11 @@ public static class Scorer
             reasons.Add("excluded as new stock (under 500 miles or a model year beyond the current year)");
         }
 
-        if (vehicle.OnlyReservedOrInTransit)
+        if (vehicle.OnlyAtOutOfRadiusStore is string onlyAtStore)
+        {
+            reasons.Add($"only at {onlyAtStore}, out of radius");
+        }
+        else if (vehicle.OnlyReservedOrInTransit)
         {
             reasons.Add("every posting is reserved for another buyer or in transit, not yet purchasable");
         }

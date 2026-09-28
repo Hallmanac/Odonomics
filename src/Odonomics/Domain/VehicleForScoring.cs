@@ -75,6 +75,15 @@ public sealed record VehicleForScoring
     /// earlier one.</summary>
     public bool OnlyReservedOrInTransit { get; init; }
 
+    /// <summary>The CarMax store to blame when every one of this vehicle's live postings is either
+    /// reserved/in-transit or a CarMax "Only at" posting whose store sits outside the scenario's radius,
+    /// with none both purchasable and priced (see <see cref="Ledger.VehiclePricing.OnlyAtOutOfRadiusStore"/>):
+    /// null otherwise, including when a live, purchasable "Only at" posting sits inside the radius (that one
+    /// still prices and ranks the vehicle normally) or when another live posting is purchasable regardless of
+    /// what this one says. <see cref="Scorer.FilterReasons"/> is what actually excludes a vehicle this is set
+    /// for, with the reason "only at &lt;store&gt;, out of radius".</summary>
+    public string? OnlyAtOutOfRadiusStore { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>

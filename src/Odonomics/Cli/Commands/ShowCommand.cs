@@ -44,11 +44,12 @@ public static class ShowCommand
         // asking price alone; the monthly cost is what taking the car home costs under the scenario's fulfillment,
         // itemized fees included. The fee flag comes from the postings, not the research.
         decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-        IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment)];
+        IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles)];
 
-        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, scenario.Fulfillment);
-        bool onlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource);
-        (CostBreakdown? monthlyCost, string? unavailable) = CostOrReason($"{vehicle.Make} {vehicle.Model}", purchasePrice, onlyReservedOrInTransit, scenario);
+        PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
+        bool onlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);
+        string? onlyAtOutOfRadiusStore = VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);
+        (CostBreakdown? monthlyCost, string? unavailable) = CostOrReason($"{vehicle.Make} {vehicle.Model}", purchasePrice, onlyAtOutOfRadiusStore, onlyReservedOrInTransit, scenario);
         ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice);
         return 0;
     }
@@ -74,16 +75,20 @@ public static class ShowCommand
 
     /// <summary>The monthly cost `odo show` prints for one vehicle, or the reason it can't be priced,
     /// checked in the order that reason should win: the scenario's own price ceiling first (see
-    /// <see cref="OverPriceCeiling"/>), then whether every live posting is reserved or in transit (see
-    /// <see cref="VehiclePricing.OnlyReservedOrInTransit"/>) rather than <paramref name="purchasePrice"/>
-    /// simply being null, since that null means something else, "no current asking price (every posting
-    /// is gone)", only when it is not also true. <see cref="MonthlyCostFor"/> checks the rest.</summary>
-    public static (CostBreakdown? Cost, string? Unavailable) CostOrReason(string makeModel, PurchasePrice? purchasePrice, bool onlyReservedOrInTransit, Scenario scenario) =>
+    /// <see cref="OverPriceCeiling"/>), then whether every live posting is an out-of-radius CarMax "Only
+    /// at" posting (see <see cref="VehiclePricing.OnlyAtOutOfRadiusStore"/>), then whether every live
+    /// posting is reserved or in transit (see <see cref="VehiclePricing.OnlyReservedOrInTransit"/>) rather
+    /// than <paramref name="purchasePrice"/> simply being null, since that null means something else, "no
+    /// current asking price (every posting is gone)", only when neither of those is also true.
+    /// <see cref="MonthlyCostFor"/> checks the rest.</summary>
+    public static (CostBreakdown? Cost, string? Unavailable) CostOrReason(string makeModel, PurchasePrice? purchasePrice, string? onlyAtOutOfRadiusStore, bool onlyReservedOrInTransit, Scenario scenario) =>
         OverPriceCeiling(purchasePrice, scenario.Filters.MaxPrice) is string ceilingReason
             ? (null, ceilingReason)
-            : onlyReservedOrInTransit
-                ? (null, "every posting is reserved for another buyer or in transit, not yet purchasable")
-                : MonthlyCostFor(makeModel, purchasePrice?.Total, scenario);
+            : onlyAtOutOfRadiusStore is string store
+                ? (null, $"only at {store}, out of radius")
+                : onlyReservedOrInTransit
+                    ? (null, "every posting is reserved for another buyer or in transit, not yet purchasable")
+                    : MonthlyCostFor(makeModel, purchasePrice?.Total, scenario);
 
     /// <summary>Prices one vehicle the way `odo rank` does (see <see cref="Scorer.ComputeCost"/>), but
     /// without the hard filters: `odo show` is asked about any VIN in the ledger, including one the
