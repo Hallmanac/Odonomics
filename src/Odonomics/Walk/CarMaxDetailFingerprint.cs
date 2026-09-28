@@ -6,11 +6,10 @@ namespace Odonomics.Walk;
 /// a search card's own text, see <see cref="CarMaxDetailFingerprints.Read"/>) states about its car,
 /// read directly off the visible text rather than through <see cref="Extraction.ExtractionClient"/>'s
 /// LLM call. A detail page's own visible text never states its VIN or its own URL (the happy path,
-/// where the VIN read off the page's HTML actually succeeds, never keeps that HTML on disk), and
-/// <see cref="CarMaxBackfill"/> needs a way to match a recorded page back to a ledger posting without
-/// either: the same figures a search card's own text states about a car are exactly what the original
-/// walk read off its detail page to store the posting in the first place, so comparing what a page and
-/// a posting each say about the car itself is what stands in for a VIN or URL.</summary>
+/// where the VIN read off the page's HTML actually succeeds, never keeps that HTML on disk), so
+/// <see cref="CarMaxBackfill"/> anchors a detail page to a posting through a search card instead: a
+/// card's own fingerprint is compared against a detail page's, both read by this same type, to line up
+/// a card's href (the posting's URL) with the detail page recorded from the very same walk.</summary>
 public sealed record CarMaxDetailFingerprint(int Year, string Make, string Model, string? Trim, int Mileage, decimal? Price);
 
 public static class CarMaxDetailFingerprints
@@ -24,10 +23,12 @@ public static class CarMaxDetailFingerprints
         @"^[ \t]*(?<year>\d{4})[ \t]+(?<make>[A-Z][A-Za-z]*)[ \t]+(?<model>\S.*?)[ \t]*$",
         RegexOptions.Multiline | RegexOptions.Compiled);
 
-    /// <summary>"33k miles", "630 miles", or a search card's own "25K mi" shorthand: CarMax rounds
-    /// anything at or above 1,000 miles to the nearest thousand on both its cards and its detail
-    /// pages, so the figure here is exactly what the original extraction would also have read off the
-    /// same page.</summary>
+    /// <summary>"33k miles", "630 miles", or a search card's own "25K mi" shorthand. A car's detail
+    /// page and its own card usually agree, but not always: CarMax's cards round some cars with well
+    /// under 1,000 actual miles up to "1K mi" while the detail page still states the exact figure (a
+    /// recorded 2026-09-27 camry-hybrid detail page reads "521 miles" for a car whose own card reads
+    /// "1K mi"), so a fingerprint built from one never matches the other for that car; that leaves it
+    /// unmatched and counted as could-not-match rather than mismatched.</summary>
     private static readonly Regex MileageLine = new(
         @"^[ \t]*(?<num>[\d,]+)(?<k>[kK])?[ \t]+mi(?:les?)?[ \t]*$",
         RegexOptions.Multiline | RegexOptions.Compiled);
