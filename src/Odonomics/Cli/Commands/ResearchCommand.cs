@@ -61,7 +61,8 @@ public static class ResearchCommand
 
         var secrets = new SecretResolver();
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        var researchService = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient(secrets.MarketcheckApiKey, http));
+        var marketcheck = new MarketcheckHistoryClient(secrets.MarketcheckApiKey, http);
+        var researchService = new VinResearchService(new NhtsaClient(http), marketcheck);
 
         var summaryEntries = new List<ResearchSummaryEntry>();
         int fullyResearched = 0;
@@ -69,6 +70,12 @@ public static class ResearchCommand
         int unreachable = 0;
         int fetchedCount = 0;
         int cachedCount = 0;
+
+        // Counts a vehicle whose Marketcheck call was skipped outright because
+        // MarketcheckHistoryClient.AllowanceExhausted already tripped (three vehicles in this run hit
+        // HTTP 429 in a row), so the one-line notice below can name how many vehicles were affected
+        // instead of every one of them getting its own silent "partial" tag.
+        int marketcheckAllowanceSkipped = 0;
 
         try
         {
@@ -82,6 +89,11 @@ public static class ResearchCommand
                     VinResearchResult research = usingCache
                         ? VinResearchService.FromCached(vehicle.VinRecord!)
                         : await researchService.RefreshAsync(db, vehicle, refresh, cancellationToken);
+
+                    if (!usingCache && research.History.CouldNotFetchReason == MarketcheckHistoryClient.AllowanceExhaustedReason)
+                    {
+                        marketcheckAllowanceSkipped++;
+                    }
 
                     decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
                     IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment)];
@@ -163,6 +175,12 @@ public static class ResearchCommand
             {
                 ResearchProgressCounter.Finish(AnsiConsole.Console);
             }
+        }
+
+        if (marketcheckAllowanceSkipped > 0)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLineInterpolated($"[yellow]Marketcheck VIN history hit HTTP 429 for {MarketcheckHistoryClient.ConsecutiveFailuresBeforeAllowanceExhausted} vehicles in a row; treated the allowance as exhausted and skipped Marketcheck for {marketcheckAllowanceSkipped} vehicle(s) for the rest of this run. A later plain odo research will retry them.[/]");
         }
 
         AnsiConsole.WriteLine();
