@@ -145,6 +145,61 @@ public class MarketcheckHistoryClientTests
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(30), $"expected the wait to be capped well under Retry-After's one hour, took {stopwatch.Elapsed}");
     }
 
+    /// <summary>Pins the 2026-09-28 follow-up fix: after the 158-VIN outage where every vehicle in a
+    /// batch spent its full per-call retries against HTTP 429 (about 40 minutes across the batch),
+    /// three vehicles in a row still ending in 429 now stops the client from calling Marketcheck at
+    /// all for the rest of the run, so the fourth and fifth vehicles below never generate a single
+    /// request.</summary>
+    [Fact]
+    public async Task GetHistoryAsync_AlwaysReturns429AcrossManyVehicles_StopsCallingAfterThreeConsecutiveFailures()
+    {
+        var handler = new AlwaysTooManyRequestsHttpMessageHandler();
+        var client = new MarketcheckHistoryClient("test-key", new HttpClient(handler));
+        string[] vins = ["11111111111111111", "22222222222222222", "33333333333333333", "44444444444444444", "55555555555555555"];
+
+        var results = new List<VinHistoryResult>();
+        foreach (string vin in vins)
+        {
+            results.Add(await client.GetHistoryAsync(vin, CancellationToken.None));
+        }
+
+        List<string> vinsThatReachedMarketcheck = [.. vins.Where(v => handler.RequestedUrls.Any(u => u.Contains(v, StringComparison.Ordinal)))];
+        Assert.Equal(3, vinsThatReachedMarketcheck.Count);
+        Assert.Equal(vins.Take(3), vinsThatReachedMarketcheck);
+
+        Assert.All(results.Take(3), r => Assert.Contains("429", r.CouldNotFetchReason));
+        Assert.All(results.Skip(3), r => Assert.Equal(MarketcheckHistoryClient.AllowanceExhaustedReason, r.CouldNotFetchReason));
+        Assert.True(client.AllowanceExhausted);
+    }
+
+    /// <summary>The other half of the same fix: a success in between two runs of failures must reset
+    /// the consecutive-429 count, so four 429s spread across five vehicles (with a success in the
+    /// middle) never trips the stop.</summary>
+    [Fact]
+    public async Task GetHistoryAsync_SuccessBetweenTwo429Vehicles_NeverExhaustsTheAllowance()
+    {
+        var handler = new TooManyRequestsExceptForOneVinHttpMessageHandler(
+            Vin,
+            await File.ReadAllTextAsync(FixturePath($"vin-history-{Vin}.json")),
+            await File.ReadAllTextAsync(FixturePath($"active-search-{Vin}.json")));
+        var client = new MarketcheckHistoryClient("test-key", new HttpClient(handler));
+
+        VinHistoryResult first = await client.GetHistoryAsync("11111111111111111", CancellationToken.None);
+        VinHistoryResult second = await client.GetHistoryAsync("22222222222222222", CancellationToken.None);
+        VinHistoryResult third = await client.GetHistoryAsync(Vin, CancellationToken.None);
+        VinHistoryResult fourth = await client.GetHistoryAsync("33333333333333333", CancellationToken.None);
+        VinHistoryResult fifth = await client.GetHistoryAsync("44444444444444444", CancellationToken.None);
+
+        Assert.Contains("429", first.CouldNotFetchReason);
+        Assert.Contains("429", second.CouldNotFetchReason);
+        Assert.Null(third.CouldNotFetchReason);
+        Assert.Contains("429", fourth.CouldNotFetchReason);
+        Assert.Contains("429", fifth.CouldNotFetchReason);
+        Assert.NotEqual(MarketcheckHistoryClient.AllowanceExhaustedReason, fourth.CouldNotFetchReason);
+        Assert.NotEqual(MarketcheckHistoryClient.AllowanceExhaustedReason, fifth.CouldNotFetchReason);
+        Assert.False(client.AllowanceExhausted);
+    }
+
     [Fact]
     public async Task GetHistoryAsync_CallerCancels_PropagatesCancellation()
     {
@@ -235,9 +290,32 @@ public class MarketcheckHistoryClientTests
     {
         public int CallCount { get; private set; }
 
+        public List<string> RequestedUrls { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             CallCount++;
+            RequestedUrls.Add(request.RequestUri?.ToString() ?? throw new InvalidOperationException("request has no URL"));
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("") };
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+            return Task.FromResult(response);
+        }
+    }
+
+    /// <summary>Answers HTTP 429 for every VIN except <paramref name="successVin"/>, which gets the
+    /// recorded history and active-search fixtures instead: proves a success in between two runs of
+    /// 429s resets <see cref="MarketcheckHistoryClient"/>'s consecutive-failure count.</summary>
+    private sealed class TooManyRequestsExceptForOneVinHttpMessageHandler(string successVin, string historyBody, string activeBody) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            string url = request.RequestUri?.ToString() ?? throw new InvalidOperationException("request has no URL");
+            if (url.Contains(successVin, StringComparison.Ordinal))
+            {
+                string body = url.Contains("/history/car/", StringComparison.Ordinal) ? historyBody : activeBody;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+            }
+
             var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("") };
             response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
             return Task.FromResult(response);
