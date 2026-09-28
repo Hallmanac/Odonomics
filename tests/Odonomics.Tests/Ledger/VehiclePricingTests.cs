@@ -462,4 +462,44 @@ public class VehiclePricingTests
     {
         Assert.False(VehiclePricing.OnlyReservedOrInTransit(Vehicle(), NoCoverage));
     }
+
+    [Fact]
+    public void LowestCurrentPurchasePrice_ReservedPostingCheaperThanAnotherLivePosting_PricesFromTheLiveOne()
+    {
+        PostingEntity reserved = Posting("carmax", 20000m);
+        reserved.Attributes = [AvailabilityAttribute(CarMaxStores.Reserved)];
+        PostingEntity available = Posting("cars.com", 22000m);
+        VehicleEntity vehicle = Vehicle(reserved, available);
+
+        PurchasePrice? price = VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery);
+        PostingEntity? posting = VehiclePricing.LowestCurrentPurchasePosting(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(22000m, price?.Asking);
+        Assert.Equal("cars.com", posting?.Source);
+        Assert.False(VehiclePricing.OnlyReservedOrInTransit(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void OnlyReservedOrInTransit_OtherLivePostingHasNoValidPrice_IsTrueAndPricesNothing()
+    {
+        PostingEntity reserved = Posting("carmax", 20000m);
+        reserved.Attributes = [AvailabilityAttribute(CarMaxStores.Reserved)];
+        PostingEntity noValidPrice = Posting("cars.com", 0m);
+        VehicleEntity vehicle = Vehicle(reserved, noValidPrice);
+
+        Assert.True(VehiclePricing.OnlyReservedOrInTransit(vehicle, NoCoverage));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePosting(vehicle, NoCoverage, Fulfillment.Delivery));
+    }
+
+    [Fact]
+    public void ReservedOrInTransitNote_ReservedPostingWithAnotherLivePosting_StillReportsTheNote()
+    {
+        PostingEntity reserved = Posting("carmax", 20000m);
+        reserved.Attributes = [AvailabilityAttribute(CarMaxStores.Reserved)];
+        PostingEntity available = Posting("cars.com", 22000m);
+        VehicleEntity vehicle = Vehicle(reserved, available);
+
+        Assert.Equal(CarMaxStores.Reserved, VehiclePricing.ReservedOrInTransitNote(vehicle, NoCoverage));
+    }
 }

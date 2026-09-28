@@ -202,11 +202,11 @@ public static class RankRenderer
             : $"  {Format.Cell(score.Vehicle.Vin)}  {Format.Cell(name)}";
     }
 
-    /// <summary>The line under a row's vehicle line when its cheapest posting is reserved or in
-    /// transit (see <see cref="VehicleForScoring.Availability"/>): that fact in red, on its own line
-    /// so it never pushes <see cref="VehicleLine"/> past its own 80-column guarantee, but still right
-    /// under the row it still ranks alongside every other. Null when the vehicle carries no such
-    /// note.</summary>
+    /// <summary>The line under a row's vehicle line when one of its active postings is reserved or in
+    /// transit, even one other than the posting it's priced from (see <see cref="VehicleForScoring.Availability"/>):
+    /// that fact in red, on its own line so it never pushes <see cref="VehicleLine"/> past its own
+    /// 80-column guarantee, but still right under the row it still ranks alongside every other. Null
+    /// when the vehicle carries no such note.</summary>
     private static string? AvailabilityLine(Score score) =>
         score.Vehicle.Availability is string note ? $"    [red]{Markup.Escape(note)}[/]" : null;
 

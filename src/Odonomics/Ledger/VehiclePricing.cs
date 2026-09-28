@@ -20,8 +20,10 @@ public static class VehiclePricing
         return known.Length == 0 ? null : known.Min();
     }
 
-    /// <summary>The cheapest way to take this vehicle home among its active postings (see
-    /// <see cref="LowestCurrentPrice"/> for which those are): each posting's latest asking price
+    /// <summary>The cheapest way to take this vehicle home among its active, purchasable postings (see
+    /// <see cref="LowestCurrentPrice"/> for which are active; a posting currently reserved or in transit,
+    /// see <see cref="IsReservedOrInTransit"/>, is never a candidate here even when it is the cheapest
+    /// priced one, since it cannot actually be bought right now): each posting's latest asking price
     /// plus the fee for <paramref name="fulfillment"/>, plus the fees it itemized on top of that price
     /// when its fee posture is itemized, so a far-away carvana car, or a dealer whose fees are added at
     /// the desk, is compared honestly with one that has neither. Under delivery the fee is the shipping
@@ -33,9 +35,9 @@ public static class VehiclePricing
     public static PurchasePrice? LowestCurrentPurchasePrice(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment) =>
         CheapestPosting(vehicle, latestCoverageBySource, fulfillment)?.Price;
 
-    /// <summary>The active posting <see cref="LowestCurrentPurchasePrice"/> reports the price of, so a
-    /// display that sits beside that price (a site's own badge for the listing, its dealer and fee
-    /// posture) speaks for the same listing; null when no active posting has a price.</summary>
+    /// <summary>The active, purchasable posting <see cref="LowestCurrentPurchasePrice"/> reports the price
+    /// of, so a display that sits beside that price (a site's own badge for the listing, its dealer and fee
+    /// posture) speaks for the same listing; null when no active, purchasable posting has a price.</summary>
     public static PostingEntity? LowestCurrentPurchasePosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment) =>
         CheapestPosting(vehicle, latestCoverageBySource, fulfillment)?.Posting;
 
@@ -44,6 +46,7 @@ public static class VehiclePricing
         (PostingEntity Posting, PurchasePrice Price)[] known =
         [
             .. ActivePostings(vehicle, latestCoverageBySource)
+                .Where(p => !IsReservedOrInTransit(p))
                 .Select(p => (Posting: p, Asking: LatestAskingPrice(p)))
                 .Where(p => p.Asking is not null)
                 .Select(p => (p.Posting, PurchasePriceOf(p.Posting, p.Asking.GetValueOrDefault(), fulfillment))),
@@ -69,16 +72,32 @@ public static class VehiclePricing
         };
 
     /// <summary>True when this vehicle has at least one active posting (see <see cref="LowestCurrentPrice"/>
-    /// for which those are) and every one of them currently carries CarMax's own
-    /// <see cref="PostingAttributeNames.Availability"/> attribute: "Reserved for another buyer" or "In
-    /// transit, not yet purchasable", so not one of them can actually be bought right now. A vehicle with
-    /// no active posting at all (every posting gone) is false here too, since that is
-    /// <see cref="Domain.Scorer.FilterReasons"/>'s own separate reason to give, not this one's.</summary>
+    /// for which those are) currently carrying CarMax's own <see cref="PostingAttributeNames.Availability"/>
+    /// attribute ("Reserved for another buyer" or "In transit, not yet purchasable"), and none of its active
+    /// postings is both purchasable (not carrying that attribute) and priced: whether because every active
+    /// posting carries it, or because the only ones that don't have no valid price to rank or budget on (see
+    /// <see cref="LatestAskingPrice"/>) and so are indistinguishable from gone. Either way <see cref="CheapestPosting"/>
+    /// has nothing to price the vehicle from, so this is the reason to give instead of ranking it on the
+    /// reserved posting's own price. A vehicle with no active posting at all (every posting gone) is false
+    /// here too, since that is <see cref="Domain.Scorer.FilterReasons"/>'s own separate reason to give, not
+    /// this one's.</summary>
     public static bool OnlyReservedOrInTransit(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
     {
         PostingEntity[] active = [.. ActivePostings(vehicle, latestCoverageBySource)];
-        return active.Length > 0 && active.All(IsReservedOrInTransit);
+        return active.Length > 0
+            && active.Any(IsReservedOrInTransit)
+            && !active.Any(p => !IsReservedOrInTransit(p) && LatestAskingPrice(p) is not null);
     }
+
+    /// <summary>The <see cref="PostingAttributeNames.Availability"/> note of the first active posting that
+    /// carries one, even when a different, purchasable posting is the one <see cref="LowestCurrentPurchasePosting"/>
+    /// actually prices the vehicle from: informational only, for `odo rank` to show beside a row that still
+    /// ranks normally off another posting. <see cref="OnlyReservedOrInTransit"/> is what actually excludes a
+    /// vehicle; null when no active posting carries the attribute.</summary>
+    public static string? ReservedOrInTransitNote(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
+        ActivePostings(vehicle, latestCoverageBySource)
+            .SelectMany(p => p.Attributes)
+            .FirstOrDefault(a => a.Name == PostingAttributeNames.Availability)?.Value;
 
     /// <summary>True when the posting currently carries CarMax's <see cref="PostingAttributeNames.Availability"/>
     /// attribute at all: the attribute is only ever set to say a car can't be bought right now (see its own
