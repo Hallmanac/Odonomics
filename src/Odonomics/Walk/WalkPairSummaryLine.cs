@@ -25,6 +25,7 @@ public static class WalkPairSummaryLine
         DetailPageOutcome.NewCar,
         DetailPageOutcome.Sold,
         DetailPageOutcome.NoPriceListed,
+        DetailPageOutcome.CarMaxDealer,
         DetailPageOutcome.MissingFields,
         DetailPageOutcome.NoVin,
         DetailPageOutcome.Repeat,

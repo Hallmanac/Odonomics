@@ -523,4 +523,38 @@ public class WalkSitesTests
         Assert.Single(noDistance);
         Assert.Empty(overCeiling);
     }
+
+    // CarMax is walked nationwide by its own site, and cars.com's delivery offer does not actually
+    // hold for an "Only at" CarMax car anyway, so a CarMax dealer on cars.com is always skipped
+    // (WalkCommand.VisitLinkAsync) rather than saved as a second, redundant posting.
+    [Theory]
+    [InlineData("CarMax Tri-Cities Kennewick")]
+    [InlineData("CarMax Santa Rosa")]
+    [InlineData("CarMax Lakeland")]
+    [InlineData("CarMax Norco")]
+    [InlineData("carmax lakeland")]
+    public void CarsCom_IsCarMaxDealer_AnyCarMaxStoreName_IsTrue(string dealerName)
+    {
+        Assert.True(WalkSites.CarsCom.IsCarMaxDealer(dealerName));
+    }
+
+    [Fact]
+    public void CarsCom_IsCarMaxDealer_OrdinaryDealer_IsFalse()
+    {
+        Assert.False(WalkSites.CarsCom.IsCarMaxDealer("Holler Honda"));
+    }
+
+    [Fact]
+    public void CarsCom_IsCarMaxDealer_NullDealerName_IsFalse()
+    {
+        Assert.False(WalkSites.CarsCom.IsCarMaxDealer(null));
+    }
+
+    [Fact]
+    public void CarGurus_IsCarMaxDealer_NeverTrue_SiteDoesNotSkipCarMaxDealers()
+    {
+        // CarGurus never carries CarMax's own inventory the way cars.com does, so its
+        // SkipsCarMaxDealer flag is unset and this must stay false even for a CarMax-shaped name.
+        Assert.False(WalkSites.CarGurus.IsCarMaxDealer("CarMax Norco"));
+    }
 }
