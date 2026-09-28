@@ -78,6 +78,11 @@ public static class Scorer
             reasons.Add("no current asking price (every posting is gone)");
         }
 
+        if (vehicle.OnlyReservedOrInTransit)
+        {
+            reasons.Add("every posting is reserved for another buyer or in transit, not yet purchasable");
+        }
+
         return reasons;
     }
 

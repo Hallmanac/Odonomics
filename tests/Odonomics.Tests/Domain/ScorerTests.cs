@@ -212,6 +212,28 @@ public class ScorerTests
     }
 
     [Fact]
+    public void FilterReasons_OnlyReservedOrInTransit_ReportsReason()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with { OnlyReservedOrInTransit = true };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.Contains(reasons, r => r.Contains("reserved") && r.Contains("in transit"));
+    }
+
+    [Fact]
+    public void FilterReasons_NotOnlyReservedOrInTransit_NeverReportsTheReservedReason()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with { OnlyReservedOrInTransit = false };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.DoesNotContain(reasons, r => r.Contains("reserved"));
+    }
+
+    [Fact]
     public void Score_InsuranceUnknownForModel_ReturnsNoCostBreakdownButStillPasses()
     {
         Scenario scenario = BuildScenario();
