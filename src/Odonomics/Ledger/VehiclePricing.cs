@@ -68,6 +68,26 @@ public static class VehiclePricing
             _ => new(asking, posting.ShippingFee, posting.PickupFee, posting.PickupLocation, fulfillment, null, posting.FeePosture),
         };
 
+    /// <summary>True when this vehicle has at least one active posting (see <see cref="LowestCurrentPrice"/>
+    /// for which those are) and every one of them currently carries CarMax's own
+    /// <see cref="PostingAttributeNames.Availability"/> attribute: "Reserved for another buyer" or "In
+    /// transit, not yet purchasable", so not one of them can actually be bought right now. A vehicle with
+    /// no active posting at all (every posting gone) is false here too, since that is
+    /// <see cref="Domain.Scorer.FilterReasons"/>'s own separate reason to give, not this one's.</summary>
+    public static bool OnlyReservedOrInTransit(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
+    {
+        PostingEntity[] active = [.. ActivePostings(vehicle, latestCoverageBySource)];
+        return active.Length > 0 && active.All(IsReservedOrInTransit);
+    }
+
+    /// <summary>True when the posting currently carries CarMax's <see cref="PostingAttributeNames.Availability"/>
+    /// attribute at all: the attribute is only ever set to say a car can't be bought right now (see its own
+    /// doc comment), and a run whose detail visit finds the reservation lifted removes the row entirely
+    /// rather than changing its value (see <see cref="LedgerUpsertService.ApplyAttributes"/> and
+    /// <see cref="PostingEntity.AvailabilityClearedAt"/>), so the row's mere presence is enough.</summary>
+    private static bool IsReservedOrInTransit(PostingEntity posting) =>
+        posting.Attributes.Any(a => a.Name == PostingAttributeNames.Availability);
+
     private static IEnumerable<PostingEntity> ActivePostings(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
         vehicle.Postings.Where(p =>
         {

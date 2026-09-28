@@ -1,6 +1,7 @@
 using Odonomics.Cli.Commands;
 using Odonomics.Domain;
 using Odonomics.Ledger;
+using Odonomics.Walk;
 
 namespace Odonomics.Tests.Ledger;
 
@@ -414,5 +415,51 @@ public class VehiclePricingTests
         posting.PriceObservations.Add(new PriceObservationEntity { PostingId = 0, Price = 0m, ObservedAt = RunTime.AddDays(1) });
 
         Assert.Null(VehiclePricing.LowestCurrentPrice(Vehicle(posting), NoCoverage));
+    }
+
+    private static PostingAttributeEntity AvailabilityAttribute(string value) =>
+        new() { PostingId = 0, Name = PostingAttributeNames.Availability, Value = value, ObservedRunId = 1 };
+
+    [Theory]
+    [InlineData(CarMaxStores.Reserved)]
+    [InlineData(CarMaxStores.ComingSoon)]
+    public void OnlyReservedOrInTransit_OneActivePostingCarryingTheNote_IsTrue(string note)
+    {
+        PostingEntity posting = Posting("carmax", 24998m);
+        posting.Attributes = [AvailabilityAttribute(note)];
+        VehicleEntity vehicle = Vehicle(posting);
+
+        Assert.True(VehiclePricing.OnlyReservedOrInTransit(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void OnlyReservedOrInTransit_AnotherActivePostingNotReserved_IsFalse()
+    {
+        PostingEntity reserved = Posting("carmax", 24998m);
+        reserved.Attributes = [AvailabilityAttribute(CarMaxStores.Reserved)];
+        PostingEntity available = Posting("cars.com", 26000m);
+        VehicleEntity vehicle = Vehicle(reserved, available);
+
+        Assert.False(VehiclePricing.OnlyReservedOrInTransit(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void OnlyReservedOrInTransit_AttributeClearedByALaterWalk_IsFalse()
+    {
+        // A later detail visit that finds the reservation lifted removes the attribute row and
+        // stamps AvailabilityClearedAt (see LedgerUpsertService.ApplyAttributes); the row's absence,
+        // not the timestamp, is what this reads.
+        PostingEntity posting = Posting("carmax", 24998m);
+        posting.Attributes = [];
+        posting.AvailabilityClearedAt = RunTime;
+        VehicleEntity vehicle = Vehicle(posting);
+
+        Assert.False(VehiclePricing.OnlyReservedOrInTransit(vehicle, NoCoverage));
+    }
+
+    [Fact]
+    public void OnlyReservedOrInTransit_NoActivePostingsAtAll_IsFalse()
+    {
+        Assert.False(VehiclePricing.OnlyReservedOrInTransit(Vehicle(), NoCoverage));
     }
 }
