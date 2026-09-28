@@ -299,6 +299,14 @@ public static class WalkCommand
         // diff read its untouched known postings as gone.
         bool renderingDegraded = false;
 
+        // Set when a search's own paging stopped because a result page held only CarMax cards,
+        // beyond-radius cards, or no-distance cards it had never seen before (see
+        // WalkSearchPages.CollectLinksAsync's own onStoppedOnPaddingOnlyPage): none of those is ever a
+        // candidate this walk would keep, but cars.com states no total match count that would otherwise
+        // prove no further in-radius, non-CarMax car sits past that page, so the pair's coverage is
+        // recorded as partial for it, the same as a failed later page.
+        bool pagingStoppedOnCarMaxPadding = false;
+
         // The canonical URLs, among those, that the ledger already held: never touched, so their
         // LastSeen never moved. Exempted from the diff on their own (see LedgerDiffService.ComputeAsync)
         // rather than marking the whole pair's coverage partial, so every other untouched posting in the
@@ -456,7 +464,12 @@ public static class WalkCommand
                     }
                 },
                 onNoPriceStated: () => skippedNoPriceStated++,
-                onCarMaxDealer: () => skippedCarMaxDealer++);
+                onCarMaxDealer: () => skippedCarMaxDealer++,
+                onStoppedOnPaddingOnlyPage: pageNumber =>
+                {
+                    pagingStoppedOnCarMaxPadding = true;
+                    AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings and out-of-radius cars are new here, so paging stops; marked unread rather than complete, since cars.com states no total to confirm no organic car sits past this page, but neither kind is ever saved here anyway, so nothing this pair would have kept is behind it");
+                });
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -731,7 +744,8 @@ public static class WalkCommand
         return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls,
             AlsoCoveredModel: isPriusPair ? PriusPrimeVariant.StoredModel : null,
             SearchFellShortOfStatedCount: searchFellShortOfStatedCount,
-            RenderingDegraded: renderingDegraded);
+            RenderingDegraded: renderingDegraded,
+            PagingStoppedOnCarMaxPadding: pagingStoppedOnCarMaxPadding);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
@@ -796,7 +810,7 @@ public static class WalkCommand
     private static string StatusCell(WalkPairSummary summary) => summary switch
     {
         { Completed: false } => "[yellow]failed[/]",
-        { FailedPage: not null } or { SearchFellShortOfStatedCount: true } or { RenderingDegraded: true } => "unread",
+        { FailedPage: not null } or { SearchFellShortOfStatedCount: true } or { RenderingDegraded: true } or { PagingStoppedOnCarMaxPadding: true } => "unread",
         { Capped: true } => "capped",
         _ => "ok",
     };
