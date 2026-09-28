@@ -257,16 +257,18 @@ public static class VehiclePricing
     private static bool IsCarMaxDealerOnCarsCom(PostingEntity posting) =>
         posting.Source == WalkSites.CarsCom.Name && WalkSites.CarsCom.IsCarMaxDealer(posting.Dealer?.Name);
 
-    /// <summary>True when this vehicle has no active posting at all (see <see cref="ActivePostings"/>) only
-    /// because its only posting(s) are cars.com copies of one of CarMax's own stores (see
+    /// <summary>True when this vehicle has no active posting at all (see <see cref="ActivePostings"/>) because
+    /// every one of its postings, with no exception, is a cars.com copy of one of CarMax's own stores (see
     /// <see cref="IsCarMaxDealerOnCarsCom"/>), which <see cref="ActivePostings"/> always drops: the car is
     /// not actually gone, it is simply not priced from a copy the CarMax walk already covers. <see
     /// cref="Domain.Scorer.FilterReasons"/> gives this its own reason instead of "every posting is gone" when
     /// it applies, and <see cref="Cli.Commands.ShowCommand"/> does the same. False when the vehicle has any
     /// active posting of its own (whatever else the CarMax-on-cars.com exclusion also drops from it doesn't
-    /// matter then), or when none of its raw postings is a cars.com CarMax dealer posting at all.</summary>
+    /// matter then), when it has no postings at all, or when even one of its raw postings is not a cars.com
+    /// CarMax dealer posting: that posting going stale (aged out of coverage) is a genuine "every posting is
+    /// gone" case, not this one, even though a cars.com CarMax copy also happens to sit alongside it.</summary>
     public static bool OnlyCarsComCarMaxPostings(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
-        !ActivePostings(vehicle, latestCoverageBySource).Any() && vehicle.Postings.Any(IsCarMaxDealerOnCarsCom);
+        !ActivePostings(vehicle, latestCoverageBySource).Any() && vehicle.Postings.Count > 0 && vehicle.Postings.All(IsCarMaxDealerOnCarsCom);
 
     /// <summary>The posting's most recent asking price, or null when that price is below
     /// <see cref="PlaceholderPrice.Floor"/>: a placeholder already on the ledger is history, never
