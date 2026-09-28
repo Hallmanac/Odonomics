@@ -242,6 +242,13 @@ public sealed record WalkSite(
                 .Select(g => g.First() with { CardText = g.Select(l => l.CardText).FirstOrDefault(t => t.Length > 0) ?? "" })
         ];
 
+        // A stated count already narrowed poolSize above; taken here, ahead of the price, facet, and radius
+        // checks below, so a card one of them drops can never free up room for a padding card beyond the
+        // site's own exact matches to backfill into (a carvana page can state "16 cars" and still render 20,
+        // the last 4 being other models the search facets never asked for, and letting the price ceiling
+        // check run over all 20 would spend a detail visit on those 4 once enough of the real 16 dropped out).
+        candidates = [.. candidates.Take(poolSize)];
+
         if (maxPrice is int priceCeiling)
         {
             List<PageLink> withinCeiling = [];
@@ -659,6 +666,9 @@ public static class WalkSites
         // cars.com pages with a plain page=N on the same URL. A page holds about thirty cards, and the
         // site ignores a page_size parameter, so the search URL carries none.
         PagedSearchUrl: (searchUrl, pageNumber, _) => $"{searchUrl}&page={pageNumber}",
+        // A CarMax listing carried on cars.com's own search prints a delivery fee on its card ("$249
+        // delivery to Orlando, FL (14 mi)"); an ordinary dealer's card prints no such line.
+        CardFeeReader: CarsComCards.ReadFee,
         CardBadgeReader: CardBadges.CarsCom,
         FeeStatementReader: FeeStatements.ReadCarsCom,
         // cars.com's maximum_distance query parameter doesn't bound the results it actually returns
@@ -703,6 +713,9 @@ public static class WalkSites
         // A carvana card names its asking price after "Current price:", and a marked-down one then
         // prints "Original price: was $..." as well, so only the amount after "Current price:" counts.
         CardPriceReader: CardPrices.CarvanaCurrentPrice,
+        // A carvana card states its own shipping fee ("Free shipping" or "$690 shipping") the same way its
+        // detail page does, ahead of the "Get it <day>" line.
+        CardFeeReader: CarvanaShipping.ReadCardFee,
         CardBadgeReader: CardBadges.Carvana,
         // The delivery block also carries the pickup option, and renders only after the page has been
         // scrolled about a third of the way down.

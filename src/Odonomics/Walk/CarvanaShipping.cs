@@ -34,4 +34,11 @@ public static class CarvanaShipping
             _ => 0m,
         };
     }
+
+    /// <summary>The same fee <see cref="Read"/> reads off a detail page, read instead off a search card's own
+    /// text ("Free shipping" or "$690 shipping" sits on its own line on a card exactly as it does on the
+    /// page), wrapped as a <see cref="CardFee"/> so <see cref="WalkSite.CardFeeReader"/> can read it the same
+    /// way CarMax's own card fee is read, and the scenario's price ceiling counts a Carvana card's stated
+    /// fee the same way it counts CarMax's.</summary>
+    public static CardFee? ReadCardFee(string cardText) => Read(cardText) is decimal fee ? new CardFee(fee) : null;
 }
