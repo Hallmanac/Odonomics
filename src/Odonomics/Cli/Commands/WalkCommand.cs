@@ -578,12 +578,16 @@ public static class WalkCommand
                 {
                     attributes[PostingAttributeNames.Availability] = availability;
                 }
-                else if (storeLineRecognised)
+                else if (site.DetailAvailabilityReader is not null && storeLineRecognised)
                 {
-                    // The header names a store, so it states plainly the car is not reserved or in
-                    // transit; unlike a card badge that stopped showing up, this is proof the earlier
-                    // state ended, so the attribute is cleared rather than left standing (see
-                    // ListingCandidate.AttributesToClear).
+                    // Only a site with its own availability reader (carmax) ever states "Reserved at" or
+                    // "Coming to" in the first place, so only there does recognising the header at all
+                    // prove the car is neither: unlike a card badge that stopped showing up, this is proof
+                    // the earlier state ended, so the attribute is cleared rather than left standing (see
+                    // ListingCandidate.AttributesToClear). A site whose DetailDealerReader is set for a
+                    // different reason (cargurus, reading its dealer name and location off the page text
+                    // deterministically) has no such header and no availability concept, so recognising a
+                    // dealer there says nothing about whether the car is reserved.
                     attributesToClear.Add(PostingAttributeNames.Availability);
                 }
 
