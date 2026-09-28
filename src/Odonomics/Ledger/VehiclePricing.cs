@@ -34,8 +34,10 @@ public static class VehiclePricing
     /// carvana car, or a dealer whose fees are added at the desk, is compared honestly with one that has
     /// neither. Under delivery the fee is the shipping fee; under pickup it is the pickup fee, or the
     /// shipping fee when no pickup fee was read (see <see cref="PurchasePrice"/>). A posting with a null
-    /// fee costs its asking price, and so does one whose posture is all-in (its price already holds its
-    /// fees, and any shipping fee it shows), unknown (the page did not say), or never read. When two
+    /// fee costs its asking price, and so does one whose posture is unknown (the page did not say) or
+    /// never read. An all-in posting's price already holds its dealer documentation fees, but a shipping
+    /// fee it shows is still added on top unless the posting is cargurus's own, the one source whose
+    /// all-in posture speaks to shipping at all (see <see cref="PurchasePriceOf"/>). When two
     /// postings cost the same to take home, the one with the lower asking price is reported.
     /// <paramref name="zip"/> and <paramref name="radiusMiles"/> are the scenario's own; null when no
     /// scenario is in play (a bare VIN lookup), which never treats an "Only at" posting as out of radius,
