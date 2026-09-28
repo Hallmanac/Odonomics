@@ -32,8 +32,14 @@ namespace Odonomics.Walk;
 /// was affected, since a card the render wait never saw as a link at all (throttled off the page entirely,
 /// not merely slow to render) is invisible to it the same way. This run did not actually measure everything
 /// the pair's own search would ordinarily show, so it is treated the same way a failed later page is, with
-/// the same "pages unread" reason.</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false);
+/// the same "pages unread" reason. <see cref="PagingStoppedOnCarMaxPadding"/> is true when a search's own
+/// paging ended because a result page held only CarMax cards, beyond-radius cards, or no-distance cards it
+/// had never seen before (see <see cref="WalkSearchPages.CollectLinksAsync"/>'s own
+/// <c>onStoppedOnPaddingOnlyPage</c>): none of those is ever a candidate this walk would keep, but cars.com
+/// states no total match count that would otherwise prove no further in-radius, non-CarMax car sits past
+/// that page, so this is treated the same way a failed later page is too, with the same "pages unread"
+/// reason.</summary>
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false, bool PagingStoppedOnCarMaxPadding = false);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
 /// is false when the pair's own walk threw (a page that never loaded, a site that errored); the
@@ -42,10 +48,11 @@ public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, Dropp
 /// true when the pair stopped short of the site's results (see <see cref="WalkPairOutcome.Capped"/>), and
 /// <see cref="FailedPage"/> is the result page that failed to load, if one did. <see cref="UnrenderedKnownUrls"/>
 /// carries forward <see cref="WalkPairOutcome.UnrenderedKnownUrls"/>, for the caller to hand every pair's
-/// list to the diff once the whole run is done. <see cref="SearchFellShortOfStatedCount"/> and
-/// <see cref="RenderingDegraded"/> carry forward <see cref="WalkPairOutcome.SearchFellShortOfStatedCount"/>
-/// and <see cref="WalkPairOutcome.RenderingDegraded"/>.</summary>
-public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false);
+/// list to the diff once the whole run is done. <see cref="SearchFellShortOfStatedCount"/>,
+/// <see cref="RenderingDegraded"/>, and <see cref="PagingStoppedOnCarMaxPadding"/> carry forward
+/// <see cref="WalkPairOutcome.SearchFellShortOfStatedCount"/>, <see cref="WalkPairOutcome.RenderingDegraded"/>,
+/// and <see cref="WalkPairOutcome.PagingStoppedOnCarMaxPadding"/>.</summary>
+public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false, bool PagingStoppedOnCarMaxPadding = false);
 
 /// <summary>
 /// Walks every (site, model) pair in order, stamping the run's coverage token the moment each
@@ -103,7 +110,7 @@ public static class WalkCoverage
                         coveredTokens.Add(RunSources.PartialKey(coverageKey));
                     }
 
-                    if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded)
+                    if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded || outcome.PagingStoppedOnCarMaxPadding)
                     {
                         coveredTokens.Add(RunSources.UnreadKey(coverageKey));
                     }
@@ -117,7 +124,7 @@ public static class WalkCoverage
                             coveredTokens.Add(RunSources.PartialKey(alsoCoverageKey));
                         }
 
-                        if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded)
+                        if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded || outcome.PagingStoppedOnCarMaxPadding)
                         {
                             coveredTokens.Add(RunSources.UnreadKey(alsoCoverageKey));
                         }
@@ -135,7 +142,7 @@ public static class WalkCoverage
                         throw;
                     }
 
-                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage, outcome.SkippedBeyondRadius, outcome.SkippedNoDistance, outcome.SkippedUnrendered, outcome.UnrenderedKnownUrls, outcome.SearchFellShortOfStatedCount, outcome.RenderingDegraded));
+                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage, outcome.SkippedBeyondRadius, outcome.SkippedNoDistance, outcome.SkippedUnrendered, outcome.UnrenderedKnownUrls, outcome.SearchFellShortOfStatedCount, outcome.RenderingDegraded, outcome.PagingStoppedOnCarMaxPadding));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
