@@ -105,4 +105,31 @@ public class ResearchCommandSelectionTests
 
         Assert.Contains(selected, v => v.Vin == vehicle.Vin);
     }
+
+    [Fact]
+    public void SelectVehiclesToResearch_AskingPriceUnderTheCeilingButShippingFeePushesItOver_IsExcluded()
+    {
+        // $24,998 alone is under the $25,000 ceiling `odo rank` would check; the $499 shipping fee
+        // pushes it to $25,497. odo rank excludes this car, so odo research must too, rather than
+        // spending NHTSA and Marketcheck calls on a car Brian would never buy.
+        const string vin = "1HGCM82633A004354";
+        VehicleEntity vehicle = Vehicle(vin);
+        vehicle.Postings.Add(new PostingEntity
+        {
+            VehicleVin = vin,
+            Source = "carmax",
+            Url = "https://www.carmax.com/car/1",
+            FirstSeen = DateTimeOffset.UtcNow,
+            LastSeen = DateTimeOffset.UtcNow,
+            ShippingFee = 499m,
+            FeePosture = FeePostures.Itemized,
+            PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 24998m, ObservedAt = DateTimeOffset.UtcNow }],
+        });
+        Scenario baseScenario = BuildScenario();
+        Scenario scenario = baseScenario with { Filters = baseScenario.Filters with { MaxPrice = 25000 } };
+
+        List<VehicleEntity> selected = ResearchCommand.SelectVehiclesToResearch([vehicle], scenario, NoCoverage);
+
+        Assert.DoesNotContain(selected, v => v.Vin == vin);
+    }
 }
