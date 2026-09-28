@@ -234,6 +234,9 @@ public class WalkSitesTests
         Assert.True(WalkSites.CarsCom.CarMaxCardReader("$249 delivery to Orlando, FL (14 mi)"));
         Assert.True(WalkSites.CarsCom.CarMaxCardReader("CarMax Town Center\n4.3\nOrlando, FL (5 mi)"));
         Assert.False(WalkSites.CarsCom.CarMaxCardReader("$150 delivery from Palmetto Bay, FL (205 mi)"));
+        // Recorded walk 20260928-184522, insight/cards-5.json: the real HGreg Nissan Kendall card this
+        // reader has to walk rather than skip, not just the isolated delivery-fee snippet above.
+        Assert.False(WalkSites.CarsCom.CarMaxCardReader("$18,799\n\n50,722 mi.\nEst. $341/mo\nUsed 2022 Honda Insight EX\nGood Deal\n\nHGreg Nissan Kendall\n\n2.4\n$150 delivery from Palmetto Bay, FL (205 mi)\nCheck Availability"));
         Assert.False(WalkSites.CarsCom.CarMaxCardReader("Sanford, FL (28 mi)"));
     }
 

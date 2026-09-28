@@ -55,6 +55,9 @@ public class CarsComCardsTests
     // "delivery from" the seller's own city, never "delivery to" the search's zip, and the card names no
     // CarMax store (lesson 4a2cbaa3, walk runs 20260928-134242 and 20260928-184522).
     [InlineData("$21,419\n\n93,251 mi.\nEst. $389/mo\nUsed 2022 Honda Insight EX\nFair Deal\n\nOgden Motors\n\n4.6\n$1,493 delivery from Berwyn, IL (996 mi)\nCheck Availability")]
+    // Recorded walk 20260928-184522, insight/cards-5.json: a real HGreg Nissan Kendall card, not a
+    // snippet, so the full card's own dealer line and delivery-from fee both have to clear this check.
+    [InlineData("$18,799\n\n50,722 mi.\nEst. $341/mo\nUsed 2022 Honda Insight EX\nGood Deal\n\nHGreg Nissan Kendall\n\n2.4\n$150 delivery from Palmetto Bay, FL (205 mi)\nCheck Availability")]
     [InlineData("$150 delivery from Palmetto Bay, FL (205 mi)")]
     [InlineData("Sanford, FL (28 mi)")]
     [InlineData("")]
