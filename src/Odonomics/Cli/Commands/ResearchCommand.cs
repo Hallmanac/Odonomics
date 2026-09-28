@@ -86,13 +86,11 @@ public static class ResearchCommand
                     decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
                     IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment)];
 
-                    bool anyPieceFailed = research.Recalls.CouldNotFetchReason is not null
-                        || research.Complaints.CouldNotFetchReason is not null
-                        || research.Safety.CouldNotFetchReason is not null;
+                    bool anyPieceFailed = IsPartiallyResearched(research);
 
-                    // A "partial" tag alongside the real flags so a vehicle whose recalls, complaints, or
-                    // safety-ratings fetch failed this run never reads as indistinguishable from one that
-                    // was actually checked and came back clean.
+                    // A "partial" tag alongside the real flags so a vehicle whose recalls, complaints,
+                    // safety-ratings, or Marketcheck VIN history fetch failed this run never reads as
+                    // indistinguishable from one that was actually checked and came back clean.
                     List<string> tags = [.. redFlags.Select(f => f.ShortTag)];
                     if (anyPieceFailed)
                     {
@@ -130,7 +128,7 @@ public static class ResearchCommand
                         partiallyResearched++;
                         if (!quiet)
                         {
-                            string sentence = ComposePartialResultSentence(research.Safety, research.Recalls, research.Complaints);
+                            string sentence = ComposePartialResultSentence(research.Safety, research.Recalls, research.Complaints, research.History);
                             AnsiConsole.MarkupLineInterpolated($"[yellow]{label}: {sentence}[/]");
                         }
                     }
@@ -180,12 +178,25 @@ public static class ResearchCommand
         return unreachable > 0 && fullyResearched + partiallyResearched == 0 ? 1 : 0;
     }
 
-    /// <summary>The sentence for a vehicle whose safety-ratings, recalls, or complaints call could
-    /// not be fetched this run (see NhtsaClient's retry-then-degrade behavior): every failed piece's
-    /// reason, then which of the three still came back and were stored. For example, a safety-ratings
-    /// failure with recalls and complaints intact reads "NHTSA safety ratings could not be fetched,
-    /// HTTP 200 with an HTML error page; recalls and complaints stored".</summary>
-    private static string ComposePartialResultSentence(SafetyRatingsResult safety, RecallsResult recalls, ComplaintsResult complaints)
+    /// <summary>Whether this vehicle's research run counts as partial rather than fully researched:
+    /// true when any of recalls, complaints, safety ratings, or the Marketcheck VIN history could not
+    /// be fetched this run, including a history fetch that failed (HTTP 429 or otherwise) even though
+    /// every NHTSA piece came back clean. A separate seam from <see cref="RunAsync"/>, the same as
+    /// <see cref="SelectVehiclesToResearch"/>, so a test can assert this without a database or network
+    /// call.</summary>
+    public static bool IsPartiallyResearched(VinResearchResult research) =>
+        research.Recalls.CouldNotFetchReason is not null
+        || research.Complaints.CouldNotFetchReason is not null
+        || research.Safety.CouldNotFetchReason is not null
+        || research.History.CouldNotFetchReason is not null;
+
+    /// <summary>The sentence for a vehicle whose safety-ratings, recalls, complaints, or Marketcheck
+    /// VIN history call could not be fetched this run (see NhtsaClient's and MarketcheckHistoryClient's
+    /// retry-then-degrade behavior): every failed piece's reason, then which of the four still came
+    /// back and were stored. For example, a safety-ratings failure with recalls and complaints intact
+    /// reads "NHTSA safety ratings could not be fetched, HTTP 200 with an HTML error page; recalls and
+    /// complaints stored".</summary>
+    private static string ComposePartialResultSentence(SafetyRatingsResult safety, RecallsResult recalls, ComplaintsResult complaints, VinHistoryResult history)
     {
         List<string> failedClauses = [];
         List<string> succeededNames = [];
@@ -215,6 +226,15 @@ public static class ResearchCommand
         else
         {
             succeededNames.Add("complaints");
+        }
+
+        if (history.CouldNotFetchReason is string historyReason)
+        {
+            failedClauses.Add(historyReason);
+        }
+        else
+        {
+            succeededNames.Add("VIN history");
         }
 
         string storedClause = succeededNames.Count == 0 ? "nothing else stored" : $"{JoinWithAnd(succeededNames)} stored";

@@ -1,6 +1,8 @@
 using Odonomics.Cli.Commands;
 using Odonomics.Domain;
 using Odonomics.Ledger;
+using Odonomics.Marketcheck;
+using Odonomics.Nhtsa;
 
 namespace Odonomics.Tests.Cli;
 
@@ -131,5 +133,31 @@ public class ResearchCommandSelectionTests
         List<VehicleEntity> selected = ResearchCommand.SelectVehiclesToResearch([vehicle], scenario, NoCoverage);
 
         Assert.DoesNotContain(selected, v => v.Vin == vin);
+    }
+
+    private static VinResearchResult CleanResearch(string? historyCouldNotFetchReason) => new(
+        new VinDecodeResult("1HGCM82633A004352", 2020, "Honda", "Insight", null, null, null, null),
+        new RecallsResult([], null),
+        new ComplaintsResult(0, null),
+        new SafetyRatingsResult(5, null, null, null, null, null, null),
+        new VinHistoryResult([], null, historyCouldNotFetchReason));
+
+    [Fact]
+    public void IsPartiallyResearched_OnlyHistoryCouldNotFetch_ReturnsTrue()
+    {
+        // Pins the 2026-09-28 fix: a vehicle whose recalls, complaints, and safety ratings all came
+        // back clean but whose Marketcheck VIN history hit HTTP 429 must still count as partially
+        // researched, not fully researched, in odo research's summary tally.
+        VinResearchResult research = CleanResearch(historyCouldNotFetchReason: "Marketcheck VIN history: HTTP 429");
+
+        Assert.True(ResearchCommand.IsPartiallyResearched(research));
+    }
+
+    [Fact]
+    public void IsPartiallyResearched_EveryPieceSucceeded_ReturnsFalse()
+    {
+        VinResearchResult research = CleanResearch(historyCouldNotFetchReason: null);
+
+        Assert.False(ResearchCommand.IsPartiallyResearched(research));
     }
 }
