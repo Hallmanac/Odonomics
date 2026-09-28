@@ -87,6 +87,70 @@ public class PriceCeilingFilterTests
         Assert.Single(kept);
     }
 
+    [Fact]
+    public void CollectDetailCards_CarsComCardWhoseDeliveryFeePushesItOverTheCeiling_IsSkipped()
+    {
+        // $24,900 alone is under the $25,000 ceiling; the CarMax-brokered listing's $249 delivery fee
+        // pushes it to $25,149.
+        var card = new PageLink(
+            "https://www.cars.com/vehicledetail/x/?sid=1",
+            "Used 2020 Honda Insight EX",
+            "$24,900\n80,924 mi.\nEst. $345/mo\nUsed 2020 Honda Insight EX\nCarMax Town Center\n$249 delivery to Orlando, FL (14 mi)");
+        List<PageLink> overCeiling = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(
+            [card], poolSize: 60, maxPrice: 25000, onOverPriceCeiling: overCeiling.Add);
+
+        Assert.Empty(kept);
+        Assert.Single(overCeiling);
+    }
+
+    private static PageLink CarvanaCard(string href, decimal price) =>
+        new(href, "", $"2020 Honda Insight\nEX\n38k miles\nCurrent price:\n${price:N0}\n$430/mo\nestimated\n$0 cash down\nFree shipping\nGet it today");
+
+    [Fact]
+    public void CollectDetailCards_APriceCeilingSkipNeverLetsAPaddingCardBackfillTheStatedCount()
+    {
+        // The page states "16 cars" but renders 20: the first 16 are the exact matches, 10 of them over
+        // the $25,000 ceiling, and the last 4 are padding (other models the search facets never asked
+        // for). Before the fix, letting the price filter run over all 20 before the stated count was
+        // taken meant the 4 padding cards backfilled the room the 10 skipped exact matches left, so they
+        // too earned a detail visit; they must never be pooled or even reported over the ceiling.
+        List<PageLink> exactMatches =
+        [
+            .. Enumerable.Range(0, 10).Select(i => CarvanaCard($"https://www.carvana.com/vehicle/over{i}", 30000m)),
+            .. Enumerable.Range(0, 6).Select(i => CarvanaCard($"https://www.carvana.com/vehicle/under{i}", 20000m)),
+        ];
+        List<PageLink> padding = [.. Enumerable.Range(0, 4).Select(i => CarvanaCard($"https://www.carvana.com/vehicle/pad{i}", 20000m))];
+        List<PageLink> cards = [.. exactMatches, .. padding];
+        List<PageLink> overCeiling = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.Carvana.CollectDetailCards(
+            cards, poolSize: 200, searchPageText: "16 cars", maxPrice: 25000, onOverPriceCeiling: overCeiling.Add);
+
+        Assert.Equal(6, kept.Count);
+        Assert.Equal(10, overCeiling.Count);
+        Assert.All(kept, card => Assert.DoesNotContain("pad", card.Href));
+        Assert.All(overCeiling, card => Assert.DoesNotContain("pad", card.Href));
+    }
+
+    [Fact]
+    public void CollectDetailCards_CarvanaCardWhoseShippingFeePushesItOverTheCeiling_IsSkipped()
+    {
+        // $24,990 alone is under the $25,000 ceiling; the card's own $690 shipping fee pushes it to $25,680.
+        var card = new PageLink(
+            "https://www.carvana.com/vehicle/1",
+            "",
+            "2020 Honda Insight\nEX\n38k miles\nCurrent price:\n$24,990\n$430/mo\nestimated\n$0 cash down\n$690 shipping\nGet it Monday");
+        List<PageLink> overCeiling = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.Carvana.CollectDetailCards(
+            [card], poolSize: 60, maxPrice: 25000, onOverPriceCeiling: overCeiling.Add);
+
+        Assert.Empty(kept);
+        Assert.Single(overCeiling);
+    }
+
     private static ValueTask<bool> NoneKnown(string canonicalUrl, decimal? cardPrice, IReadOnlyDictionary<string, string> cardBadges, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 
     [Fact]

@@ -245,6 +245,14 @@ public static class WalkSearchPages
                 onOverPriceCeiling?.Invoke();
             }
 
+            // An over-ceiling card is still one of the page's exact matches (see WalkSites.CollectDetailCards,
+            // which now bounds the price check to those before this ever sees a padding card), so it counts
+            // the same way a pooled one does: without this, a URL-paged site's page made up entirely of cars
+            // over the ceiling would read as adding nothing and end the paging, leaving every later page,
+            // cheaper cars included, unread.
+            considered += overPriceCeilingCards.Count;
+            added += overPriceCeilingCards.Count;
+
             // A page that adds nothing, or a stated count already reached, means the site's results are
             // all read even when the pool happens to be full too; only a full pool with more to read is capped.
             if (pageUrlFor is null || considered >= linkBound || added == 0)

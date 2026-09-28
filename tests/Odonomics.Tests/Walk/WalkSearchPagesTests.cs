@@ -100,6 +100,37 @@ public class WalkSearchPagesTests
         Assert.Equal(1, capped);
     }
 
+    private static List<PageLink> CarvanaCardsWithPrice(string prefix, int count, decimal price) =>
+        [.. Enumerable.Range(0, count).Select(i => new PageLink(
+            $"https://www.carvana.com/vehicle/{prefix}{i}",
+            "",
+            $"2020 Honda Insight\nEX\n38k miles\nCurrent price:\n${price:N0}\n$430/mo\nestimated\n$0 cash down\nFree shipping\nGet it today"))];
+
+    [Fact]
+    public async Task Carvana_APageWhereEveryCardIsOverThePriceCeiling_StillContinuesPagingToTheNext()
+    {
+        // A page-1 made entirely of cars over the ceiling used to read as "added nothing" and end the
+        // paging right there, leaving every cheaper car on page 2 unread and every known posting on it
+        // untouched.
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = CarvanaCardsWithPrice("a", 21, 30000m),
+            [2] = CarvanaCardsWithPrice("b", 5, 20000m),
+        });
+        int overCeiling = 0;
+        int capped = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.Carvana, CarvanaSearch, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync,
+            (_, _) => { }, _ => { }, () => capped++, CancellationToken.None,
+            maxPrice: 25000, onOverPriceCeiling: () => overCeiling++);
+
+        Assert.Equal(21, overCeiling);
+        Assert.Equal(5, pool.Count);
+        Assert.Contains("https://www.carvana.com/vehicle/b0", pool);
+        Assert.Equal(0, capped);
+    }
+
     [Fact]
     public async Task Carvana_APoolFilledOnTheLastPageTheSiteHasByItsStatedCount_IsNotCapped()
     {

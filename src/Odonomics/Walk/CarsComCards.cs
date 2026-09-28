@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Odonomics.Walk;
 
-/// <summary>Reads how far a cars.com result card says its car is from the search's zip. An ordinary
-/// dealer's card prints it as "<c>&lt;City&gt;, &lt;ST&gt; (N mi)</c>" ("Sanford, FL (28 mi)"), and a CarMax
+/// <summary>Reads how far a cars.com result card says its car is from the search's zip, and the delivery fee a
+/// CarMax listing carried on cars.com's own search states there too. An ordinary dealer's card prints the
+/// distance as "<c>&lt;City&gt;, &lt;ST&gt; (N mi)</c>" ("Sanford, FL (28 mi)"), and a CarMax
 /// listing carried on cars.com's own search prints it the same way after its delivery fee ("$249 delivery
 /// to Orlando, FL (14 mi)"), so one pattern reads both. A card with no such line, whether it shows nothing
 /// at all (the site's own nationwide recommendation links padding a later page) or some other text
@@ -22,6 +24,21 @@ public static class CarsComCards
         MatchCollection matches = DistanceLine.Matches(cardText);
         return matches.Count == 1 && int.TryParse(matches[0].Groups["mi"].Value.Replace(",", ""), out int miles)
             ? miles
+            : null;
+    }
+
+    private static readonly Regex DeliveryFeeLine = new(@"\$\s*(?<fee>\d[\d,]*(?:\.\d{2})?)\s+delivery\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>The one-time delivery fee a card states ("$249 delivery to Orlando, FL (14 mi)"), wrapped as
+    /// a <see cref="CardFee"/> so <see cref="WalkSite.CardFeeReader"/> can read it the same way CarMax's own
+    /// card fee is read, and the scenario's price ceiling counts it the same way on cars.com as on every
+    /// other site. Null when the card states no such fee, so a car whose card is silent about one is never
+    /// treated as free.</summary>
+    public static CardFee? ReadFee(string cardText)
+    {
+        Match match = DeliveryFeeLine.Match(cardText);
+        return match.Success
+            ? new CardFee(decimal.Parse(match.Groups["fee"].Value, NumberStyles.AllowThousands | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture))
             : null;
     }
 }
