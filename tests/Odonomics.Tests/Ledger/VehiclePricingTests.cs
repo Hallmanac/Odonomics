@@ -650,6 +650,23 @@ public class VehiclePricingTests
     }
 
     [Fact]
+    public void OnlyCarsComCarMaxPostings_OwnCarMaxWalkPostingHasAgedOutOfCoverage_IsFalse()
+    {
+        // The vehicle's own CarMax-walk posting (not a cars.com copy) has gone stale, alongside a
+        // cars.com copy that ActivePostings always drops on its own terms. Every posting is still
+        // inactive, but not because the only postings are cars.com copies: the real posting is
+        // genuinely gone, so this must fall through to Scorer's "every posting is gone" reason
+        // rather than reporting the cars.com-copy reason.
+        Dictionary<string, DateTimeOffset> coverage = new() { [RunSources.Key("carmax", "Prius")] = RunTime.AddDays(1) };
+        PostingEntity staleOwnCarMaxPosting = Posting("carmax", 19998m, lastSeen: RunTime, dealerName: "CarMax Norco");
+        PostingEntity carsComCopy = Posting("cars.com", 16998m, dealerName: "CarMax Norco");
+        VehicleEntity vehicle = Vehicle(staleOwnCarMaxPosting, carsComCopy);
+
+        Assert.False(VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, coverage));
+        Assert.Null(VehiclePricing.LowestCurrentPrice(vehicle, coverage));
+    }
+
+    [Fact]
     public void OnlyAtOutOfRadiusStore_NoZipOrRadiusGiven_NeverExcludes()
     {
         PostingEntity onlyAt = Posting("carmax", 19998m, shippingFee: 0m, pickupLocation: "Only at Norco");
