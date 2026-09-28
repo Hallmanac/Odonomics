@@ -57,8 +57,10 @@ public static class WalkPairSummaryLine
     /// also never a candidate. <paramref name="skippedNoPriceStated"/> is every site's own count of cards that
     /// state plainly they have no price (cargurus's "No Price Listed"), checked ahead of the ceiling above so
     /// such a card is never mistaken for one whose price this walk simply couldn't read: also never a
-    /// candidate, and named last, since it is checked on every site rather than only one with a year or
-    /// mileage facet.</summary>
+    /// candidate. <paramref name="skippedCarMaxDealer"/> is cars.com's own count of cards a delivery fee
+    /// marks as one of CarMax's own store's listings (see <see cref="WalkSearchPages.CollectLinksAsync"/>):
+    /// also never a candidate, and named last, since it is checked on cars.com alone rather than every
+    /// site.</summary>
     public static string Format(
         string site,
         string make,
@@ -76,7 +78,8 @@ public static class WalkPairSummaryLine
         int skippedBelowYearFloor = 0,
         int skippedOverMileageCap = 0,
         int skippedOverPriceCeiling = 0,
-        int skippedNoPriceStated = 0)
+        int skippedNoPriceStated = 0,
+        int skippedCarMaxDealer = 0)
     {
         string cappedSuffix = (capped ? ", capped" : "") + (failedPage is int page ? $", page {page} failed" : "");
         string radiusSuffix = (skippedBeyondRadius > 0 ? $", {skippedBeyondRadius} beyond radius" : "")
@@ -85,7 +88,8 @@ public static class WalkPairSummaryLine
             + (skippedBelowYearFloor > 0 ? $", {skippedBelowYearFloor} below year floor" : "")
             + (skippedOverMileageCap > 0 ? $", {skippedOverMileageCap} over mileage cap" : "")
             + (skippedOverPriceCeiling > 0 ? $", {skippedOverPriceCeiling} over price ceiling" : "")
-            + (skippedNoPriceStated > 0 ? $", {skippedNoPriceStated} no price stated" : "");
+            + (skippedNoPriceStated > 0 ? $", {skippedNoPriceStated} no price stated" : "")
+            + (skippedCarMaxDealer > 0 ? $", {skippedCarMaxDealer} carmax, walked by the carmax walk" : "");
         string prefix = $"{site} / {make} {model}: {pages} pages, {known} known from cards, {saved} saved, {dropped.Total} dropped";
         string cell = DroppedCell(dropped);
         if (cell.Length == 0)

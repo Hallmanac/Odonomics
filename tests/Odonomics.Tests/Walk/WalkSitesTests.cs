@@ -453,13 +453,79 @@ public class WalkSitesTests
     }
 
     [Fact]
-    public void CarsCom_CollectDetailCards_ACarMaxDeliveryCardWithinRadius_IsMeasuredByItsOwnStatedDistance()
+    public void CarsCom_CollectDetailCards_ACarMaxDeliveryCardWithinRadius_IsExcludedAsCarMaxNotPooled()
     {
+        // Before the card-level CarMax check existed, a delivery card like this measured within radius
+        // was kept and pooled for a detail visit; it is now dropped before ever reaching the pool, the
+        // same as a beyond-radius card, since the fee line alone already marks it as CarMax regardless
+        // of how close its store happens to be (lesson e975e649).
         var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "Used 2020 Honda Insight EX", "$249 delivery to Orlando, FL (14 mi)") };
+        List<PageLink> carMaxDealer = [];
 
-        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50);
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50, onCarMaxDealer: carMaxDealer.Add);
+
+        Assert.Empty(kept);
+        Assert.Single(carMaxDealer);
+    }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_ACarMaxDeliveryCardBeyondRadius_IsReportedBeyondRadiusNotCarMax()
+    {
+        // The radius check runs first, so a CarMax card the search only turns up because cars.com
+        // carries its whole nationwide inventory is still reported under its existing "beyond radius"
+        // reason when it is nowhere close, not double-counted as CarMax too.
+        var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "Used 2020 Honda Insight EX", "$1,999 delivery to Orlando, FL (2400 mi)") };
+        List<PageLink> beyondRadius = [];
+        List<PageLink> carMaxDealer = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50, onBeyondRadius: beyondRadius.Add, onCarMaxDealer: carMaxDealer.Add);
+
+        Assert.Empty(kept);
+        Assert.Single(beyondRadius);
+        Assert.Empty(carMaxDealer);
+    }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_AnOrdinaryDealerCardWithinRadius_IsUnaffectedByTheCarMaxCheck()
+    {
+        var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)") };
+        List<PageLink> carMaxDealer = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 10, maxDistanceMiles: 50, onCarMaxDealer: carMaxDealer.Add);
 
         Assert.Single(kept);
+        Assert.Empty(carMaxDealer);
+    }
+
+    [Fact]
+    public void CarsCom_CollectDetailCards_ACarMaxDeliveryCardOverThePriceCeiling_IsReportedCarMaxNotOverCeiling()
+    {
+        // Checked ahead of the price ceiling: a CarMax card that also happens to be unaffordable is
+        // still reported as CarMax, the reason that would exclude it from cars.com regardless of price.
+        var links = new List<PageLink> { new("https://www.cars.com/vehicledetail/x/?sid=1", "Used 2020 Honda Insight EX", "$40,998\n$1,999 delivery to Orlando, FL (14 mi)") };
+        List<PageLink> carMaxDealer = [];
+        List<PageLink> overCeiling = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(
+            links, poolSize: 10, maxDistanceMiles: 50, maxPrice: 25000, onOverPriceCeiling: overCeiling.Add, onCarMaxDealer: carMaxDealer.Add);
+
+        Assert.Empty(kept);
+        Assert.Single(carMaxDealer);
+        Assert.Empty(overCeiling);
+    }
+
+    [Fact]
+    public void CarMax_CollectDetailCards_IgnoresItsOwnDeliveryLikeCardText_SkipsCarMaxDealerIsUnset()
+    {
+        // CarMax's own site also has a CardFeeReader (its shipping-fee card text), but its
+        // SkipsCarMaxDealer flag is unset, so the new check must never fire there at all.
+        var links = new List<PageLink> { new("https://www.carmax.com/car/1", "", "$49 shipping·Get it by Monday") };
+        List<PageLink> carMaxDealer = [];
+
+        IReadOnlyList<PageLink> kept = WalkSites.CarMax.CollectDetailCards(links, poolSize: 10, onCarMaxDealer: carMaxDealer.Add);
+
+        Assert.Single(kept);
+        Assert.Empty(carMaxDealer);
     }
 
     [Fact]

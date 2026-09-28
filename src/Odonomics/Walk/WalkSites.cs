@@ -221,7 +221,20 @@ public sealed record WalkSite(
     /// <paramref name="maxPrice"/> is given at all), a card its own text matches (cargurus's "No Price Listed") is
     /// told to <paramref name="onNoPriceStated"/> instead of ever being pooled, so a card cargurus itself says has
     /// no price never spends a detail visit finding that out the slow way, and its "Price includes $1,498
-    /// shipping" line is never read as if it were the price.</summary>
+    /// shipping" line is never read as if it were the price. Checked right after the radius check, when this
+    /// site has <see cref="SkipsCarMaxDealer"/> set and a <see cref="CardFeeReader"/>: a card whose own text
+    /// states a fee that reader can read is a CarMax listing carried on cars.com's own search (its dealer line
+    /// prints one of CarMax's own store names right above a "$249 delivery to Orlando, FL (14 mi)" line; an
+    /// ordinary cars.com dealer's card states no such fee at all), so it is told to
+    /// <paramref name="onCarMaxDealer"/> instead of ever being pooled, the same as a beyond-radius or
+    /// no-distance card: CarMax is walked nationwide by its own site already, and cars.com's delivery offer
+    /// does not actually hold for a car CarMax will only sell "Only at" its one store (see
+    /// <see cref="IsCarMaxDealer"/>). Unlike a below-floor, over-mileage, over-ceiling, or no-price card, a
+    /// known posting behind a card dropped this way is never touched from it either: it is a redundant copy
+    /// the walk stopped saving outright, not one this walk simply couldn't measure, so keeping it current
+    /// would tell the diff a car left cars.com the moment CarMax's own copy of it goes stale, when the truth
+    /// is the opposite. Checked before the price-ceiling and no-price checks, so a CarMax card that also
+    /// happens to be over budget or state no price is still reported as CarMax, not one of those.</summary>
     public IReadOnlyList<PageLink> CollectDetailCards(
         IReadOnlyList<PageLink> links,
         int poolSize,
@@ -235,7 +248,8 @@ public sealed record WalkSite(
         Action<PageLink>? onOverMileageCap = null,
         int? maxPrice = null,
         Action<PageLink>? onOverPriceCeiling = null,
-        Action<PageLink>? onNoPriceStated = null)
+        Action<PageLink>? onNoPriceStated = null,
+        Action<PageLink>? onCarMaxDealer = null)
     {
         int? statedCount = MatchCountIn(searchPageText);
         if (statedCount is int matchCount)
@@ -316,6 +330,28 @@ public sealed record WalkSite(
             }
 
             candidates = inRadius;
+        }
+
+        // A CarMax listing carried on cars.com's own search prints a delivery fee on its card ("$249
+        // delivery to Orlando, FL (14 mi)"); an ordinary cars.com dealer's card prints no such line. Checked
+        // here, before any detail page is ever opened, so a CarMax card never spends a detail visit or an
+        // LLM extraction on every run just to be dropped after the fact the way WalkCommand.VisitLinkAsync's
+        // own IsCarMaxDealer check still does for the rare card this fee reader misses.
+        if (SkipsCarMaxDealer && CardFeeReader is not null)
+        {
+            List<PageLink> notCarMax = [];
+            foreach (PageLink card in candidates)
+            {
+                if (CardFeeReader(card.CardText) is not null)
+                {
+                    onCarMaxDealer?.Invoke(card);
+                    continue;
+                }
+
+                notCarMax.Add(card);
+            }
+
+            candidates = notCarMax;
         }
 
         // Checked ahead of the price ceiling below, and regardless of whether one is even set: a card

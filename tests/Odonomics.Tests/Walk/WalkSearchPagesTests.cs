@@ -165,6 +165,81 @@ public class WalkSearchPagesTests
         Assert.Empty(pool);
     }
 
+    private static List<PageLink> CarsComCarMaxCards(string prefix, int count) =>
+        [.. Enumerable.Range(0, count).Select(i => new PageLink(
+            $"https://www.cars.com/vehicledetail/{prefix}{i}/?sid=x",
+            "",
+            "CarMax Independence Boulevard\n$249 delivery to Orlando, FL (14 mi)"))];
+
+    [Fact]
+    public async Task CarsCom_APageMadeEntirelyOfCarMaxDeliveryCards_StillContinuesPagingToTheNext()
+    {
+        // A page cars.com pads with nothing but CarMax's own national-inventory cards (walk
+        // 20260928-134242's Prius pair had about 94 of them) must still read as "added something", the
+        // same reason an all-over-ceiling page must: otherwise it would end the paging before a real,
+        // later page of ordinary dealers was ever read (lesson e975e649).
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = CarsComCarMaxCards("cm", 21),
+            [2] = [new("https://www.cars.com/vehicledetail/ord0/?sid=x", "", "Sanford, FL (28 mi)")],
+        });
+        int carMaxDealer = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync,
+            (_, _) => { }, _ => { }, () => { }, CancellationToken.None,
+            onCarMaxDealer: () => carMaxDealer++);
+
+        // Page 2's one ordinary card still adds something, so paging continues to page 3, which is
+        // empty and ends it there.
+        Assert.Equal([1, 2, 3], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal(21, carMaxDealer);
+        Assert.Single(pool);
+    }
+
+    [Fact]
+    public async Task CarsCom_APaddedPageRepeatingTheSameCarMaxCards_AddsNothingAndStopsPaging()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight";
+        List<PageLink> repeatedCarMaxCards = CarsComCarMaxCards("cm", 4);
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
+        {
+            [1] = repeatedCarMaxCards,
+            [2] = repeatedCarMaxCards,
+        });
+        int carMaxDealer = 0;
+
+        IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync,
+            (_, _) => { }, _ => { }, () => { }, CancellationToken.None,
+            onCarMaxDealer: () => carMaxDealer++);
+
+        // Page 2 repeats the same four cards page 1 already reported as CarMax, so it adds nothing new
+        // and paging stops there: a third page is never requested.
+        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal(4, carMaxDealer);
+        Assert.Empty(pool);
+    }
+
+    [Fact]
+    public async Task CarsCom_ACarMaxDeliveryCard_IsNeverTouchedEvenWhenTheLedgerAlreadyKnowsIt()
+    {
+        // A cars.com posting for a CarMax store saved before this card-level check existed must stop
+        // being kept current, not just stop being visited (docs/walk.md#carscom): touchKnownAsync is
+        // never even asked about a card this reads as CarMax.
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight";
+        var browser = new FakeBrowser(new Dictionary<int, List<PageLink>> { [1] = CarsComCarMaxCards("cm", 1) });
+        bool touched = false;
+
+        await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool,
+            (_, _, _, _) => { touched = true; return ValueTask.FromResult(true); },
+            browser.LoadAsync, (_, _) => { }, _ => { }, () => { }, CancellationToken.None);
+
+        Assert.False(touched);
+    }
+
     [Fact]
     public async Task Carvana_APoolFilledOnTheLastPageTheSiteHasByItsStatedCount_IsNotCapped()
     {

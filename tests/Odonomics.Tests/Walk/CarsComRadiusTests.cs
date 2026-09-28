@@ -8,8 +8,9 @@ namespace Odonomics.Tests.Walk;
 /// rendered pages 2 through 11 as nothing but four 65-to-96-mile Florida cards and two empty-text
 /// nationwide recommendation links, so the pre-fix walk saved seventeen Insights from all over the
 /// country before the unbounded pool finally read all eleven pages; and walk run 20260926-121057, whose
-/// page 1 mixed three in-radius cards (two of them CarMax's own "delivery to &lt;city&gt; (N mi)" form) in
-/// with the same four out-of-radius Florida cards.</summary>
+/// page 1 mixed three in-radius cards (two of them CarMax's own "delivery to &lt;city&gt; (N mi)" form,
+/// now excluded on their own as CarMax rather than kept, see WalkSite.CollectDetailCards) in with the
+/// same four out-of-radius Florida cards.</summary>
 public class CarsComRadiusTests
 {
     private static string FixturePath(string name) =>
@@ -74,6 +75,7 @@ public class CarsComRadiusTests
         });
         int beyondRadius = 0;
         int noDistance = 0;
+        int carMaxDealer = 0;
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom,
@@ -88,7 +90,8 @@ public class CarsComRadiusTests
             revisit: false,
             maxDistanceMiles: 50,
             onBeyondRadius: () => beyondRadius++,
-            onNoDistance: () => noDistance++);
+            onNoDistance: () => noDistance++,
+            onCarMaxDealer: () => carMaxDealer++);
 
         // Page 2 held nothing but the same four out-of-radius Florida cards page 1 already carried plus
         // two fresh, empty-text nationwide links, so it added no new in-radius link and paging stopped
@@ -107,10 +110,11 @@ public class CarsComRadiusTests
         string[] multiCardWrapperHrefs = ["af6fb68e-25ea-4c9f-9459-4f6f20d97f1d", "80a6e699-f24c-40fc-9075-235a6d8133e1", "9ae48e6a-57ae-4da4-909b-11f95a171140", "49693b71-df19-4092-9e3f-81d408e93508", "1200a372-b8c9-4b72-b66e-4ae9c1d5b5eb"];
         Assert.All(multiCardWrapperHrefs, id => Assert.DoesNotContain(pool, href => href.Contains(id, StringComparison.Ordinal)));
 
-        // The only in-radius card on either page is page 1's own-text 5616062b (14 mi): the pool holds it
-        // and nothing else.
-        Assert.Single(pool);
-        Assert.Contains(pool, href => href.Contains("5616062b-4439-4e07-badb-8240b99bcd83", StringComparison.Ordinal));
+        // The only in-radius card on either page is page 1's own-text 5616062b (14 mi), a CarMax
+        // Independence Boulevard delivery card: the card-level CarMax check drops it before it ever
+        // reaches the pool, so the pool holds nothing at all.
+        Assert.Empty(pool);
+        Assert.Equal(1, carMaxDealer);
 
         // Page 1 contributes its four out-of-radius Florida cards under "beyond radius" and its three
         // multi-card-wrapper links (a card text naming more than one distance states none) under "no
@@ -132,13 +136,15 @@ public class CarsComRadiusTests
         ];
         List<PageLink> beyondRadius = [];
         List<PageLink> noDistance = [];
+        List<PageLink> carMaxDealer = [];
 
         IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(
             links,
             poolSize: 10,
             maxDistanceMiles: 50,
             onBeyondRadius: beyondRadius.Add,
-            onNoDistance: noDistance.Add);
+            onNoDistance: noDistance.Add,
+            onCarMaxDealer: carMaxDealer.Add);
 
         Assert.Empty(noDistance);
         Assert.Equal(4, beyondRadius.Count);
@@ -147,9 +153,14 @@ public class CarsComRadiusTests
             || card.CardText.Contains("Lakeland", StringComparison.Ordinal)
             || card.CardText.Contains("Tampa", StringComparison.Ordinal)));
 
-        Assert.Equal(3, kept.Count);
+        // The two in-radius CarMax delivery cards are excluded as CarMax, not pooled: only the ordinary
+        // Sanford dealer's card is kept.
+        Assert.Equal(2, carMaxDealer.Count);
+        Assert.All(carMaxDealer, card => Assert.True(
+            card.CardText.Contains("$199 delivery to Orlando, FL (14 mi)", StringComparison.Ordinal)
+            || card.CardText.Contains("$249 delivery to Orlando, FL (14 mi)", StringComparison.Ordinal)));
+
+        Assert.Single(kept);
         Assert.Contains(kept, c => c.CardText.Contains("Sanford, FL (28 mi)", StringComparison.Ordinal));
-        Assert.Contains(kept, c => c.CardText.Contains("$199 delivery to Orlando, FL (14 mi)", StringComparison.Ordinal));
-        Assert.Contains(kept, c => c.CardText.Contains("$249 delivery to Orlando, FL (14 mi)", StringComparison.Ordinal));
     }
 }

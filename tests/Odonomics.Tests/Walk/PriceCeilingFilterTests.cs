@@ -88,21 +88,25 @@ public class PriceCeilingFilterTests
     }
 
     [Fact]
-    public void CollectDetailCards_CarsComCardWhoseDeliveryFeePushesItOverTheCeiling_IsSkipped()
+    public void CollectDetailCards_CarsComCardWhoseDeliveryFeePushesItOverTheCeiling_IsSkippedAsCarMaxNotOverCeiling()
     {
         // $24,900 alone is under the $25,000 ceiling; the CarMax-brokered listing's $249 delivery fee
-        // pushes it to $25,149.
+        // would push it to $25,149, but the card's own delivery fee line marks it as CarMax first (see
+        // WalkSite.CollectDetailCards), checked ahead of the price ceiling, so it is reported under that
+        // reason instead: CarMax's own walk already covers it nationwide regardless of what it costs.
         var card = new PageLink(
             "https://www.cars.com/vehicledetail/x/?sid=1",
             "Used 2020 Honda Insight EX",
             "$24,900\n80,924 mi.\nEst. $345/mo\nUsed 2020 Honda Insight EX\nCarMax Town Center\n$249 delivery to Orlando, FL (14 mi)");
         List<PageLink> overCeiling = [];
+        List<PageLink> carMaxDealer = [];
 
         IReadOnlyList<PageLink> kept = WalkSites.CarsCom.CollectDetailCards(
-            [card], poolSize: 60, maxPrice: 25000, onOverPriceCeiling: overCeiling.Add);
+            [card], poolSize: 60, maxPrice: 25000, onOverPriceCeiling: overCeiling.Add, onCarMaxDealer: carMaxDealer.Add);
 
         Assert.Empty(kept);
-        Assert.Single(overCeiling);
+        Assert.Empty(overCeiling);
+        Assert.Single(carMaxDealer);
     }
 
     private static PageLink CarvanaCard(string href, decimal price) =>

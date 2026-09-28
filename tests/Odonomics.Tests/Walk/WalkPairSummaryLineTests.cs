@@ -479,4 +479,24 @@ public class WalkPairSummaryLineTests
             "cargurus / Toyota Prius: 20 pages, 18 known from cards, 18 saved, 0 dropped, 3 over price ceiling, 2 no price stated",
             line);
     }
+
+    [Fact]
+    public void Format_SkippedCarMaxDealer_IsNamedAfterTheDroppedTotal()
+    {
+        string line = WalkPairSummaryLine.Format("cars.com", "Toyota", "Prius", pages: 5, known: 3, saved: 2, new DroppedBreakdown(0, 0, 0, 0), skippedCarMaxDealer: 94);
+
+        Assert.Equal("cars.com / Toyota Prius: 5 pages, 3 known from cards, 2 saved, 0 dropped, 94 carmax, walked by the carmax walk", line);
+    }
+
+    [Fact]
+    public void Format_SkippedCarMaxDealer_IsNamedLastAfterNoPriceStated()
+    {
+        string line = WalkPairSummaryLine.Format(
+            "cars.com", "Toyota", "Prius", pages: 5, known: 3, saved: 2, new DroppedBreakdown(0, 0, 0, 0),
+            skippedOverPriceCeiling: 3, skippedNoPriceStated: 2, skippedCarMaxDealer: 94);
+
+        Assert.Equal(
+            "cars.com / Toyota Prius: 5 pages, 3 known from cards, 2 saved, 0 dropped, 3 over price ceiling, 2 no price stated, 94 carmax, walked by the carmax walk",
+            line);
+    }
 }
