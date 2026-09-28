@@ -956,7 +956,9 @@ public static class WalkSites
     /// <see cref="CardBadges.CarGurus"/>). A card can instead state plainly it has none ("No Price Listed"), even
     /// while it names a shipping amount of its own ("Price includes $1,498 shipping"), and such a card is dropped
     /// before it is ever a candidate (see <see cref="CarGurusCards.NoPriceListed"/>) rather than spending a detail
-    /// visit finding that out the slow way. The detail page's text prints the VIN, so no HTML reader is needed for it.</summary>
+    /// visit finding that out the slow way. The detail page's text prints the VIN, so no HTML reader is needed for
+    /// it, and its dealer name and location are read from its own text (see <see cref="CarGurusDealer"/>) rather
+    /// than left to the extraction, since CarGurus has no fallback dealer for a page that names none.</summary>
     public static readonly WalkSite CarGurus = new(
         "cargurus",
         query => query.HybridOnlyFromModelYear is int hybridOnlyYear
@@ -977,6 +979,7 @@ public static class WalkSites
         CardFeeReader: CarGurusCards.ReadFee,
         CardFeeStatementReader: FeeStatements.ReadCarGurusCard,
         NoPriceCardPattern: CarGurusCards.NoPriceListed,
+        DetailDealerReader: CarGurusDealer.Read,
         DetailTitleModelReader: ReadTitleModel);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
