@@ -48,7 +48,7 @@ rootCommand.Add(walkCommand);
 
 var fulfillmentOption = new Option<Fulfillment?>("--fulfillment") { Description = "override the scenario's fulfillment for this run: delivery counts a listing's shipping fee, pickup counts its pickup fee" };
 
-var rankBudgetOption = new Option<decimal?>("--budget") { Description = "list vehicles whose during-loan monthly cost exceeds this under a separate over-budget heading instead of the ranked list" };
+var rankBudgetOption = new Option<decimal?>("--budget") { Description = "list vehicles whose loan payment exceeds this under a separate over-budget heading instead of the ranked list" };
 var rankTermOption = new Option<int?>("--term") { Description = "override the scenario's loan term in months (e.g. 48, 60, 72)" };
 var rankDetailOption = new Option<bool>("--detail") { Description = "under each row, also print that vehicle's loan payment beside its during-loan total" };
 var rankCommand = new Command("rank", "score every vehicle in the ledger against the scenario");

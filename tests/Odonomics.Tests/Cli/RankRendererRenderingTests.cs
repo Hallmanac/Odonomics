@@ -57,13 +57,19 @@ public class RankRendererRenderingTests
         };
     }
 
+    /// <summary>A cost whose loan payment equals <paramref name="duringLoan"/>: nothing in this
+    /// file's threshold and unmet-target tests cares about the split between the payment and the
+    /// running costs riding on top of it, only about the one figure the over-budget and
+    /// unmet-target comparisons key off (now the payment, not the during-loan total), so giving
+    /// them the same band lets every existing "$590-$626"-style figure keep meaning what it always
+    /// did. <see cref="BuildItemizedCost"/> is for the tests that do care about the split.</summary>
     private static CostBreakdown BuildCost(Band duringLoan, Band tenYearAvg)
     {
         Band point = Band.Point(100m);
         return new CostBreakdown
         {
             PurchaseCost = 20000m,
-            Payment = point,
+            Payment = duringLoan,
             Fuel = point,
             Maintenance = point,
             Reserve = point,
@@ -313,7 +319,7 @@ public class RankRendererRenderingTests
 
     private static string UnmetTargetsText(string[] lines)
     {
-        int start = Array.FindIndex(lines, line => line.StartsWith("No rankable vehicle meets"));
+        int start = Array.FindIndex(lines, line => line.StartsWith("No rankable vehicle's loan payment meets"));
         if (start < 0)
         {
             return string.Empty;
@@ -333,10 +339,10 @@ public class RankRendererRenderingTests
 
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.Equal(
-            "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
+            "No rankable vehicle's loan payment meets a target of $300, $350, or $400; the cheapest payment is $590-$626 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
         Assert.True(
-            Array.FindIndex(lines, line => line.StartsWith("No rankable vehicle meets")) < Array.FindIndex(lines, line => line.StartsWith("Ranked (")),
+            Array.FindIndex(lines, line => line.StartsWith("No rankable vehicle's loan payment meets")) < Array.FindIndex(lines, line => line.StartsWith("Ranked (")),
             "the line should print above the Ranked heading");
     }
 
@@ -370,7 +376,7 @@ public class RankRendererRenderingTests
 
         string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
 
-        Assert.DoesNotContain(lines, line => line.Contains("No rankable vehicle meets"));
+        Assert.DoesNotContain(lines, line => line.Contains("No rankable vehicle's loan payment meets"));
         Assert.DoesNotContain(lines, line => line.Contains("odo budget"));
         Assert.Contains("Ranked (1)", lines);
     }
@@ -383,7 +389,7 @@ public class RankRendererRenderingTests
 
         string[] lines = Render([score], budget: null, targets: [300m, 350m, 400m]);
 
-        Assert.StartsWith("No rankable vehicle meets a target budget of $300 during the loan;", UnmetTargetsText(lines));
+        Assert.StartsWith("No rankable vehicle's loan payment meets a target of $300;", UnmetTargetsText(lines));
         Assert.DoesNotContain(lines, line => line.Contains("$350") || line.Contains("$400"));
     }
 
@@ -396,7 +402,7 @@ public class RankRendererRenderingTests
         string[] lines = Render([pricey, cheap], budget: 1000m, targets: [300m, 350m, 400m]);
 
         Assert.Equal(
-            "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $410-$430 a month. Run odo budget for the purchase price each target allows.",
+            "No rankable vehicle's loan payment meets a target of $300, $350, or $400; the cheapest payment is $410-$430 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
     }
 
@@ -405,7 +411,7 @@ public class RankRendererRenderingTests
     {
         string[] lines = Render([], budget: null, targets: [300m, 350m, 400m]);
 
-        Assert.DoesNotContain(lines, line => line.Contains("No rankable vehicle meets"));
+        Assert.DoesNotContain(lines, line => line.Contains("No rankable vehicle's loan payment meets"));
     }
 
     [Fact]
@@ -418,7 +424,7 @@ public class RankRendererRenderingTests
 
         Assert.Contains(lines, line => line.StartsWith("Ranked (0)"));
         Assert.Equal(
-            "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $590-$626 a month. Run odo budget for the purchase price each target allows.",
+            "No rankable vehicle's loan payment meets a target of $300, $350, or $400; the cheapest payment is $590-$626 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
     }
 
@@ -433,7 +439,7 @@ public class RankRendererRenderingTests
         Assert.Contains(lines, line => line.StartsWith("Ranked (1)"));
         Assert.Contains(lines, line => line.StartsWith("Over the $500 budget (1)"));
         Assert.Equal(
-            "No rankable vehicle meets a target budget of $300, $350, or $400 during the loan; the cheapest is $410-$430 a month. Run odo budget for the purchase price each target allows.",
+            "No rankable vehicle's loan payment meets a target of $300, $350, or $400; the cheapest payment is $410-$430 a month. Run odo budget for the purchase price each target allows.",
             UnmetTargetsText(lines));
     }
 
@@ -532,7 +538,7 @@ public class RankRendererRenderingTests
         Score ranked = BuildScore("JTDKARFU9L3124436", 2020, "Toyota", "Prius", 17897m, cost: BuildItemizedCost(new Band(324m, 336m, 348m), new Band(268m, 274m, 279m), new Band(590m, 608m, 626m)));
         Score overBudget = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Camry Hybrid", 22000m, cost: BuildItemizedCost(new Band(400m, 410m, 420m), new Band(278m, 284m, 289m), new Band(680m, 694m, 709m)));
 
-        string[] lines = Render([ranked, overBudget], budget: 650m, detail: true);
+        string[] lines = Render([ranked, overBudget], budget: 380m, detail: true);
 
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.DoesNotContain(lines, line => line.Contains('\u001b'));
