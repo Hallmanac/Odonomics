@@ -27,7 +27,8 @@ public class RankRendererRenderingTests
         decimal? pickupFee = null,
         string? pickupLocation = null,
         Fulfillment fulfillment = Fulfillment.Delivery,
-        decimal? itemizedFees = null)
+        decimal? itemizedFees = null,
+        string? unmeasuredOnlyAtStore = null)
     {
         var vehicle = new VehicleForScoring
         {
@@ -44,6 +45,7 @@ public class RankRendererRenderingTests
             ItemizedFees = itemizedFees,
             DealerGrade = dealerGrade,
             OnlyFGradedDealers = onlyFGraded,
+            UnmeasuredOnlyAtStore = unmeasuredOnlyAtStore,
         };
 
         return new Score
@@ -315,6 +317,29 @@ public class RankRendererRenderingTests
         string row = Assert.Single(lines, line => line.Contains("4T1G11AK0LU123456"));
         Assert.DoesNotContain("$0", row);
         Assert.Contains(" - ", row);
+    }
+
+    [Fact]
+    public void Render_VehicleWithAnUnmeasuredOnlyAtStore_ListsItUnderItsOwnWarningHeading()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 590m, 590m), new Band(612m, 612m, 612m));
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, cost: cost, unmeasuredOnlyAtStore: "Nowhere");
+
+        string[] lines = Render([score], budget: null);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Contains(lines, line => line.Contains("can't yet measure"));
+        Assert.Contains(lines, line => line.Contains("4T1G11AK0LU123456") && line.Contains("Nowhere"));
+    }
+
+    [Fact]
+    public void Render_VehicleWithNoUnmeasuredOnlyAtStore_PrintsNoWarningHeading()
+    {
+        Score score = BuildScore("4T1G11AK0LU123456", 2020, "Toyota", "Corolla Hybrid", 22000m, passes: false, failureReasons: ["price too high"]);
+
+        string[] lines = Render([score], budget: null);
+
+        Assert.DoesNotContain(lines, line => line.Contains("can't yet measure"));
     }
 
     private static string UnmetTargetsText(string[] lines)

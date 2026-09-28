@@ -559,6 +559,56 @@ public class VehiclePricingTests
     }
 
     [Fact]
+    public void LowestPriceIncludingOutOfRadius_OnlyPostingIsAnOutOfRadiusOnlyAtStore_StillPricesIt()
+    {
+        PostingEntity onlyAt = Posting("carmax", 28000m, shippingFee: 0m, pickupLocation: "Only at Norco");
+        VehicleEntity vehicle = Vehicle(onlyAt);
+
+        PurchasePrice? price = VehiclePricing.LowestPriceIncludingOutOfRadius(vehicle, NoCoverage, Fulfillment.Delivery);
+
+        Assert.Equal(28000m, price?.Asking);
+        Assert.Equal(28000m, price?.Total);
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery, DaughterZip, DaughterRadiusMiles));
+    }
+
+    [Fact]
+    public void LowestPriceIncludingOutOfRadius_ReservedPosting_StillExcludesIt()
+    {
+        PostingEntity reserved = Posting("carmax", 15000m);
+        reserved.Attributes = [AvailabilityAttribute(CarMaxStores.Reserved)];
+        VehicleEntity vehicle = Vehicle(reserved);
+
+        Assert.Null(VehiclePricing.LowestPriceIncludingOutOfRadius(vehicle, NoCoverage, Fulfillment.Delivery));
+    }
+
+    [Fact]
+    public void UnmeasuredOnlyAtStore_StoreNotInTheCuratedTable_ReturnsTheStore()
+    {
+        PostingEntity onlyAt = Posting("carmax", 25000m, shippingFee: 0m, pickupLocation: "Only at Nowhere");
+        VehicleEntity vehicle = Vehicle(onlyAt);
+
+        Assert.Equal("Nowhere", VehiclePricing.UnmeasuredOnlyAtStore(vehicle, NoCoverage, DaughterZip, DaughterRadiusMiles));
+    }
+
+    [Fact]
+    public void UnmeasuredOnlyAtStore_StoreInTheCuratedTable_ReturnsNull()
+    {
+        PostingEntity onlyAt = Posting("carmax", 25000m, shippingFee: 0m, pickupLocation: "Only at Norco");
+        VehicleEntity vehicle = Vehicle(onlyAt);
+
+        Assert.Null(VehiclePricing.UnmeasuredOnlyAtStore(vehicle, NoCoverage, DaughterZip, DaughterRadiusMiles));
+    }
+
+    [Fact]
+    public void UnmeasuredOnlyAtStore_NoZipOrRadiusGiven_ReturnsNull()
+    {
+        PostingEntity onlyAt = Posting("carmax", 25000m, shippingFee: 0m, pickupLocation: "Only at Nowhere");
+        VehicleEntity vehicle = Vehicle(onlyAt);
+
+        Assert.Null(VehiclePricing.UnmeasuredOnlyAtStore(vehicle, NoCoverage, zip: null, radiusMiles: null));
+    }
+
+    [Fact]
     public void LowestCurrentPurchasePrice_InRadiusOnlyAtPostingUnderDelivery_DoesNotTreatTheZeroShippingFeeAsFree()
     {
         // CarMax's own $0 shipping fee for an "Only at" posting is a side effect of the same

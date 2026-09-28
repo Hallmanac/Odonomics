@@ -50,6 +50,12 @@ public static class ShowCommand
         bool onlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);
         string? onlyAtOutOfRadiusStore = VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);
         (CostBreakdown? monthlyCost, string? unavailable) = CostOrReason($"{vehicle.Make} {vehicle.Model}", purchasePrice, onlyAtOutOfRadiusStore, onlyReservedOrInTransit, scenario);
+
+        if (VehiclePricing.UnmeasuredOnlyAtStore(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles) is string unmeasuredStore)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[yellow]only at {unmeasuredStore}: its distance from {scenario.Zip} is not in this project's curated store list, so it is being treated as in radius[/]");
+        }
+
         ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice);
         return 0;
     }

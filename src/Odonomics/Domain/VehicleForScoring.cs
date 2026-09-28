@@ -84,6 +84,15 @@ public sealed record VehicleForScoring
     /// for, with the reason "only at &lt;store&gt;, out of radius".</summary>
     public string? OnlyAtOutOfRadiusStore { get; init; }
 
+    /// <summary>The CarMax "Only at" store, among this vehicle's active postings, whose distance from the
+    /// scenario's zip <see cref="Ledger.VehiclePricing.UnmeasuredOnlyAtStore"/> could not measure: this
+    /// vehicle counts as purchasable, and may be the one it prices and ranks from, only because that gap
+    /// reads as "not out of radius" rather than because the distance was actually confirmed. Null when
+    /// every "Only at" store this vehicle's postings name has a known distance, or when it names none.
+    /// Display only, the same as <see cref="Availability"/>: it never changes whether this vehicle passes
+    /// the scenario's filters or what it is priced at.</summary>
+    public string? UnmeasuredOnlyAtStore { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>

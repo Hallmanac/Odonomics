@@ -135,6 +135,59 @@ public class ResearchCommandSelectionTests
         Assert.DoesNotContain(selected, v => v.Vin == vin);
     }
 
+    [Fact]
+    public void SelectVehiclesToResearch_OnlyAtOutOfRadiusPostingOverTheCeiling_IsExcluded()
+    {
+        // Before the fix, the out-of-radius "Only at" posting made IsPurchasable false, which made
+        // VehicleForScoring.LowestCurrentPrice null for this vehicle; that silently skipped the price
+        // ceiling check inside Scorer.FilterReasons entirely (it only runs when LowestCurrentPrice is
+        // a decimal), leaving only the tolerated "out of radius" reason. This $28,000 car, over the
+        // scenario's $25,000 ceiling, would have been researched anyway.
+        const string vin = "1HGCM82633A004355";
+        VehicleEntity vehicle = Vehicle(vin);
+        vehicle.Postings.Add(new PostingEntity
+        {
+            VehicleVin = vin,
+            Source = "carmax",
+            Url = "https://www.carmax.com/car/2",
+            FirstSeen = DateTimeOffset.UtcNow,
+            LastSeen = DateTimeOffset.UtcNow,
+            ShippingFee = 0m,
+            PickupLocation = "Only at Norco",
+            PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 28000m, ObservedAt = DateTimeOffset.UtcNow }],
+        });
+        Scenario baseScenario = BuildScenario();
+        Scenario scenario = baseScenario with { Filters = baseScenario.Filters with { MaxPrice = 25000 } };
+
+        List<VehicleEntity> selected = ResearchCommand.SelectVehiclesToResearch([vehicle], scenario, NoCoverage);
+
+        Assert.DoesNotContain(selected, v => v.Vin == vin);
+    }
+
+    [Fact]
+    public void SelectVehiclesToResearch_OnlyAtOutOfRadiusPostingUnderTheCeiling_IsStillIncluded()
+    {
+        const string vin = "1HGCM82633A004356";
+        VehicleEntity vehicle = Vehicle(vin);
+        vehicle.Postings.Add(new PostingEntity
+        {
+            VehicleVin = vin,
+            Source = "carmax",
+            Url = "https://www.carmax.com/car/3",
+            FirstSeen = DateTimeOffset.UtcNow,
+            LastSeen = DateTimeOffset.UtcNow,
+            ShippingFee = 0m,
+            PickupLocation = "Only at Norco",
+            PriceObservations = [new PriceObservationEntity { PostingId = 0, Price = 18000m, ObservedAt = DateTimeOffset.UtcNow }],
+        });
+        Scenario baseScenario = BuildScenario();
+        Scenario scenario = baseScenario with { Filters = baseScenario.Filters with { MaxPrice = 25000 } };
+
+        List<VehicleEntity> selected = ResearchCommand.SelectVehiclesToResearch([vehicle], scenario, NoCoverage);
+
+        Assert.Contains(selected, v => v.Vin == vin);
+    }
+
     private static VinResearchResult CleanResearch(string? historyCouldNotFetchReason) => new(
         new VinDecodeResult("1HGCM82633A004352", 2020, "Honda", "Insight", null, null, null, null),
         new RecallsResult([], null),

@@ -46,6 +46,30 @@ public static class VehiclePricing
     public static PostingEntity? LowestCurrentPurchasePosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string? zip = null, int? radiusMiles = null) =>
         CheapestPosting(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles)?.Posting;
 
+    /// <summary>The price the cheapest active, non-reserved posting would cost to take home if an
+    /// out-of-radius CarMax "Only at" posting still counted as purchasable, for a price-ceiling check that
+    /// must still reject a car that is too expensive even though <see cref="OnlyAtOutOfRadiusStore"/> would
+    /// otherwise make <see cref="LowestCurrentPurchasePrice"/> null for it (see
+    /// <see cref="Cli.Commands.ResearchCommand"/>'s own use of this: it tolerates the out-of-radius reason so
+    /// it still researches a car in that shape, and researching it anyway must not also skip the price
+    /// ceiling that shape happens to silence). A reserved or in-transit posting is still excluded, the same
+    /// as <see cref="LowestCurrentPurchasePrice"/>.</summary>
+    public static PurchasePrice? LowestPriceIncludingOutOfRadius(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment)
+    {
+        (PostingEntity Posting, PurchasePrice Price)[] known =
+        [
+            .. ActivePostings(vehicle, latestCoverageBySource)
+                .Where(p => !IsReservedOrInTransit(p))
+                .Select(p => (Posting: p, Asking: LatestAskingPrice(p)))
+                .Where(p => p.Asking is not null)
+                .Select(p => (p.Posting, PurchasePriceOf(p.Posting, p.Asking.GetValueOrDefault(), fulfillment))),
+        ];
+
+        return known.Length == 0
+            ? null
+            : known.OrderBy(p => p.Price.Total).ThenBy(p => p.Price.Asking).First().Price;
+    }
+
     private static (PostingEntity Posting, PurchasePrice Price)? CheapestPosting(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string? zip, int? radiusMiles)
     {
         (PostingEntity Posting, PurchasePrice Price)[] known =
@@ -130,6 +154,28 @@ public static class VehiclePricing
             .Where(p => !IsReservedOrInTransit(p))
             .Select(p => CarMaxStores.OnlyAtStoreName(p.PickupLocation))
             .FirstOrDefault(store => store is not null && IsOutOfRadius(store, zip, radiusMiles));
+    }
+
+    /// <summary>The store named by any of this vehicle's active, non-reserved postings' CarMax "Only at"
+    /// pickup location whose distance from <paramref name="zip"/> <see cref="CarMaxStores.DistanceMilesFromZip"/>
+    /// could not measure, because the store or the zip is not in that file's own curated tables: that gap
+    /// makes <see cref="IsOutOfRadius"/> read as false, so this vehicle counts as purchasable and prices
+    /// normally off that posting on nothing more than the absence of a measurement, not a confirmed in-radius
+    /// distance. Null when <paramref name="zip"/> or <paramref name="radiusMiles"/> is null (no scenario is in
+    /// play, so no distance is ever checked), when no active posting names an "Only at" store, or when every
+    /// one named is a store and zip this file's tables do know. `odo rank` and `odo show` surface this as a
+    /// caveat beside the vehicle rather than silently trusting the unmeasured distance.</summary>
+    public static string? UnmeasuredOnlyAtStore(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, string? zip, int? radiusMiles)
+    {
+        if (zip is null || radiusMiles is null)
+        {
+            return null;
+        }
+
+        return ActivePostings(vehicle, latestCoverageBySource)
+            .Where(p => !IsReservedOrInTransit(p))
+            .Select(p => CarMaxStores.OnlyAtStoreName(p.PickupLocation))
+            .FirstOrDefault(store => store is not null && CarMaxStores.DistanceMilesFromZip(store, zip) is null);
     }
 
     /// <summary>True when <paramref name="posting"/> is neither reserved/in-transit nor a CarMax "Only at"
