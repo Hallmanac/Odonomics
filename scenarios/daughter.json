@@ -34,6 +34,7 @@
       "Toyota Camry Hybrid": 2018
     },
     "maxMileage": 100000,
+    "maxPrice": 25000,
     "allowedModels": [
       "Honda Insight",
       "Toyota Corolla Hybrid",

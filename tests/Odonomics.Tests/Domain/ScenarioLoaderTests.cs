@@ -25,6 +25,7 @@ public class ScenarioLoaderTests
         Assert.Equal(3000m, scenario.DownPayment.Expected);
         Assert.Equal(2019, scenario.Filters.MinYearFor("Honda Insight"));
         Assert.Equal(2018, scenario.Filters.MinYearFor("Toyota Camry Hybrid"));
+        Assert.Equal(25000, scenario.Filters.MaxPrice);
         Assert.Null(scenario.InsuranceMonthlyByModel["Honda Insight"]);
         Assert.Equal(95m, scenario.InsuranceMonthlyByModel["Toyota Corolla Hybrid"]);
         Assert.Contains(300m, scenario.TargetMonthlyBudgets);
@@ -67,6 +68,7 @@ public class ScenarioLoaderTests
         Scenario scenario = ScenarioLoader.Parse(json);
 
         Assert.Empty(scenario.HybridOnlyFromModelYear);
+        Assert.Null(scenario.Filters.MaxPrice);
     }
 
     [Fact]
