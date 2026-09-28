@@ -123,7 +123,19 @@ namespace Odonomics.Walk;
 /// below-floor or over-ceiling card is, with a known posting behind it still touched current from its card. A
 /// card like this can still carry a shipping-only line ("Price includes $1,498 shipping") that names no price of
 /// its own, which <see cref="ReadCardPrice"/> already never reads as one; null for a site with no such
-/// statement.</summary>
+/// statement. <paramref name="CarMaxCardReader"/> tells a card that is really one of CarMax's own
+/// nationwide-inventory listings, carried on cars.com's own search, from an ordinary dealer's card that
+/// also happens to state a delivery fee (cars.com, see <see cref="CarsComCards.ReadsAsCarMax"/>): checked
+/// instead of <see cref="CardFeeReader"/> returning non-null for the <see cref="SkipsCarMaxDealer"/> check
+/// below, since an ordinary distant dealer's own delivery fee satisfies that too. Null for a site with no
+/// such distinction to draw. <paramref name="ScrollLoadsMoreCards"/> says this site's search page mounts more result cards
+/// into the DOM only as the page is scrolled further, rather than holding every card of the page it already
+/// sent from the first paint (cars.com: a page whose true count runs to about thirty cards showed only the
+/// handful <see cref="SearchPageCardRenderWait"/>'s own scan happened to scroll into view, since that scan
+/// exists to hydrate a card already in the DOM, not to make the DOM grow a card that was never there at all;
+/// see <see cref="SearchPageLoadMore"/>, which the walk reuses to keep scrolling until the page's own count of
+/// cards stops growing, the same stall it already uses to know a "show more" control has nothing left to add).
+/// False for a site whose page holds its full card count without further scrolling.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -161,7 +173,9 @@ public sealed record WalkSite(
     bool WaitsForRenderedCards = false,
     Func<string, CardVehicleFacets>? CardFacetsReader = null,
     Regex? NoPriceCardPattern = null,
-    bool SkipsCarMaxDealer = false)
+    bool SkipsCarMaxDealer = false,
+    bool ScrollLoadsMoreCards = false,
+    Func<string, bool>? CarMaxCardReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -333,16 +347,19 @@ public sealed record WalkSite(
         }
 
         // A CarMax listing carried on cars.com's own search prints a delivery fee on its card ("$249
-        // delivery to Orlando, FL (14 mi)"); an ordinary cars.com dealer's card prints no such line. Checked
+        // delivery to Orlando, FL (14 mi)"), or names CarMax as the dealer, or both; an ordinary cars.com
+        // dealer's card that also charges its own delivery fee reads "delivery from" instead (lesson
+        // 4a2cbaa3), which is why this is CarMaxCardReader, not CardFeeReader returning non-null: that
+        // would also catch a genuine distant dealer's own delivery-fee card as if it were CarMax's. Checked
         // here, before any detail page is ever opened, so a CarMax card never spends a detail visit or an
         // LLM extraction on every run just to be dropped after the fact the way WalkCommand.VisitLinkAsync's
-        // own IsCarMaxDealer check still does for the rare card this fee reader misses.
-        if (SkipsCarMaxDealer && CardFeeReader is not null)
+        // own IsCarMaxDealer check still does for the rare card this reader misses.
+        if (SkipsCarMaxDealer && CarMaxCardReader is not null)
         {
             List<PageLink> notCarMax = [];
             foreach (PageLink card in candidates)
             {
-                if (CardFeeReader(card.CardText) is not null)
+                if (CarMaxCardReader(card.CardText))
                 {
                     onCarMaxDealer?.Invoke(card);
                     continue;
@@ -780,11 +797,13 @@ public static class WalkSites
         // mileage, then the "Used <year> ..." title, so the first dollar amount is the price.
         CardPriceReader: CardPrices.FirstDollarAmount,
         // cars.com pages with a plain page=N on the same URL. A page holds about thirty cards, and the
-        // site ignores a page_size parameter, so the search URL carries none.
+        // site ignores a page_size parameter, so the search URL carries none. Getting to all thirty is
+        // ScrollLoadsMoreCards's job below, not this URL's.
         PagedSearchUrl: (searchUrl, pageNumber, _) => $"{searchUrl}&page={pageNumber}",
         // A CarMax listing carried on cars.com's own search prints a delivery fee on its card ("$249
         // delivery to Orlando, FL (14 mi)"); an ordinary dealer's card prints no such line.
         CardFeeReader: CarsComCards.ReadFee,
+        CarMaxCardReader: CarsComCards.ReadsAsCarMax,
         CardBadgeReader: CardBadges.CarsCom,
         FeeStatementReader: FeeStatements.ReadCarsCom,
         // cars.com's maximum_distance query parameter doesn't bound the results it actually returns
@@ -800,7 +819,14 @@ public static class WalkSites
         // hold for an "Only at" CarMax car anyway, so a CarMax dealer on cars.com is always skipped
         // rather than saved as a second, redundant posting (see WalkCommand.VisitLinkAsync and
         // Ledger.VehiclePricing).
-        SkipsCarMaxDealer: true);
+        SkipsCarMaxDealer: true,
+        // A page's own <li> list only holds as many cards as the page has been scrolled far enough to
+        // mount (walk run 20260928-184522: eleven page=N loads in a row that each rendered only three to
+        // seven cards, footer immediately after the last one, none of them ever reported unrendered by
+        // WaitsForRenderedCards's own scan, because every card that scan ever saw already had its own
+        // fuse-card element in the DOM; the rest of that page's roughly thirty cards were never mounted
+        // at all, so there was nothing there for that scan to find and scroll).
+        ScrollLoadsMoreCards: true);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana
     /// detail page usually prints no dealer at all (the car ships from a hub the page never names),

@@ -120,6 +120,19 @@ public static class SearchPageLinks
         ];
     }
 
+    /// <summary>How many distinct candidate detail links <paramref name="anchors"/> (in <see cref="AnchorScript"/>'s
+    /// own [href, text] shape) names for <paramref name="site"/>: every canonical URL, once, among the anchors
+    /// matching its <see cref="WalkSite.DetailUrlPattern"/>. What a page's own "is there more to load" stall check
+    /// watches for a site that shows more cards only by pressing a control (<see cref="WalkSite.LoadMoreControlPattern"/>)
+    /// or by scrolling further (<see cref="WalkSite.ScrollLoadsMoreCards"/>): the same count either one presses or
+    /// scrolls for, so a page that adds no new canonical link is a page with nothing left to load.</summary>
+    public static int CountDistinctDetailLinks(IEnumerable<string[]> anchors, WalkSite site) =>
+        anchors
+            .Where(a => site.DetailUrlPattern.IsMatch(a[0]))
+            .Select(a => WalkSites.CanonicalDetailUrl(a[0]))
+            .Distinct()
+            .Count();
+
     // Relaxed escaping keeps an href's "&" and a card's "…" readable in the file, which a person opens to cut fixtures.
     private static readonly JsonSerializerOptions CardsJsonOptions = new()
     {
