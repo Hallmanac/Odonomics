@@ -212,6 +212,45 @@ public class ScorerTests
     }
 
     [Fact]
+    public void FilterReasons_OnlyCarsComCarMaxPostings_ReportsItsOwnReasonNotTheGoneOne()
+    {
+        // A vehicle whose only postings are cars.com copies of a CarMax listing has a null
+        // LowestCurrentPrice too (VehiclePricing.ActivePostings drops them outright), the same as one
+        // whose every posting is actually gone; the two must still read as different reasons, since this
+        // car is still listed, just not priced from a redundant cars.com copy.
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, price: null) with { OnlyCarsComCarMaxPostings = true };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.Contains(reasons, r => r.Contains("cars.com") && r.Contains("CarMax"));
+        Assert.DoesNotContain(reasons, r => r.Contains("every posting is gone"));
+    }
+
+    [Fact]
+    public void FilterReasons_NotOnlyCarsComCarMaxPostings_NeverReportsThatReason()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with { OnlyCarsComCarMaxPostings = false };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.DoesNotContain(reasons, r => r.Contains("CarMax"));
+    }
+
+    [Fact]
+    public void FilterReasons_OnlyAtOutOfRadiusStoreAndOnlyCarsComCarMaxPostings_TheOnlyAtReasonWins()
+    {
+        Scenario scenario = BuildScenario();
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, price: null) with { OnlyAtOutOfRadiusStore = "Norco", OnlyCarsComCarMaxPostings = true };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, scenario);
+
+        Assert.Contains(reasons, r => r.Contains("only at Norco"));
+        Assert.DoesNotContain(reasons, r => r.Contains("cars.com copy"));
+    }
+
+    [Fact]
     public void FilterReasons_OnlyReservedOrInTransit_ReportsReason()
     {
         Scenario scenario = BuildScenario();

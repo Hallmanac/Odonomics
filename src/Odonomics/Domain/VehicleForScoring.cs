@@ -93,6 +93,15 @@ public sealed record VehicleForScoring
     /// the scenario's filters or what it is priced at.</summary>
     public string? UnmeasuredOnlyAtStore { get; init; }
 
+    /// <summary>True when this vehicle's only posting(s) are cars.com copies of one of CarMax's own stores
+    /// (see <see cref="Ledger.VehiclePricing.OnlyCarsComCarMaxPostings"/>): those never count as active
+    /// (CarMax's own walk already covers the car nationwide, and cars.com's delivery offer does not hold for
+    /// an "Only at" CarMax car), so <see cref="LowestCurrentPrice"/> reads null here exactly as it would for
+    /// a car that actually left the market, even though this one is still listed on cars.com and at CarMax.
+    /// <see cref="Scorer.FilterReasons"/> gives this its own reason instead of "every posting is gone" when
+    /// it applies.</summary>
+    public bool OnlyCarsComCarMaxPostings { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>

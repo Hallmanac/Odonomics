@@ -49,7 +49,8 @@ public static class ShowCommand
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
         bool onlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);
         string? onlyAtOutOfRadiusStore = VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);
-        (CostBreakdown? monthlyCost, string? unavailable) = CostOrReason($"{vehicle.Make} {vehicle.Model}", purchasePrice, onlyAtOutOfRadiusStore, onlyReservedOrInTransit, scenario);
+        bool onlyCarsComCarMaxPostings = VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, latestCoverageBySource);
+        (CostBreakdown? monthlyCost, string? unavailable) = CostOrReason($"{vehicle.Make} {vehicle.Model}", purchasePrice, onlyAtOutOfRadiusStore, onlyReservedOrInTransit, onlyCarsComCarMaxPostings, scenario);
 
         if (VehiclePricing.UnmeasuredOnlyAtStore(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles) is string unmeasuredStore)
         {
@@ -83,18 +84,21 @@ public static class ShowCommand
     /// checked in the order that reason should win: the scenario's own price ceiling first (see
     /// <see cref="OverPriceCeiling"/>), then whether every live posting is an out-of-radius CarMax "Only
     /// at" posting (see <see cref="VehiclePricing.OnlyAtOutOfRadiusStore"/>), then whether every live
-    /// posting is reserved or in transit (see <see cref="VehiclePricing.OnlyReservedOrInTransit"/>) rather
-    /// than <paramref name="purchasePrice"/> simply being null, since that null means something else, "no
-    /// current asking price (every posting is gone)", only when neither of those is also true.
-    /// <see cref="MonthlyCostFor"/> checks the rest.</summary>
-    public static (CostBreakdown? Cost, string? Unavailable) CostOrReason(string makeModel, PurchasePrice? purchasePrice, string? onlyAtOutOfRadiusStore, bool onlyReservedOrInTransit, Scenario scenario) =>
+    /// posting is reserved or in transit (see <see cref="VehiclePricing.OnlyReservedOrInTransit"/>), then
+    /// whether the vehicle's only postings are cars.com copies of a CarMax listing (see
+    /// <see cref="VehiclePricing.OnlyCarsComCarMaxPostings"/>) rather than <paramref name="purchasePrice"/>
+    /// simply being null, since that null means something else, "no current asking price (every posting is
+    /// gone)", only when none of those is also true. <see cref="MonthlyCostFor"/> checks the rest.</summary>
+    public static (CostBreakdown? Cost, string? Unavailable) CostOrReason(string makeModel, PurchasePrice? purchasePrice, string? onlyAtOutOfRadiusStore, bool onlyReservedOrInTransit, bool onlyCarsComCarMaxPostings, Scenario scenario) =>
         OverPriceCeiling(purchasePrice, scenario.Filters.MaxPrice) is string ceilingReason
             ? (null, ceilingReason)
             : onlyAtOutOfRadiusStore is string store
                 ? (null, $"only at {store}, out of radius")
                 : onlyReservedOrInTransit
                     ? (null, "every posting is reserved for another buyer or in transit, not yet purchasable")
-                    : MonthlyCostFor(makeModel, purchasePrice?.Total, scenario);
+                    : onlyCarsComCarMaxPostings
+                        ? (null, "no current asking price (only a cars.com copy of a CarMax posting; see the CarMax walk)")
+                        : MonthlyCostFor(makeModel, purchasePrice?.Total, scenario);
 
     /// <summary>Prices one vehicle the way `odo rank` does (see <see cref="Scorer.ComputeCost"/>), but
     /// without the hard filters: `odo show` is asked about any VIN in the ledger, including one the
@@ -105,7 +109,8 @@ public static class ShowCommand
     /// excluded, so its monthly cost is never computed, the same as any other model missing that
     /// data. <paramref name="purchasePrice"/> is what the car costs to take home, its asking price
     /// plus the fee for the scenario's fulfillment and any itemized fees (see <see cref="PurchasePrice.Total"/>).
-    /// <see cref="CostOrReason"/> checks the price ceiling and the reserved/in-transit case ahead of this.</summary>
+    /// <see cref="CostOrReason"/> checks the price ceiling, the reserved/in-transit case, and the
+    /// cars.com-CarMax-only case ahead of this.</summary>
     public static (CostBreakdown? Cost, string? Unavailable) MonthlyCostFor(string makeModel, decimal? purchasePrice, Scenario scenario)
     {
         if (purchasePrice is not decimal price)
