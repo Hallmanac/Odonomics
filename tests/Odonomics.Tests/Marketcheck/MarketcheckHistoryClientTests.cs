@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using Odonomics.Marketcheck;
 using Odonomics.Tests.TestSupport;
 
@@ -81,6 +82,45 @@ public class MarketcheckHistoryClientTests
         Assert.NotNull(result.CouldNotFetchReason);
     }
 
+    /// <summary>Pins the 2026-09-28 fix: Marketcheck rate-limits under load with HTTP 429, and the
+    /// call used to record that as a permanent could-not-fetch reason on the first attempt rather
+    /// than backing off and trying again. The fake handler's first response is 429 with a
+    /// Retry-After: 0 header (so the retry pause here is instant rather than slowing the suite down),
+    /// its second is 200 with the recorded fixture, proving the retry both happens and honors
+    /// Retry-After.</summary>
+    [Fact]
+    public async Task GetHistoryAsync_HistoryCallReturns429ThenSucceeds_RetriesAndStoresHistory()
+    {
+        string historyUrl = $"https://mc-api.marketcheck.com/v2/history/car/{Vin}?api_key=test-key";
+        string activeUrl = $"https://mc-api.marketcheck.com/v2/search/car/active?api_key=test-key&vin={Vin}";
+        var handler = new TooManyRequestsThenFixtureHttpMessageHandler(
+            historyUrl, await File.ReadAllTextAsync(FixturePath($"vin-history-{Vin}.json")),
+            activeUrl, await File.ReadAllTextAsync(FixturePath($"active-search-{Vin}.json")));
+        var client = new MarketcheckHistoryClient("test-key", new HttpClient(handler));
+
+        VinHistoryResult result = await client.GetHistoryAsync(Vin, CancellationToken.None);
+
+        Assert.Null(result.CouldNotFetchReason);
+        Assert.Equal(7, result.PriorListings.Count);
+        Assert.Equal(2, handler.HistoryUrlCallCount);
+    }
+
+    /// <summary>A 429 that never clears must still degrade to a could-not-fetch reason rather than
+    /// retrying forever: the bounded-attempts half of the same fix.</summary>
+    [Fact]
+    public async Task GetHistoryAsync_HistoryCallAlwaysReturns429_DegradesAfterBoundedAttempts()
+    {
+        var handler = new AlwaysTooManyRequestsHttpMessageHandler();
+        var client = new MarketcheckHistoryClient("test-key", new HttpClient(handler));
+
+        VinHistoryResult result = await client.GetHistoryAsync(Vin, CancellationToken.None);
+
+        Assert.Empty(result.PriorListings);
+        Assert.NotNull(result.CouldNotFetchReason);
+        Assert.Contains("429", result.CouldNotFetchReason);
+        Assert.True(handler.CallCount is > 1 and <= 4, $"expected a bounded 2-4 attempts, got {handler.CallCount}");
+    }
+
     [Fact]
     public async Task GetHistoryAsync_CallerCancels_PropagatesCancellation()
     {
@@ -96,5 +136,54 @@ public class MarketcheckHistoryClientTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             throw exception;
+    }
+
+    /// <summary>Answers <paramref name="historyUrl"/> with HTTP 429 (Retry-After: 0) the first time
+    /// and <paramref name="historyBody"/> after that; always answers <paramref name="activeUrl"/>
+    /// with <paramref name="activeBody"/>, since the active-search call isn't what this test is
+    /// exercising.</summary>
+    private sealed class TooManyRequestsThenFixtureHttpMessageHandler(string historyUrl, string historyBody, string activeUrl, string activeBody) : HttpMessageHandler
+    {
+        public int HistoryUrlCallCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            string url = request.RequestUri?.ToString() ?? throw new InvalidOperationException("request has no URL");
+            if (url == activeUrl)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(activeBody) });
+            }
+
+            if (url != historyUrl)
+            {
+                throw new InvalidOperationException($"unexpected URL {url}");
+            }
+
+            HistoryUrlCallCount++;
+            if (HistoryUrlCallCount == 1)
+            {
+                var tooManyRequests = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("") };
+                tooManyRequests.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+                return Task.FromResult(tooManyRequests);
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(historyBody) });
+        }
+    }
+
+    /// <summary>Answers every request with HTTP 429 (Retry-After: 0, so a bounded-attempts test never
+    /// waits out a real backoff), forcing the client to eventually give up rather than retry
+    /// forever.</summary>
+    private sealed class AlwaysTooManyRequestsHttpMessageHandler : HttpMessageHandler
+    {
+        public int CallCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("") };
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+            return Task.FromResult(response);
+        }
     }
 }
