@@ -830,6 +830,14 @@ public static class WalkSites
         // search zip who also charges its own delivery fee ("$150 delivery from Palmetto Bay, FL") was
         // wrongly dropped as a redundant CarMax copy under that reading (lesson 4a2cbaa3), which
         // CarMaxCardReader above now corrects (see CarsComCards.ReadsAsCarMax).
+        //
+        // Those "about two new CarMax cards each" page, once CarMaxCardReader correctly told them apart
+        // from a genuine organic match, turned out to be a fresh CarMax listing URL every time rather
+        // than a repeat, which kept every one of them counting toward a page's own "added anything" tally
+        // and so kept the walk paging for as long as CarMax's own nationwide inventory held out (92 pages
+        // for this same pair's 20260928-184522 recording). WalkSearchPages.CollectLinksAsync no longer
+        // counts a CarMax card toward that tally at all, whether new or repeated, so a page with nothing
+        // but CarMax and beyond-radius cards now ends the paging the same way an empty page does.
         SkipsCarMaxDealer: true);
 
     /// <summary>What carvana's own name is stored as when a detail page names no hub. A carvana

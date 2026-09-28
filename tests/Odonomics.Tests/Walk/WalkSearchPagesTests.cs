@@ -172,12 +172,17 @@ public class WalkSearchPagesTests
             "CarMax Independence Boulevard\n$249 delivery to Orlando, FL (14 mi)"))];
 
     [Fact]
-    public async Task CarsCom_APageMadeEntirelyOfCarMaxDeliveryCards_StillContinuesPagingToTheNext()
+    public async Task CarsCom_APageMadeEntirelyOfNewCarMaxDeliveryCards_StopsPagingWithoutEverRequestingTheNext()
     {
-        // A page cars.com pads with nothing but CarMax's own national-inventory cards (walk
-        // 20260928-134242's Prius pair had about 94 of them) must still read as "added something", the
-        // same reason an all-over-ceiling page must: otherwise it would end the paging before a real,
-        // later page of ordinary dealers was ever read (lesson e975e649).
+        // CarMax's own nationwide inventory hands cars.com a fresh, never-before-seen listing URL on
+        // page after page (walk 20260928-184522's Prius pair kept doing this for 92 pages), so a page
+        // made of nothing but new CarMax cards no longer reads as "added something" the way an
+        // all-over-ceiling page still does (lesson e975e649 was about a different problem, a CarMax
+        // link revisited at the detail page every run for want of being recognized at the card; it
+        // never required counting a CarMax card toward this page's own tally). Page 2's one ordinary
+        // card is consequently never found this run: onStoppedOnPaddingOnlyPage below is what lets the
+        // caller mark the pair's coverage partial for it, so a known posting behind that unread page is
+        // never mistaken for one that left cars.com.
         const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight";
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
         {
@@ -185,22 +190,26 @@ public class WalkSearchPagesTests
             [2] = [new("https://www.cars.com/vehicledetail/ord0/?sid=x", "", "Sanford, FL (28 mi)")],
         });
         int carMaxDealer = 0;
+        var stoppedOnPaddingPages = new List<int>();
 
         IReadOnlyList<string> pool = await WalkSearchPages.CollectLinksAsync(
             WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync,
             (_, _) => { }, _ => { }, () => { }, CancellationToken.None,
-            onCarMaxDealer: () => carMaxDealer++);
+            onCarMaxDealer: () => carMaxDealer++,
+            onStoppedOnPaddingOnlyPage: stoppedOnPaddingPages.Add);
 
-        // Page 2's one ordinary card still adds something, so paging continues to page 3, which is
-        // empty and ends it there.
-        Assert.Equal([1, 2, 3], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal([1], browser.Loads.Select(l => l.PageNumber));
         Assert.Equal(21, carMaxDealer);
-        Assert.Single(pool);
+        Assert.Empty(pool);
+        Assert.Equal([1], stoppedOnPaddingPages);
     }
 
     [Fact]
-    public async Task CarsCom_APaddedPageRepeatingTheSameCarMaxCards_AddsNothingAndStopsPaging()
+    public async Task CarsCom_APaddedPageRepeatingTheSameCarMaxCards_NeverEvenRequestsIt()
     {
+        // Page 1 is already nothing but new CarMax cards, so paging stops there on its own (see the
+        // test above); page 2, holding exact repeats of the same four, is never requested at all, proving
+        // the repeat itself was never what stopped it.
         const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight";
         List<PageLink> repeatedCarMaxCards = CarsComCarMaxCards("cm", 4);
         var browser = new FakeBrowser(new Dictionary<int, List<PageLink>>
@@ -215,9 +224,7 @@ public class WalkSearchPagesTests
             (_, _) => { }, _ => { }, () => { }, CancellationToken.None,
             onCarMaxDealer: () => carMaxDealer++);
 
-        // Page 2 repeats the same four cards page 1 already reported as CarMax, so it adds nothing new
-        // and paging stops there: a third page is never requested.
-        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal([1], browser.Loads.Select(l => l.PageNumber));
         Assert.Equal(4, carMaxDealer);
         Assert.Empty(pool);
     }
