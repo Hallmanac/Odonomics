@@ -161,8 +161,9 @@ public static class PostingAttributeNames
     /// like an ordinary listing on the lot: <see cref="Odonomics.Walk.CarMaxStores.Reserved"/> when
     /// the header read "Reserved at" (held for another buyer) or
     /// <see cref="Odonomics.Walk.CarMaxStores.ComingSoon"/> when it read "Coming to" (still in
-    /// transit). Display only, the same as every other name here: a car flagged this way is still
-    /// ranked and priced normally.</summary>
+    /// transit). Unlike every other name here, this one is not display only: `odo rank` and `odo show`
+    /// never price a vehicle from a posting flagged this way, and a vehicle with no other purchasable,
+    /// priced posting is excluded outright (see <see cref="Odonomics.Ledger.VehiclePricing.OnlyReservedOrInTransit"/>).</summary>
     public const string Availability = "availability";
 }
 

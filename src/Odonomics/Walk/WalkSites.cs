@@ -478,10 +478,13 @@ public sealed record WalkSite(
     /// listing right now (CarMax's "Reserved at" or "Coming to" header, see
     /// <see cref="CarMaxStores.ReadAvailability"/>), read by this site's
     /// <see cref="DetailAvailabilityReader"/>, or null when the site has none or the page's header
-    /// says nothing of the kind. Display only in the sense that it never changes whether the posting
-    /// is ranked, but unlike a card badge, a null here beside a header that named a recognised store
-    /// is proof the earlier state ended, not silence about it, so the caller clears the stored value
-    /// rather than leaving it (see <see cref="Ledger.ListingCandidate.AttributesToClear"/>).</summary>
+    /// says nothing of the kind. This does change whether the posting is priced: `odo rank` and `odo
+    /// show` skip a posting flagged this way when picking what to price the vehicle from, and a
+    /// vehicle with no other purchasable, priced posting is excluded outright (see
+    /// <see cref="Ledger.VehiclePricing.OnlyReservedOrInTransit"/>). Unlike a card badge, though, a
+    /// null here beside a header that named a recognised store is proof the earlier state ended, not
+    /// silence about it, so the caller clears the stored value rather than leaving it (see
+    /// <see cref="Ledger.ListingCandidate.AttributesToClear"/>).</summary>
     public string? ReadDetailAvailability(string pageText) => DetailAvailabilityReader?.Invoke(pageText);
 
     /// <summary>The dealer a candidate from this site is stored with, given what extraction returned.
