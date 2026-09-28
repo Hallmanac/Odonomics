@@ -285,6 +285,23 @@ public static class WalkCommand
         // candidate either. Zero for a site with no such wait.
         int skippedUnrendered = 0;
 
+        // Set when this pair's own rendering looked degraded: a card the render wait still gave up on
+        // even after LoadSearchPageAsync's final re-check (see SearchPageCardRenderWait.StillUnrenderedAsync),
+        // or a later page of a site with a known typical page size (see WalkSite.TypicalResultsPerPage)
+        // came back with far fewer cards than a healthy page of it (walk run 20260928-134242, whose
+        // cars.com pages were throttled well below their usual card count without ever failing to load
+        // outright). Either symptom means this run did not actually measure everything the pair's own
+        // search would ordinarily show, so the pair's coverage is recorded as partial for it, the same as
+        // a failed later page, rather than let the diff read its untouched known postings as gone.
+        bool renderingDegraded = false;
+
+        // The raw count of detail-matching links LoadSearchPageAsync's own first page of each search
+        // found, by search index: the baseline a later page of the same search is checked against (see
+        // renderingDegraded above). Recorded once, from the first page read, since cars.com pads every
+        // page to its typical size regardless of the search's real match count, so the first page a
+        // search's own facet actually renders is as good a "healthy" reading as any later one.
+        var firstPageCardCountBySearch = new Dictionary<int, int>();
+
         // The canonical URLs, among those, that the ledger already held: never touched, so their
         // LastSeen never moved. Exempted from the diff on their own (see LedgerDiffService.ComputeAsync)
         // rather than marking the whole pair's coverage partial, so every other untouched posting in the
@@ -338,6 +355,19 @@ public static class WalkCommand
                 // this checks each one's own fuse-card element again, right now, rather than trusting the
                 // loop's stale snapshot (see SearchPageCardRenderWait.StillUnrenderedAsync).
                 unrenderedHrefs = await SearchPageCardRenderWait.StillUnrenderedAsync((script, arg) => page.EvaluateAsync<string[]>(script, arg));
+            }
+
+            if (site.TypicalResultsPerPage is int typicalResultsPerPage)
+            {
+                int rawCardCount = links.Count(l => site.DetailUrlPattern.IsMatch(l.Href));
+                if (!firstPageCardCountBySearch.TryGetValue(searchIndex, out int firstPageCardCount))
+                {
+                    firstPageCardCountBySearch[searchIndex] = rawCardCount;
+                }
+                else if (WalkPageYield.FellFar(rawCardCount, firstPageCardCount, typicalResultsPerPage))
+                {
+                    renderingDegraded = true;
+                }
             }
 
             HashSet<string> unrenderedCanonicalUrls = [.. unrenderedHrefs.Select(WalkSites.CanonicalDetailUrl)];
@@ -410,10 +440,15 @@ public static class WalkCommand
                 {
                     skippedUnrendered++;
                     // A known posting whose card never rendered was never touched, so its LastSeen did not
-                    // move; it is exempted from the diff on its own (see unrenderedKnownUrls above) rather
-                    // than marking the whole pair capped, so every other untouched posting in the pair is
-                    // still compared against this run's own full coverage.
+                    // move; it is exempted from the diff on its own (see unrenderedKnownUrls above), which
+                    // still runs first for it specifically. But at least one card in this pair never
+                    // rendered even after LoadSearchPageAsync's own final re-check, so this pair's coverage
+                    // is also recorded as partial (see renderingDegraded above): a posting the render wait
+                    // never even reached as a link at all (not just the ones it saw and gave up on) is not
+                    // in unrenderedKnownUrls either, and must not read as gone just because this pair's own
+                    // rendering was degraded this run.
                     knownTouches.RecordIfKnown(canonicalUrl, unrenderedKnownUrls);
+                    renderingDegraded = true;
                 },
                 query.CardYearFloor,
                 query.MaxMileage,
@@ -700,7 +735,8 @@ public static class WalkCommand
         // same as its own coverage token) is what actually matches what the pair covered.
         return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls,
             AlsoCoveredModel: isPriusPair ? PriusPrimeVariant.StoredModel : null,
-            SearchFellShortOfStatedCount: searchFellShortOfStatedCount);
+            SearchFellShortOfStatedCount: searchFellShortOfStatedCount,
+            RenderingDegraded: renderingDegraded);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)
@@ -765,7 +801,7 @@ public static class WalkCommand
     private static string StatusCell(WalkPairSummary summary) => summary switch
     {
         { Completed: false } => "[yellow]failed[/]",
-        { FailedPage: not null } or { SearchFellShortOfStatedCount: true } => "unread",
+        { FailedPage: not null } or { SearchFellShortOfStatedCount: true } or { RenderingDegraded: true } => "unread",
         { Capped: true } => "capped",
         _ => "ok",
     };

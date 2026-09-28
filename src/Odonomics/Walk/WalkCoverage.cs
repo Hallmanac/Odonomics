@@ -10,9 +10,9 @@ namespace Odonomics.Walk;
 /// (null when none did), which ended that search's paging with the pages after it unread, so the pair's
 /// coverage is partial for that reason too. <see cref="UnrenderedKnownUrls"/> are the canonical URLs of
 /// known links whose card never rendered within the site's bounded render wait (see
-/// <see cref="SearchPageCardRenderWait"/>) and so were never touched: they do not make the pair's own
-/// coverage partial (see <see cref="Cli.Commands.WalkCommand"/>), since each is instead exempted from the
-/// diff on its own. <see cref="AlsoCoveredModel"/> is the bare model of a second
+/// <see cref="SearchPageCardRenderWait"/>) and so were never touched: each is exempted from the diff on
+/// its own (see <see cref="Cli.Commands.WalkCommand"/>) whether or not the same render wait also makes the
+/// whole pair's own coverage partial (see <see cref="RenderingDegraded"/> below). <see cref="AlsoCoveredModel"/> is the bare model of a second
 /// vehicle this pair's own search always mixes in and saves under its own scenario model (a Prius Prime
 /// candidate mixed into the "Toyota Prius" pair's own search, see PriusPrimeVariant), set whenever the
 /// pair's own search ran, whether or not it happened to save one this run: a Prime already on the ledger
@@ -25,8 +25,17 @@ namespace Odonomics.Walk;
 /// model's hybrid and base-model searches) had a search that fell short of its own stated count outside
 /// the tolerance <see cref="WalkSearchCoverage"/> allows: the pages that would have closed that gap were
 /// never read, so this is treated the same way a failed later page is, with the same "pages unread" reason
-/// (see <see cref="FailedPage"/> and <see cref="Ledger.LedgerDiffService"/>).</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false);
+/// (see <see cref="FailedPage"/> and <see cref="Ledger.LedgerDiffService"/>). <see cref="RenderingDegraded"/>
+/// is true when this pair's own rendering looked degraded (walk run 20260928-134242): a card its site's
+/// render wait still gave up on even after a final re-check (see
+/// <see cref="SearchPageCardRenderWait.StillUnrenderedAsync"/>), unlike <see cref="UnrenderedKnownUrls"/>'s
+/// own per-URL exemption, this cannot say which specific known posting was affected, since a card the
+/// render wait never saw as a link at all (throttled off the page entirely, not merely slow to render) is
+/// invisible to it the same way; or a later page of a site with a known typical page size (see
+/// <see cref="WalkSite.TypicalResultsPerPage"/>) came back with far fewer cards than a healthy one. Either
+/// way this run did not actually measure everything the pair's own search would ordinarily show, so it is
+/// treated the same way a failed later page is, with the same "pages unread" reason.</summary>
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false);
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
 /// is false when the pair's own walk threw (a page that never loaded, a site that errored); the
@@ -35,9 +44,10 @@ public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, Dropp
 /// true when the pair stopped short of the site's results (see <see cref="WalkPairOutcome.Capped"/>), and
 /// <see cref="FailedPage"/> is the result page that failed to load, if one did. <see cref="UnrenderedKnownUrls"/>
 /// carries forward <see cref="WalkPairOutcome.UnrenderedKnownUrls"/>, for the caller to hand every pair's
-/// list to the diff once the whole run is done. <see cref="SearchFellShortOfStatedCount"/> carries forward
-/// <see cref="WalkPairOutcome.SearchFellShortOfStatedCount"/>.</summary>
-public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, bool SearchFellShortOfStatedCount = false);
+/// list to the diff once the whole run is done. <see cref="SearchFellShortOfStatedCount"/> and
+/// <see cref="RenderingDegraded"/> carry forward <see cref="WalkPairOutcome.SearchFellShortOfStatedCount"/>
+/// and <see cref="WalkPairOutcome.RenderingDegraded"/>.</summary>
+public sealed record WalkPairSummary(string Site, string Model, int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, bool Completed, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false);
 
 /// <summary>
 /// Walks every (site, model) pair in order, stamping the run's coverage token the moment each
@@ -50,7 +60,8 @@ public sealed record WalkPairSummary(string Site, string Model, int DetailPagesV
 /// already completed stamped in the database. A pair that stopped short of the site's results
 /// (<see cref="WalkPairOutcome.Capped"/>) gets a partial-coverage token beside its own (see
 /// <see cref="RunSources.PartialKey"/>), stamped and rolled back with it, and so does a pair whose later
-/// result page failed to load (<see cref="WalkPairOutcome.FailedPage"/>, see <see cref="RunSources.UnreadKey"/>).
+/// result page failed to load or whose own rendering looked degraded (<see cref="WalkPairOutcome.FailedPage"/>
+/// or <see cref="WalkPairOutcome.RenderingDegraded"/>, see <see cref="RunSources.UnreadKey"/>).
 /// </summary>
 public static class WalkCoverage
 {
@@ -94,7 +105,7 @@ public static class WalkCoverage
                         coveredTokens.Add(RunSources.PartialKey(coverageKey));
                     }
 
-                    if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount)
+                    if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded)
                     {
                         coveredTokens.Add(RunSources.UnreadKey(coverageKey));
                     }
@@ -108,7 +119,7 @@ public static class WalkCoverage
                             coveredTokens.Add(RunSources.PartialKey(alsoCoverageKey));
                         }
 
-                        if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount)
+                        if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded)
                         {
                             coveredTokens.Add(RunSources.UnreadKey(alsoCoverageKey));
                         }
@@ -126,7 +137,7 @@ public static class WalkCoverage
                         throw;
                     }
 
-                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage, outcome.SkippedBeyondRadius, outcome.SkippedNoDistance, outcome.SkippedUnrendered, outcome.UnrenderedKnownUrls, outcome.SearchFellShortOfStatedCount));
+                    summaries.Add(new WalkPairSummary(site.Name, model, outcome.DetailPagesVisited, outcome.Upserted, outcome.Dropped, Completed: true, outcome.KnownFromCards, outcome.Capped, outcome.FailedPage, outcome.SkippedBeyondRadius, outcome.SkippedNoDistance, outcome.SkippedUnrendered, outcome.UnrenderedKnownUrls, outcome.SearchFellShortOfStatedCount, outcome.RenderingDegraded));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
