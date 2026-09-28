@@ -605,4 +605,67 @@ public class CarGurusWalkTests
         Assert.Equal(1, noPriceStated);
         Assert.Contains(WalkSites.CanonicalDetailUrl(cards[0].Href), checkedAsKnownOrNew);
     }
+
+    [Fact]
+    public void DetailDealerReader_RecordedPickupLehiText_NamesTheDealerAndStoresThePickupCityAsItsLocation()
+    {
+        // JTDBCMFE4R3040782: the page's own "Dealer" block gives its name behind a "TOP DIGITAL /
+        // DEALER / 2026" badge, and line 153 names its origin only through the "choose pick up in
+        // Lehi, UT." delivery step.
+        string pageText = Fixture("cargurus-detail-corolla-hybrid-pickup-lehi.txt");
+
+        ResolvedDealer? dealer = CarGurusDealer.Read(pageText);
+
+        Assert.Equal(new ResolvedDealer("Action Auto Sales and Finance Inc.", "Lehi, UT", IsFallback: false), dealer);
+    }
+
+    [Fact]
+    public void DetailDealerReader_RecordedNoDealerBlockText_NamesNoDealerButStoresTheMileageAwayCity()
+    {
+        // JTDBCMFE8S3078635: the "Dealer" heading is followed directly by "Dealer reviews", naming no
+        // dealer at all, but the page still prints "Clermont, FL (38 mi away)" under its title.
+        string pageText = Fixture("cargurus-detail-corolla-hybrid-no-dealer-block.txt");
+
+        ResolvedDealer? dealer = CarGurusDealer.Read(pageText);
+
+        Assert.Equal(new ResolvedDealer(null, "Clermont, FL", IsFallback: false), dealer);
+    }
+
+    [Fact]
+    public void ResolveDealer_RecordedPickupLehiText_UsesTheDeterministicReaderAheadOfTheExtraction()
+    {
+        string pageText = Fixture("cargurus-detail-corolla-hybrid-pickup-lehi.txt");
+
+        ResolvedDealer dealer = WalkSites.CarGurus.ResolveDealer("some other name", "Orlando, FL", pageText);
+
+        Assert.Equal(new ResolvedDealer("Action Auto Sales and Finance Inc.", "Lehi, UT", IsFallback: false), dealer);
+    }
+
+    [Fact]
+    public void ResolveDealer_PageTextNamingNeitherDealerNorLocation_FallsBackToTheExtraction()
+    {
+        ResolvedDealer dealer = WalkSites.CarGurus.ResolveDealer("Extraction Dealer", "Extraction City, FL", "no Dealer heading anywhere on this page");
+
+        Assert.Equal(new ResolvedDealer("Extraction Dealer", "Extraction City, FL", IsFallback: false), dealer);
+    }
+
+    [Fact]
+    public void DetailDealerReader_PageTextNamingNeitherDealerNorLocation_IsNull()
+    {
+        Assert.Null(CarGurusDealer.Read("no Dealer heading, no pickup line, no mi-away line anywhere on this page"));
+    }
+
+    [Fact]
+    public void DetailDealerReader_ADealerWhoseRealNameStartsWithTopButCarriesNoBadge_IsReadAsTheName()
+    {
+        // "TOP" alone, with no following "DEALER" line and four-digit year, is not the "Top Rated
+        // Dealer" / "Top Digital Dealer" badge: it is (or could be) part of the dealer's own name, and
+        // must never be skipped as though it were the badge, nor let whatever line happens to follow
+        // it (here, "Closed Today (Sun)") be mistaken for the name instead.
+        string pageText = "Dealer\nTop Line Motors\n\nClosed Today (Sun)\n\n(555) 555-1234\n123 Main St, Sanford, FL 32771\n";
+
+        ResolvedDealer? dealer = CarGurusDealer.Read(pageText);
+
+        Assert.Equal("Top Line Motors", dealer?.Name);
+    }
 }
