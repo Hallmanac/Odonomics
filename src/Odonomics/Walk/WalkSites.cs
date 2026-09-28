@@ -901,8 +901,9 @@ public static class WalkSites
     /// one search for the hybrid model id from the scenario's minimum year and a second for the base model id from
     /// the hybrid-only year (or the scenario's minimum year if that is later). The two share the pair's cap exactly
     /// as cars.com's do (see <see cref="WalkPairSearches"/>), and cards from both are de-duplicated by canonical
-    /// URL the same way, so a pair with the rule reads complete only once both searches have covered their own
-    /// stated counts.
+    /// URL the same way; each search stops paging by <see cref="WalkSearchPages"/>'s own rules, its stated count
+    /// reached or a page adding nothing new, so a pair with the rule reads complete only once both searches have
+    /// covered their own stated counts within tolerance (see <see cref="WalkSearchCoverage"/>).
     /// A search page states "N vehicles found", and that
     /// count is of the ordinary results only: the page also carries sponsored cards, whose links say
     /// <c>sponsoredType=PRIORITY</c> (a dealer's ad), <c>FEATURED</c> or <c>HIGHLIGHT</c> (a promoted copy of a
