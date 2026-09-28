@@ -26,6 +26,82 @@ public static class CarMaxStores
     /// to": the car has not arrived at the store yet, so it cannot be bought until it does.</summary>
     public const string ComingSoon = "In transit, not yet purchasable";
 
+    private const string OnlyAtPrefix = "Only at ";
+
+    /// <summary>The store name after "Only at " in <paramref name="pickupLocation"/> (a CarMax
+    /// posting's own <see cref="Ledger.PostingEntity.PickupLocation"/>), or null when it isn't in
+    /// that shape or names none. CarMax has no pickup reader of its own (see
+    /// <see cref="WalkSites.CarMax"/>), so this field is always read off a search card's own text
+    /// (<see cref="CarMaxCards.ReadFee"/>'s "Available today" line), and for a car CarMax will not
+    /// transfer that line reads "Available today·Only at Norco", which lands here verbatim as
+    /// "Only at Norco" rather than a bare city: CarMax prints no delivery option for a car like
+    /// this at all, only its one store, so this is the one place that fact survives into the
+    /// ledger.</summary>
+    public static string? OnlyAtStoreName(string? pickupLocation) =>
+        pickupLocation is not null && pickupLocation.StartsWith(OnlyAtPrefix, StringComparison.Ordinal)
+            ? pickupLocation[OnlyAtPrefix.Length..].Trim()
+            : null;
+
+    /// <summary>Known CarMax store locations, keyed by the short name <see cref="OnlyAtStoreName"/>
+    /// reads off a card ("Norco", "San Gabriel Valley/Duarte"): latitude and longitude in decimal
+    /// degrees, close enough to the store's own street address to judge whether it sits inside or
+    /// outside a scenario's radius (see <see cref="DistanceMilesFromZip"/>). Curated by hand from
+    /// CarMax's public store locator as new "Only at" stores turn up in a walk's own postings; a
+    /// store not yet in here is left unmeasured rather than guessed at.</summary>
+    private static readonly IReadOnlyDictionary<string, (double Latitude, double Longitude)> StoreLocations = new Dictionary<string, (double, double)>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Norco"] = (33.9312, -117.5578),
+        ["Irvine"] = (33.6822, -117.7423),
+        ["Buena Park"] = (33.8642, -117.9987),
+        ["LAX"] = (33.9425, -118.4081),
+        ["Modesto"] = (37.6650, -120.9958),
+        ["San Gabriel Valley/Duarte"] = (34.1400, -117.9773),
+        ["Laurel"] = (39.1057, -76.8477),
+        ["White Marsh"] = (39.3899, -76.4327),
+        ["Orlando"] = (28.4728, -81.4331),
+    };
+
+    /// <summary>The centroid of a scenario zip this file knows the location of, for
+    /// <see cref="DistanceMilesFromZip"/>: every zip a shipped or tested scenario actually uses
+    /// (see scenarios/daughter.json and the test scenarios), curated the same way as
+    /// <see cref="StoreLocations"/>. A zip not yet in here is left unmeasured, same as an unknown
+    /// store.</summary>
+    private static readonly IReadOnlyDictionary<string, (double Latitude, double Longitude)> ZipLocations = new Dictionary<string, (double, double)>
+    {
+        ["32833"] = (28.5551, -81.0864),
+        ["32114"] = (29.2108, -81.0228),
+    };
+
+    /// <summary>The great-circle distance in miles between <paramref name="storeName"/> (the name
+    /// <see cref="OnlyAtStoreName"/> reads) and <paramref name="zip"/>, or null when either isn't in
+    /// this file's own curated location tables: a distance nobody actually measured never proves a
+    /// store in or out of a scenario's radius.</summary>
+    public static double? DistanceMilesFromZip(string storeName, string zip)
+    {
+        if (!StoreLocations.TryGetValue(storeName, out (double Latitude, double Longitude) store)
+            || !ZipLocations.TryGetValue(zip, out (double Latitude, double Longitude) origin))
+        {
+            return null;
+        }
+
+        return HaversineMiles(store, origin);
+    }
+
+    private const double EarthRadiusMiles = 3958.8;
+
+    private static double HaversineMiles((double Latitude, double Longitude) a, (double Latitude, double Longitude) b)
+    {
+        double lat1 = DegreesToRadians(a.Latitude);
+        double lat2 = DegreesToRadians(b.Latitude);
+        double deltaLat = DegreesToRadians(b.Latitude - a.Latitude);
+        double deltaLon = DegreesToRadians(b.Longitude - a.Longitude);
+        double h = (Math.Sin(deltaLat / 2) * Math.Sin(deltaLat / 2))
+            + (Math.Cos(lat1) * Math.Cos(lat2) * Math.Sin(deltaLon / 2) * Math.Sin(deltaLon / 2));
+        return EarthRadiusMiles * 2 * Math.Atan2(Math.Sqrt(h), Math.Sqrt(1 - h));
+    }
+
+    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
+
     private static readonly Regex StoreLine = new(
         @"^[ \t]*(?<prefix>Test drive at|Ships from|Available at|Only at|Reserved at|Coming to)[ \t]+CarMax[ \t]+(?<city>[A-Z][A-Za-z.'’()/-]*(?:[ \t]+[A-Za-z(][A-Za-z.'’()/-]*)*?)(?:,[ \t]*(?<state>[A-Z]{2}))?[ \t]*$",
         RegexOptions.Compiled | RegexOptions.Multiline);

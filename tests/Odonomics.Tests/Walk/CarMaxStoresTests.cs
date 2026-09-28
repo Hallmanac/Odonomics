@@ -69,6 +69,61 @@ public class CarMaxStoresTests
         Assert.Null(CarMaxStores.ReadAvailability(page));
     }
 
+    [Theory]
+    [InlineData("Only at Norco", "Norco")]
+    [InlineData("Only at San Gabriel Valley/Duarte", "San Gabriel Valley/Duarte")]
+    public void OnlyAtStoreName_PickupLocationInThatShape_ReturnsTheStore(string pickupLocation, string expected)
+    {
+        Assert.Equal(expected, CarMaxStores.OnlyAtStoreName(pickupLocation));
+    }
+
+    [Theory]
+    [InlineData("Orlando, FL")]
+    [InlineData(null)]
+    public void OnlyAtStoreName_PickupLocationNotInThatShape_ReturnsNull(string? pickupLocation)
+    {
+        Assert.Null(CarMaxStores.OnlyAtStoreName(pickupLocation));
+    }
+
+    [Fact]
+    public void DistanceMilesFromZip_CaliforniaStoreFromTheDaughterScenarioZip_IsWellOverTheFiftyMileRadius()
+    {
+        double? miles = CarMaxStores.DistanceMilesFromZip("Norco", "32833");
+
+        Assert.NotNull(miles);
+        Assert.True(miles > 2000, $"expected Norco to be over 2000 miles from 32833, was {miles}");
+    }
+
+    [Fact]
+    public void DistanceMilesFromZip_MarylandStoreFromTheDaughterScenarioZip_IsWellOverTheFiftyMileRadius()
+    {
+        double? miles = CarMaxStores.DistanceMilesFromZip("White Marsh", "32833");
+
+        Assert.NotNull(miles);
+        Assert.True(miles > 500, $"expected White Marsh to be over 500 miles from 32833, was {miles}");
+    }
+
+    [Fact]
+    public void DistanceMilesFromZip_OrlandoStoreFromTheDaughterScenarioZip_IsWellInsideTheFiftyMileRadius()
+    {
+        double? miles = CarMaxStores.DistanceMilesFromZip("Orlando", "32833");
+
+        Assert.NotNull(miles);
+        Assert.True(miles < 50, $"expected the Orlando store to be under 50 miles from 32833, was {miles}");
+    }
+
+    [Fact]
+    public void DistanceMilesFromZip_UnknownStore_ReturnsNull()
+    {
+        Assert.Null(CarMaxStores.DistanceMilesFromZip("Nowhere", "32833"));
+    }
+
+    [Fact]
+    public void DistanceMilesFromZip_UnknownZip_ReturnsNull()
+    {
+        Assert.Null(CarMaxStores.DistanceMilesFromZip("Norco", "00000"));
+    }
+
     [Fact]
     public void Read_SimilarCarsAtOtherStoresAfterTheHeader_ReturnsTheCarsOwnStore()
     {
