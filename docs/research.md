@@ -7,21 +7,21 @@ Both `odo show <vin>` and `odo research` pull the same free background research 
 On top of the NHTSA decode, recalls, and complaints that `odo show` has always fetched, there are two more pieces of research.
 
 - NHTSA safety ratings: the overall and per-category (front crash, side crash, rollover) star ratings for that year, make, and model.
-- Marketcheck VIN history: every prior listing recorded for the VIN, with its dealer, first and last seen dates, price, and mileage, along with the current listing's days on market. This one needs `Marketcheck:ApiKey`, and with no key set it degrades to a "could not fetch" line rather than failing the command.
+- Marketcheck VIN history: every prior listing recorded for the VIN, with its dealer, first and last seen dates, price, and mileage, along with the current listing's days on market. This one needs `Marketcheck:ApiKey`, and with no key set it degrades to a "could not fetch" line rather than failing the command. Marketcheck rate-limits under load with HTTP 429; the call backs off and retries a bounded number of times, honoring the response's Retry-After header when present, before it degrades to a "could not fetch" reason.
 
 ## Caching and refresh
 
-Both pieces are cached on the vehicle's ledger row with a researched-at stamp, and the NHTSA pieces also carry a fetched-at stamp of their own. They're only re-fetched in five cases:
+Both pieces are cached on the vehicle's ledger row with a researched-at stamp, and the NHTSA pieces and the Marketcheck VIN history each also carry a fetched-at stamp of their own. They're only re-fetched in five cases:
 
 - The vehicle has never been researched, or no NHTSA piece has ever come back for it.
 - The cached research is more than seven days old.
 - You pass `--refresh`.
-- The Marketcheck VIN history was never successfully fetched, whether from a missing key or a failed call.
+- The Marketcheck VIN history was never successfully fetched, or the last attempt against an otherwise-cached vehicle could not be fetched (a missing key, an HTTP 429 that outlasted its own retries, or any other failed call), and it retries on its own, independently of the seven-day window, the same as the NHTSA pieces below.
 - The NHTSA recalls, complaints, or safety-ratings call previously couldn't be fetched, and each of those retries on its own, independently of the seven-day window.
 
-A `show` or `research` inside the window, with a fetched history and no outstanding NHTSA failure, reads the cache and makes no network call. When a refresh does run, even one set off by a single failed NHTSA piece, the Marketcheck history is fetched again along with it.
+A `show` or `research` inside the window, with a fetched history and no outstanding NHTSA or Marketcheck failure, reads the cache and makes no network call. When a refresh does run, even one set off by a single failed NHTSA piece, the Marketcheck history is fetched again along with it; conversely, a plain run set off only by a failed Marketcheck history re-fetches just the history, not the NHTSA pieces that are still within the seven-day window.
 
-api.nhtsa.gov has occasionally answered a healthy call with an HTML error page, or not at all, so odo retries a failed NHTSA call once and, if it still fails, only that piece (recalls, complaints, or safety ratings) shows a "could not fetch" reason while its last known-good value stays on display and in `odo rank`'s red-flag math.
+api.nhtsa.gov has occasionally answered a healthy call with an HTML error page, or not at all, so odo retries a failed NHTSA call once and, if it still fails, only that piece (recalls, complaints, or safety ratings) shows a "could not fetch" reason while its last known-good value stays on display and in `odo rank`'s red-flag math. The Marketcheck VIN history call carries its own could-not-fetch reason the same way, so a vehicle whose history is stuck behind a rate limit is visible as such rather than silently reading as fully researched.
 
 ## Running odo research
 
@@ -29,7 +29,7 @@ api.nhtsa.gov has occasionally answered a healthy call with an HTML error page, 
 
 There's a one-second pause after each vehicle it actually fetches, except the last, so it doesn't hammer either API. A cached vehicle makes no network call and adds no pause, so a run over an entirely cached set finishes in a moment.
 
-While it runs, the progress output prints one line per vehicle that was actually fetched this run, and nothing for a cached one, since nothing happened for it. The line says `researched` followed by the vehicle's flags as short tags, for example `2025 Toyota Camry Hybrid (4T1...): researched, 12-sellers, mileage-drop`. When only some of a vehicle's pieces came back, it's a yellow line naming which pieces failed and which data is still stored. A vehicle whose lookup fails outright gets a red "could not be reached" line, which in practice means the NHTSA VIN decode couldn't be fetched, and the rest of the batch carries on. If only the recalls, complaints, or safety-ratings calls fail, the vehicle counts as partially researched instead. One bad vehicle never fails the batch, and one bad NHTSA answer never fails the whole vehicle.
+While it runs, the progress output prints one line per vehicle that was actually fetched this run, and nothing for a cached one, since nothing happened for it. The line says `researched` followed by the vehicle's flags as short tags, for example `2025 Toyota Camry Hybrid (4T1...): researched, 12-sellers, mileage-drop`. When only some of a vehicle's pieces came back, it's a yellow line naming which pieces failed and which data is still stored. A vehicle whose lookup fails outright gets a red "could not be reached" line, which in practice means the NHTSA VIN decode couldn't be fetched, and the rest of the batch carries on. If only the recalls, complaints, safety-ratings, or Marketcheck VIN history call fails, the vehicle counts as partially researched instead, even when every NHTSA piece came back clean. One bad vehicle never fails the batch, and one bad NHTSA or Marketcheck answer never fails the whole vehicle.
 
 The command exits non-zero only when at least one vehicle was unreachable and no vehicle fetched this run came back with any data at all, fully or partially. A cached vehicle needs no fetch, so it never counts toward either side of that check.
 
