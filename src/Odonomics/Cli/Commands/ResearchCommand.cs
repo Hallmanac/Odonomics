@@ -238,26 +238,18 @@ public static class ResearchCommand
         IReadOnlyList<VehicleEntity> allVehicles,
         Scenario scenario,
         IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
-        [.. allVehicles.Where(v =>
-            PassesScenarioFilters(v, scenario, VehiclePricing.LowestCurrentPrice(v, latestCoverageBySource)))];
+        [.. allVehicles.Where(v => PassesScenarioFilters(v, scenario, latestCoverageBySource))];
 
-    /// <summary>The scenario's non-price hard filters (allowed model, minimum year, maximum mileage,
-    /// not new stock). Missing-price is excluded on purpose: a vehicle that has no current asking
-    /// price is still worth researching (safety ratings and VIN history don't depend on today's
-    /// price), and <see cref="Scorer.FilterReasons"/> would otherwise reject every unpriced vehicle
-    /// outright.</summary>
-    private static bool PassesScenarioFilters(VehicleEntity vehicle, Scenario scenario, decimal? currentPrice)
+    /// <summary>The scenario's non-price hard filters (allowed model, minimum year, maximum mileage, not new
+    /// stock) plus the price ceiling, checked against the same cheapest-to-take-home posting `odo rank` scores
+    /// (see <see cref="RankCommand.ForScoring"/>), asking price and shipping fee together, so a car `odo rank`
+    /// would exclude for its price is never researched either. Missing-price is excluded on purpose: a
+    /// vehicle that has no current asking price is still worth researching (safety ratings and VIN history
+    /// don't depend on today's price), and <see cref="Scorer.FilterReasons"/> would otherwise reject every
+    /// unpriced vehicle outright.</summary>
+    private static bool PassesScenarioFilters(VehicleEntity vehicle, Scenario scenario, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
     {
-        var forScoring = new VehicleForScoring
-        {
-            Vin = vehicle.Vin,
-            Year = vehicle.Year,
-            Make = vehicle.Make,
-            Model = vehicle.Model,
-            Mileage = vehicle.Mileage,
-            LowestCurrentPrice = currentPrice,
-        };
-
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment);
         return Scorer.FilterReasons(forScoring, scenario).All(reason => reason.Contains("no current asking price"));
     }
 }
