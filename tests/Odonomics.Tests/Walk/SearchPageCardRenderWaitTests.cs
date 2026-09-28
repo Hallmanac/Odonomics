@@ -6,9 +6,11 @@ namespace Odonomics.Tests.Walk;
 
 /// <summary>Proves the render-wait scans a cars.com result page, scrolls a card that hasn't shown its own
 /// price yet into view, and keeps scanning, up to a bounded number of times, until a scan comes back with
-/// nothing left to render. The page is a fake: a small list of cards standing in for the DOM, answering
-/// <see cref="SearchPageCardRenderWait.RenderScanScript"/> the way the browser does, so nothing here opens
-/// a browser (see <see cref="SearchPageLinksTests"/> for the sibling pattern this follows).</summary>
+/// nothing left to render; and that its final, no-scroll recheck (<see cref="SearchPageCardRenderWait.StillUnrenderedAsync"/>)
+/// gives a card that goes on rendering after the scan loop gives up one more chance to prove it before the
+/// walk drops it (walk run 20260928-134242). The page is a fake: a small list of cards standing in for the
+/// DOM, answering <see cref="SearchPageCardRenderWait.RenderScanScript"/> the way the browser does, so
+/// nothing here opens a browser (see <see cref="SearchPageLinksTests"/> for the sibling pattern this follows).</summary>
 public class SearchPageCardRenderWaitTests
 {
     /// <summary>A card whose own text is empty until <paramref name="rendersOnScan"/> (1-based): the scan
@@ -39,18 +41,20 @@ public class SearchPageCardRenderWaitTests
             Assert.Equal(SearchPageCardRenderWait.RenderScanScript, script);
             JsonElement options = JsonSerializer.SerializeToElement(arg);
             var hasAmount = new Regex(options.GetProperty("amount").GetString()!);
+            bool scroll = !options.TryGetProperty("scroll", out JsonElement scrollProperty) || scrollProperty.GetBoolean();
 
             // Mirrors RenderScanScript's own guard: only the first still-unrendered, not-yet-scrolled
             // card of the scan is scrolled, since the browser only ever realizes one scroll position per
             // script call, and a card's own Scrolled flag persists between calls the same way the script's
-            // data attribute survives between calls against the same live page.
+            // data attribute survives between calls against the same live page. StillUnrenderedAsync passes
+            // scroll: false, the same as the real script does, for a check that nudges nothing.
             List<string> hrefs = [];
             bool scrolled = false;
             foreach (FakeCard card in cards)
             {
                 if (!hasAmount.IsMatch(card.TextAsOf(ScanCount)))
                 {
-                    if (!scrolled && !card.Scrolled)
+                    if (scroll && !scrolled && !card.Scrolled)
                     {
                         card.Scroll();
                         scrolled = true;
@@ -173,6 +177,52 @@ public class SearchPageCardRenderWaitTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SearchPageCardRenderWait.RunAsync(page.EvaluateAsync, () => TimeSpan.FromSeconds(30), cts.Token));
+    }
+
+    /// <summary>Reproduces walk run 20260928-134242: cars.com rendered slowly enough that a card
+    /// <see cref="RunAsync"/> gave up on, within its own bounded scans, had already rendered under its own
+    /// text by the time the walk went on to actually read the page's cards a moment later. Modelled here
+    /// as the same card rendering on the very next scan after <see cref="RunAsync"/>'s own last one: without
+    /// <see cref="SearchPageCardRenderWait.StillUnrenderedAsync"/>, WalkCommand would have dropped it from
+    /// the pool on <see cref="RunAsync"/>'s stale say-so alone.</summary>
+    [Fact]
+    public async Task StillUnrenderedAsync_ACardThatFinishedRenderingSinceRunAsyncGaveUpOnIt_ReportsNothing()
+    {
+        var card = new FakeCard("https://www.cars.com/vehicledetail/a/?sid=1", "$21,202 Used 2023 Honda Insight EX", rendersOnScan: SearchPageCardRenderWait.MaxScans + 2);
+        var page = new FakePage(card);
+        IReadOnlyList<string> unrenderedAfterTheLoop = await RunAsync(page);
+        Assert.Equal([card.Href], unrenderedAfterTheLoop);
+
+        IReadOnlyList<string> stillUnrendered = await SearchPageCardRenderWait.StillUnrenderedAsync(page.EvaluateAsync);
+
+        Assert.Empty(stillUnrendered);
+    }
+
+    [Fact]
+    public async Task StillUnrenderedAsync_ACardThatNeverRenders_IsStillReportedUnrendered()
+    {
+        var card = new FakeCard("https://www.cars.com/vehicledetail/a/?sid=1", "$21,202 Used 2023 Honda Insight EX", rendersOnScan: SearchPageCardRenderWait.MaxScans + 100);
+        var page = new FakePage(card);
+        await RunAsync(page);
+
+        IReadOnlyList<string> stillUnrendered = await SearchPageCardRenderWait.StillUnrenderedAsync(page.EvaluateAsync);
+
+        Assert.Equal([card.Href], stillUnrendered);
+    }
+
+    [Fact]
+    public async Task StillUnrenderedAsync_NeverScrollsTheCardItChecks()
+    {
+        var card = new FakeCard("https://www.cars.com/vehicledetail/a/?sid=1", "$21,202 Used 2023 Honda Insight EX", rendersOnScan: 1, requiresScroll: true);
+        var page = new FakePage(card);
+
+        IReadOnlyList<string> stillUnrendered = await SearchPageCardRenderWait.StillUnrenderedAsync(page.EvaluateAsync);
+
+        // The card would render on the very first scan once scrolled, but StillUnrenderedAsync never
+        // scrolls anything, so a card only lazy-rendering trigger away from showing its price still
+        // reports as unrendered rather than being nudged into rendering by the check itself.
+        Assert.Equal([card.Href], stillUnrendered);
+        Assert.False(card.Scrolled);
     }
 
     [Fact]
