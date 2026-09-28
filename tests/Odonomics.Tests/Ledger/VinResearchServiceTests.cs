@@ -374,6 +374,51 @@ public class VinResearchServiceTests
         Assert.True(VinResearchService.NeedsRefresh(saved, refresh: false));
     }
 
+    /// <summary>A vehicle whose history was fetched successfully before (so the record already holds
+    /// prior listings) must not have that history vanish from the caller's result just because this
+    /// round's retry failed: recalls, complaints, and safety ratings already keep their last
+    /// known-good value alongside a failure's reason, and history must do the same, or a vehicle's
+    /// history-based red flags (mileage drop, seller count) would disappear from `odo show` and
+    /// `odo research` for as long as the outage lasts, even though the ledger still holds the
+    /// history.</summary>
+    [Fact]
+    public async Task RefreshAsync_HistoryFetchFailsWithPriorHistory_ReturnsCachedHistoryAlongsideReason()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        VehicleEntity vehicle = Vehicle();
+        var existingRecord = new VinRecordEntity
+        {
+            Vin = Vin,
+            DecodedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            DecodeRawJson = "{}",
+            ResearchedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            OpenRecallCount = 2,
+            SafetyOverallRating = 5,
+            SafetyRawJson = "{\"OverallRating\":5,\"FrontRating\":null,\"SideRating\":null,\"RolloverRating\":null,\"VehicleDescription\":null,\"ErrorText\":null}",
+            HistoryRawJson = "[{\"Dealer\":\"Old Dealer\",\"City\":null,\"State\":null,\"FirstSeen\":null,\"LastSeen\":null,\"Price\":null,\"Mileage\":null,\"Url\":null}]",
+            CurrentListingDaysOnMarket = 42,
+        };
+        db.Vehicles.Add(vehicle);
+        db.VinRecords.Add(existingRecord);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        // No NHTSA fixtures registered: the record is within its cache window and none of its NHTSA
+        // pieces previously failed, so RefreshAsync must not call NHTSA at all here. If it did, this
+        // handler would throw "no fixture registered", failing the test before the assertions below.
+        var handler = new NhtsaFixturesMarketcheckAlways429HttpMessageHandler(new Dictionary<string, string>());
+        var http = new HttpClient(handler);
+        var service = new VinResearchService(new NhtsaClient(http), new MarketcheckHistoryClient("test-key", http));
+
+        VinResearchResult result = await service.RefreshAsync(db, vehicle, refresh: false, CancellationToken.None);
+
+        Assert.NotNull(result.History.CouldNotFetchReason);
+        Assert.Contains("429", result.History.CouldNotFetchReason);
+        VinHistoryListing carried = Assert.Single(result.History.PriorListings);
+        Assert.Equal("Old Dealer", carried.Dealer);
+        Assert.Equal(42, result.History.CurrentListingDaysOnMarket);
+    }
+
     /// <summary>Answers every NHTSA URL with its registered fixture and every Marketcheck URL with
     /// HTTP 429 (Retry-After: 0, so the test never waits out a real backoff), so a test can prove
     /// NHTSA succeeds while Marketcheck's own retries are exhausted.</summary>
