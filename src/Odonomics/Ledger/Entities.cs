@@ -78,6 +78,17 @@ public sealed class PostingEntity
     /// cap", even once a later run's full coverage of the pair would otherwise have dropped it.</summary>
     public DateTimeOffset? CardUnrenderedSeenAt { get; set; }
 
+    /// <summary>The StartedAt of the most recent run whose detail visit explicitly cleared the
+    /// <see cref="PostingAttributeNames.Availability"/> attribute (see
+    /// <see cref="LedgerUpsertService.ApplyAttributes"/> and <see cref="ListingCandidate.AttributesToClear"/>),
+    /// or null when that has never happened. Stamped whether or not an attribute row actually existed
+    /// to remove: it is the only trace left on disk that a page positively read "not reserved" at a
+    /// given time, since <see cref="Attributes"/> itself never distinguishes "never read" from "read
+    /// and cleared". <see cref="Walk.CarMaxBackfill"/> reads it so an older recorded page that still
+    /// shows a reservation can never overwrite a state a newer, unrecorded detail visit already
+    /// cleared.</summary>
+    public DateTimeOffset? AvailabilityClearedAt { get; set; }
+
     public VehicleEntity? Vehicle { get; set; }
     public DealerEntity? Dealer { get; set; }
     public List<PriceObservationEntity> PriceObservations { get; set; } = [];

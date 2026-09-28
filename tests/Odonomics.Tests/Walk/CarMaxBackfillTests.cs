@@ -131,7 +131,8 @@ public class CarMaxBackfillTests
         CarMaxBackfillTally tally = await CarMaxBackfill.RunAsync(dataDirectory, candidates, upsertService, backfillRun, CancellationToken.None);
 
         // Both cards' own fingerprint is ambiguous within the pair, so neither href is anchored to the
-        // Ft. Myers page, and both postings still tie by fingerprint alone: neither is touched.
+        // Ft. Myers page, and neither posting's own URL turns up as an anchored href anywhere else:
+        // both are left alone, counted as could-not-match.
         Assert.Equal(new CarMaxBackfillTally(Filled: 0, AlreadySet: 0, CouldNotMatch: 2), tally);
 
         List<PostingEntity> updated = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
@@ -319,6 +320,69 @@ public class CarMaxBackfillTests
         // store still fills in, and no stale Reserved attribute is written.
         PostingEntity posting = (await upsertService.CarMaxPostingsAsync(CancellationToken.None)).Single(p => p.VehicleVin == "19XZE4F50KE000010");
         Assert.Equal("CarMax Laurel", posting.Dealer?.Name);
+        Assert.DoesNotContain(posting.Attributes, a => a.Name == PostingAttributeNames.Availability);
+    }
+
+    [Fact]
+    public async Task RunAsync_OnlyAnchoredRecordingIsOlderThanALaterUnrecordedClear_LeavesTheReservationUnrestored()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        string dataDirectory = Path.GetDirectoryName(testDb.DatabasePath)!;
+
+        // The only recorded page anchored to this posting's URL is from an older run and still reads
+        // "Reserved at CarMax Laurel, MD". A later, ordinary revisit read the very same page as "Only
+        // at CarMax Laurel, MD" (the reservation had ended) and cleared the availability attribute the
+        // way WalkCommand does, but that later visit's own page was never recorded to disk under this
+        // test, the same way a revisit whose card fingerprint collides with another card's own would
+        // leave nothing on disk to anchor. The backfill must not use the older, anchored "Reserved"
+        // page to restore a state the ledger's own more recent read already cleared.
+        WriteRecordedDetailPage(dataDirectory, "20260901-000000", "insight", "detail-1.txt",
+            "2019 Honda Insight\nEX\n42k miles\n\n$23,998\n\nReserved at CarMax Laurel, MD\n");
+        WriteCardsJson(dataDirectory, "20260901-000000", "insight", "cards.json",
+            ("https://www.carmax.com/car/70206244", "2019 Honda Insight\nEX\n42k miles\n\n$23,998"));
+
+        var upsertService = new LedgerUpsertService(db);
+        var seedRun = new RunEntity { Command = "walk", Sources = "carmax:Insight", StartedAt = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero) };
+        db.Runs.Add(seedRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        var seedCandidate = new ListingCandidate
+        {
+            Vin = "19XZE4F50KE000010",
+            Source = "carmax",
+            Url = "https://www.carmax.com/car/70206244",
+            Year = 2019,
+            Make = "Honda",
+            Model = "Insight",
+            Trim = "EX",
+            Price = 23998m,
+            Mileage = 42000,
+            DealerName = "CarMax Laurel",
+            DealerLocation = "Laurel, MD",
+        };
+        await upsertService.UpsertAsync(seedCandidate, seedRun, CancellationToken.None);
+
+        var revisitRun = new RunEntity { Command = "walk carmax --revisit", Sources = "carmax:Insight", StartedAt = new DateTimeOffset(2026, 9, 27, 19, 24, 43, TimeSpan.Zero) };
+        db.Runs.Add(revisitRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await upsertService.UpsertAsync(
+            seedCandidate with { AttributesToClear = new HashSet<string> { PostingAttributeNames.Availability } },
+            revisitRun,
+            CancellationToken.None);
+
+        var backfillRun = new RunEntity { Command = "walk --backfill-carmax", Sources = "", StartedAt = DateTimeOffset.UtcNow };
+        db.Runs.Add(backfillRun);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        List<PostingEntity> candidates = await upsertService.CarMaxPostingsAsync(CancellationToken.None);
+
+        CarMaxBackfillTally tally = await CarMaxBackfill.RunAsync(dataDirectory, candidates, upsertService, backfillRun, CancellationToken.None);
+
+        Assert.Equal(new CarMaxBackfillTally(Filled: 0, AlreadySet: 1, CouldNotMatch: 0), tally);
+
+        PostingEntity posting = (await upsertService.CarMaxPostingsAsync(CancellationToken.None)).Single(p => p.VehicleVin == "19XZE4F50KE000010");
         Assert.DoesNotContain(posting.Attributes, a => a.Name == PostingAttributeNames.Availability);
     }
 
