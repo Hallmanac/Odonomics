@@ -12,12 +12,12 @@
   "emergencyReservePerMonth": 50,
   "salesTaxStateRate": 0.06,
   "countySurtaxRate": 0.005,
-  "countySurtaxSource": "Volusia County discretionary sales surtax, 0.5%, effective through 2031-12-31. Florida Dept. of Revenue, Discretionary Sales Surtax Rate Table (floridarevenue.com), checked 2026-09-20.",
+  "countySurtaxSource": "Orange County discretionary sales surtax, 0.5%, effective 2003-01-01 through 2035-12-31. Florida Dept. of Revenue, Discretionary Sales Surtax Rate Table (floridarevenue.com), checked 2026-09-28.",
   "fees": 500,
   "fulfillment": "delivery",
   "residualFraction": 0.35,
   "insuranceMonthlyByModel": {
-    "Honda Insight": null,
+    "Honda Insight": 100,
     "Toyota Corolla Hybrid": 95,
     "Toyota Camry Hybrid": 100,
     "Toyota Prius": 90

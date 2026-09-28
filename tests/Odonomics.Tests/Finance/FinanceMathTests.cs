@@ -41,7 +41,7 @@ public class FinanceMathTests
         Assert.Equal(3199.36m, Math.Round(interest, 2));
     }
 
-    // Hand calculation: price $20,000, Volusia County surtax 0.5% (0.005).
+    // Hand calculation: price $20,000, Orange County surtax 0.5% (0.005).
     // State: 20000 * 0.06 = 1200.00
     // Surtax: surtax applies only to the first $5,000: 5000 * 0.005 = 25.00
     // Total: 1200 + 25 = 1225.00
