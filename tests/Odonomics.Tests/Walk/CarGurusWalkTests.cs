@@ -315,6 +315,92 @@ public class CarGurusWalkTests
     }
 
     [Fact]
+    public async Task RunAsync_CamryHybridPair_TheHybridAndBaseModelSearchesFeedOnePool()
+    {
+        // Reproduces the gap this pair was filed for: walk run 20260928-010506 (walks/cargurus/20260928-010506/camry-hybrid)
+        // recorded the Camry Hybrid model id's search (d2908) years 2018 to 2024 only, 49 vehicles found, none 2025 or
+        // 2026, because CarGurus files the hybrid-only 2025+ Camry under the plain Camry's own id (d292) instead. This
+        // proves BuildSearchUrls' second, base-model search reaches those years and that its cards join the first
+        // search's in one deduplicated pool, using that same recorded run's pages for the hybrid search and a second,
+        // separately recorded live page (m7/d292, startYear 2025) for the base model's.
+        ListingQuery query = Query("Toyota", "Camry Hybrid", yearMin: 2018) with { HybridOnlyFromModelYear = 2025 };
+        IReadOnlyList<string> searchUrls = WalkSites.CarGurus.BuildSearchUrls(query);
+        Assert.Equal(2, searchUrls.Count);
+        Assert.Contains("makeModelTrimPaths=m7%2Cm7%2Fd2908&", searchUrls[0]);
+        Assert.Contains("makeModelTrimPaths=m7%2Cm7%2Fd292&", searchUrls[1]);
+
+        string hybridPage1Text = Fixture("cargurus-camry-hybrid-search.txt");
+        List<PageLink> hybridPage1 = Cards("cargurus-camry-hybrid-search-cards.json");
+        List<PageLink> hybridPage2 = Cards("cargurus-camry-hybrid-search-page-2-cards.json");
+        List<PageLink> hybridPage3 = Cards("cargurus-camry-hybrid-search-page-3-cards.json");
+        string basePage1Text = Fixture("cargurus-camry-search.txt");
+        List<PageLink> basePage1 = Cards("cargurus-camry-search-cards.json");
+
+        // Both searches state their own count ("49 vehicles found" for the hybrid model, "394
+        // vehicles found" for the base model, read straight off the recorded pages), so the pair
+        // line can report each search's stated count beside what it actually collected.
+        Assert.Equal(49, WalkSites.CarGurus.MatchCountIn(hybridPage1Text));
+        Assert.Equal(394, WalkSites.CarGurus.MatchCountIn(basePage1Text));
+
+        var loadsBySearch = new Dictionary<int, List<int>>();
+
+        Task<SearchPageContent> LoadAsync(int searchIndex, int pageNumber)
+        {
+            (loadsBySearch.TryGetValue(searchIndex, out List<int>? pages) ? pages : loadsBySearch[searchIndex] = []).Add(pageNumber);
+
+            if (searchIndex == 0)
+            {
+                return Task.FromResult(pageNumber switch
+                {
+                    1 => new SearchPageContent(hybridPage1, hybridPage1Text),
+                    2 => new SearchPageContent(hybridPage2, "49 vehicles found"),
+                    _ => new SearchPageContent(hybridPage3, "49 vehicles found"),
+                });
+            }
+
+            // Only the base model's first page was recorded live; a second, empty page ends its
+            // paging the same way a real page that adds nothing would, well short of its own 394
+            // stated (so this pair's coverage of the base search alone is partial here, a fixture
+            // limit rather than anything the walk itself gets wrong).
+            return Task.FromResult(pageNumber == 1
+                ? new SearchPageContent(basePage1, basePage1Text)
+                : new SearchPageContent([]));
+        }
+
+        async Task<IReadOnlyList<string>> CollectAsync(string url, int searchIndex, int poolSize, CancellationToken ct) =>
+            await WalkSearchPages.CollectLinksAsync(
+                WalkSites.CarGurus,
+                url,
+                poolSize,
+                NoneKnown,
+                (_, pageNumber, _) => LoadAsync(searchIndex, pageNumber),
+                (_, _) => { },
+                _ => { },
+                () => { },
+                ct);
+
+        List<string> visited = [];
+        Task<DetailPageOutcome> VisitAsync(string link, int index, CancellationToken _)
+        {
+            visited.Add(link);
+            return Task.FromResult(DetailPageOutcome.Upserted);
+        }
+
+        DetailWalkTally tally = await WalkPairSearches.RunAsync(
+            WalkSites.CarGurus, searchUrls, maxDetailPages: null, CollectAsync, VisitAsync, _ => Task.CompletedTask, CancellationToken.None);
+
+        // Every card from both searches feeds the one pool: the hybrid search's own 49 (its whole
+        // stated count, fully covered) plus the base search's 18 ordinary cards off its one recorded
+        // page, deduplicated by listing id (no id repeats, and none of the base model's ids are among
+        // the hybrid model's).
+        Assert.Equal(49 + 18, tally.Visited);
+        Assert.Equal(tally.Visited, visited.Select(ListingId).Distinct().Count());
+        Assert.Equal(2, loadsBySearch.Count);
+        Assert.Equal([1, 2, 3], loadsBySearch[0]);
+        Assert.Equal([1, 2], loadsBySearch[1]);
+    }
+
+    [Fact]
     public async Task CollectLinksAsync_SearchThatFitsOnePage_IsLoadedOnceWhenTheCountIsCovered()
     {
         string search = WalkSites.CarGurus.BuildSearchUrls(Query("Honda", "Insight"))[0];

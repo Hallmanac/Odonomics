@@ -894,7 +894,16 @@ public static class WalkSites
         CardFacetsReader: CarMaxCards.ReadVehicleFacets);
 
     /// <summary>CarGurus: a marketplace of dealers' cars, searched by the ids CarGurus gives the make and model (see
-    /// <see cref="CarGurusSearch"/>) within the scenario's radius. A search page states "N vehicles found", and that
+    /// <see cref="CarGurusSearch"/>) within the scenario's radius. A model with a <see cref="ListingQuery.HybridOnlyFromModelYear"/>
+    /// rule gets two searches, the same reason cars.com does (see the class remarks above): CarGurus files the
+    /// hybrid-only-from-year model's post-cutover years under its plain base-model id rather than the hybrid one
+    /// (Toyota's 2025+ Camry sits under the id "Camry" itself resolves to, not "Camry Hybrid"'s), so the walk issues
+    /// one search for the hybrid model id from the scenario's minimum year and a second for the base model id from
+    /// the hybrid-only year (or the scenario's minimum year if that is later). The two share the pair's cap exactly
+    /// as cars.com's do (see <see cref="WalkPairSearches"/>), and cards from both are de-duplicated by canonical
+    /// URL the same way, so a pair with the rule reads complete only once both searches have covered their own
+    /// stated counts.
+    /// A search page states "N vehicles found", and that
     /// count is of the ordinary results only: the page also carries sponsored cards, whose links say
     /// <c>sponsoredType=PRIORITY</c> (a dealer's ad), <c>FEATURED</c> or <c>HIGHLIGHT</c> (a promoted copy of a
     /// listing shown again at the top of a page) where an ordinary result's says <c>NONE</c>, and those are never
@@ -910,7 +919,12 @@ public static class WalkSites
     /// <see cref="CardBadges.CarGurus"/>). The detail page's text prints the VIN, so no HTML reader is needed for it.</summary>
     public static readonly WalkSite CarGurus = new(
         "cargurus",
-        query => [CarGurusSearch.SearchUrl(query)],
+        query => query.HybridOnlyFromModelYear is int hybridOnlyYear
+            ? [
+                CarGurusSearch.SearchUrl(query, query.Model, query.YearMin),
+                CarGurusSearch.SearchUrl(query, BaseModelName(query.Model), Math.Max(hybridOnlyYear, query.YearMin)),
+              ]
+            : [CarGurusSearch.SearchUrl(query)],
         new Regex(@"^https?://(?:www\.)?cargurus\.com/details/\d+", RegexOptions.IgnoreCase),
         DetailLinkOverfetchMultiplier: 2,
         MatchCountPattern: new Regex(@"(?<![\d,])(\d[\d,]*)\s+vehicles?\s+found\b", RegexOptions.IgnoreCase),

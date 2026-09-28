@@ -158,6 +158,63 @@ public class WalkSitesTests
     }
 
     [Fact]
+    public void CarGurus_BuildSearchUrls_HybridOnlyFromModelYear_YieldsAHybridSearchThenABaseModelSearch()
+    {
+        // CarGurus files the 2025+ Camry Hybrid under the plain Camry's own id (m7/d292), not the
+        // Camry Hybrid one (m7/d2908), so the base model gets its own search from the hybrid-only
+        // year rather than sharing the scenario's 2018 minimum (see CarGurusSearch for how d292 was
+        // verified against a live page).
+        IReadOnlyList<string> urls = WalkSites.CarGurus.BuildSearchUrls(
+            Query("Toyota", "Camry Hybrid", zip: "32833", hybridOnlyFromModelYear: 2025, yearMin: 2018));
+
+        Assert.Equal(
+            [
+                "https://www.cargurus.com/search?zip=32833&distance=50&makeModelTrimPaths=m7%2Cm7%2Fd2908&startYear=2018&maxMileage=100000&sortDirection=ASC&sortType=BEST_MATCH",
+                "https://www.cargurus.com/search?zip=32833&distance=50&makeModelTrimPaths=m7%2Cm7%2Fd292&startYear=2025&maxMileage=100000&sortDirection=ASC&sortType=BEST_MATCH",
+            ],
+            urls);
+    }
+
+    [Fact]
+    public void CarGurus_BuildSearchUrls_MinimumYearAfterTheHybridOnlyYear_BaseSearchStartsAtTheMinimum()
+    {
+        IReadOnlyList<string> urls = WalkSites.CarGurus.BuildSearchUrls(
+            Query("Toyota", "Camry Hybrid", hybridOnlyFromModelYear: 2025, yearMin: 2026));
+
+        Assert.Contains("startYear=2026&", urls[1]);
+    }
+
+    [Fact]
+    public void CarGurus_BuildSearchUrls_NoHybridOnlyRule_YieldsExactlyOneSearch()
+    {
+        IReadOnlyList<string> urls = WalkSites.CarGurus.BuildSearchUrls(Query("Toyota", "Corolla Hybrid", zip: "32833"));
+
+        Assert.Equal(
+            ["https://www.cargurus.com/search?zip=32833&distance=50&makeModelTrimPaths=m7%2Cm7%2Fd2840&startYear=2019&maxMileage=100000&sortDirection=ASC&sortType=BEST_MATCH"],
+            urls);
+    }
+
+    [Fact]
+    public void CarGurus_BuildSearchUrls_ShippedScenarioCamryHybrid_SplitsAtTheHybridOnlyYear()
+    {
+        IReadOnlyList<string> urls = WalkSites.CarGurus.BuildSearchUrls(ListingQuery.For(Shipped(), "Toyota Camry Hybrid"));
+
+        Assert.Equal(2, urls.Count);
+        Assert.Contains("makeModelTrimPaths=m7%2Cm7%2Fd2908&", urls[0]);
+        Assert.Contains("startYear=2018&", urls[0]);
+        Assert.Contains("makeModelTrimPaths=m7%2Cm7%2Fd292&", urls[1]);
+        Assert.Contains("startYear=2025&", urls[1]);
+    }
+
+    [Fact]
+    public void CarGurus_BuildSearchUrls_NonCamryHybridOnlyModel_Unaffected()
+    {
+        IReadOnlyList<string> urls = WalkSites.CarGurus.BuildSearchUrls(Query("Honda", "Insight"));
+
+        Assert.Single(urls);
+    }
+
+    [Fact]
     public void CarsCom_DetailUrlPattern_MatchesVehicleDetailLinks()
     {
         Assert.Matches(WalkSites.CarsCom.DetailUrlPattern, "https://www.cars.com/vehicledetail/abc123/");
