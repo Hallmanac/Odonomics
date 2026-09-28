@@ -45,7 +45,7 @@ public static class RankRenderer
                 continue; // no current price; already covered by a filter reason, nothing more to show
             }
 
-            if (budget is decimal b && score.Cost.DuringLoanMonthly.Expected > b)
+            if (budget is decimal b && score.Cost.Payment.Expected > b)
             {
                 overBudget.Add(score);
                 continue;
@@ -73,14 +73,14 @@ public static class RankRenderer
     }
 
     /// <summary>Says plainly, above the Ranked section, which of the scenario's target monthly
-    /// budgets no rankable vehicle meets during the loan, and points at <c>odo budget</c> for the
-    /// purchase price each target allows. A rankable vehicle is one that passes the filters, has a
+    /// loan payments no rankable vehicle's loan payment meets, and points at <c>odo budget</c> for
+    /// the purchase price each target allows. A rankable vehicle is one that passes the filters, has a
     /// known insurance figure, and has a cost. Deliberately driven by the scenario's own targets
     /// and not by rank's optional --budget flag, so it takes every rankable vehicle, including
-    /// those the flag moved into the over-budget section: the cheapest band it names may belong to
+    /// those the flag moved into the over-budget section: the cheapest payment it names may belong to
     /// a vehicle listed under the over-budget heading rather than Ranked. Prints nothing when
-    /// there is no rankable vehicle to name or when the cheapest one meets every target. It is
-    /// written as markup for its yellow style; a "$592-$627" band has no space in it, so
+    /// there is no rankable vehicle to name or when the cheapest payment meets every target. It is
+    /// written as markup for its yellow style; a "$324-$348" band has no space in it, so
     /// Spectre's word wrapping never splits a dollar figure.</summary>
     private static void RenderUnmetTargets(IAnsiConsole console, IReadOnlyList<Score> rankable, IReadOnlyList<decimal> targetMonthlyBudgets)
     {
@@ -89,9 +89,9 @@ public static class RankRenderer
             return;
         }
 
-        Band cheapest = rankable.Select(s => s.Cost!.DuringLoanMonthly).OrderBy(band => band.Expected).First();
+        Band cheapestPayment = rankable.Select(s => s.Cost!.Payment).OrderBy(band => band.Expected).First();
         List<decimal> unmet = [.. targetMonthlyBudgets
-            .Where(target => cheapest.Expected > target)
+            .Where(target => cheapestPayment.Expected > target)
             .Distinct()
             .Order()];
         if (unmet.Count == 0)
@@ -99,7 +99,7 @@ public static class RankRenderer
             return;
         }
 
-        console.MarkupLine($"[yellow]No rankable vehicle meets a target budget of {JoinTargets(unmet)} during the loan; the cheapest is {Format.Band(cheapest)} a month. Run odo budget for the purchase price each target allows.[/]");
+        console.MarkupLine($"[yellow]No rankable vehicle's loan payment meets a target of {JoinTargets(unmet)}; the cheapest payment is {Format.Band(cheapestPayment)} a month. Run odo budget for the purchase price each target allows.[/]");
     }
 
     /// <summary>Says above the Ranked section what During-loan and 10yr avg include besides the loan
