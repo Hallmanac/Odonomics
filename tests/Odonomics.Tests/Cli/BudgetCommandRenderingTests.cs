@@ -1,4 +1,5 @@
 using System.Globalization;
+using Odonomics.Cli;
 using Odonomics.Cli.Commands;
 using Odonomics.Domain;
 using Spectre.Console;
@@ -41,18 +42,18 @@ public class BudgetCommandRenderingTests
     };
 
     [Fact]
-    public void Render_WithNoColorSet_PrintsTheItemizedRunningCostsAndEachTargetsPaymentRoomWithinEightyColumns()
+    public void Render_WithNoColorSet_PrintsTheItemizedRunningCostsAndEachTargetsMaxPriceWithinEightyColumns()
     {
         string output = RenderWithNoColor(BuildScenario());
         string[] lines = SplitLines(output);
 
         string prose = JoinTrimmed(lines);
         Assert.Contains(
-            "Running costs before any payment: about $279 a month (insurance $95, fuel $64, maintenance $70, reserve $50)",
+            "about $279 a month (insurance $95, fuel $64, maintenance $70, reserve $50)",
             prose);
-        Assert.Equal(["$250", "$0"], RowCells(lines, "$250")[..2]);
-        Assert.Equal(["$300", "$21"], RowCells(lines, "$300")[..2]);
-        Assert.Equal(["$400", "$121"], RowCells(lines, "$400")[..2]);
+        Assert.Equal(2, RowCells(lines, "$250").Length);
+        Assert.Equal(2, RowCells(lines, "$300").Length);
+        Assert.Equal(2, RowCells(lines, "$400").Length);
         Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
         Assert.DoesNotContain('\u001b', output);
     }
@@ -76,35 +77,56 @@ public class BudgetCommandRenderingTests
     }
 
     [Fact]
-    public void Render_MaxPurchasePriceColumn_MatchesTheSolver()
+    public void Render_RunningCostsAreNotSubtractedFromTheTarget()
     {
+        // The 250 target is below the 279 running-cost total; if the running costs were still being
+        // subtracted from the target (the old behavior), that target would leave no payment room at
+        // all and print a $0 max price. They no longer are, so the target itself is spent entirely on
+        // the loan payment and the max price is well above zero.
         Scenario scenario = BuildScenario();
-        decimal expected = BudgetSolver.MaxPurchasePrice(
-            scenario, 300m, scenario.AverageKnownInsuranceMonthly(), scenario.AverageMpg());
 
         string[] lines = SplitLines(RenderWithNoColor(scenario));
+        decimal maxPriceAt250 = ParseMoney(RowCells(lines, "$250")[1]);
 
-        Assert.Equal($"${expected:N0}", RowCells(lines, "$300")[2]);
+        Assert.True(maxPriceAt250 > 0m, $"expected a positive max price, got {maxPriceAt250}");
     }
 
     [Fact]
-    public void Render_ChangingOneScenarioInput_MovesTheBlockAndTheMaxPriceTogether()
+    public void Render_MaxPurchasePriceColumn_MatchesTheSolver()
+    {
+        Scenario scenario = BuildScenario();
+        Band expected = BudgetSolver.MaxPurchasePrice(scenario, 300m);
+
+        string[] lines = SplitLines(RenderWithNoColor(scenario));
+
+        Assert.Equal(Format.Band(expected), RowCells(lines, "$300")[1]);
+    }
+
+    [Fact]
+    public void Render_ChangingAprMovesTheMaxPriceButNotTheRunningCosts()
     {
         Scenario baseline = BuildScenario();
-        Scenario pricierGas = baseline with { GasPricePerGallon = Parameter.Pinned(4.80m) };
+        Scenario pricierApr = baseline with { Apr = Parameter.Pinned(0.09m) };
 
         string[] baselineLines = SplitLines(RenderWithNoColor(baseline));
-        string[] pricierLines = SplitLines(RenderWithNoColor(pricierGas));
+        string[] pricierLines = SplitLines(RenderWithNoColor(pricierApr));
 
-        // Fuel goes from $64 to 12000 / 50 * $4.80 / 12 = $96, so the total goes from $279 to $311.
-        // Joined into one string so the assertion does not depend on where the 80-column wrap falls.
         Assert.Contains("about $279 a month (insurance $95, fuel $64,", JoinTrimmed(baselineLines));
-        Assert.Contains("about $311 a month (insurance $95, fuel $96,", JoinTrimmed(pricierLines));
+        Assert.Contains("about $279 a month (insurance $95, fuel $64,", JoinTrimmed(pricierLines));
 
-        decimal baselinePrice = ParseMoney(RowCells(baselineLines, "$400")[2]);
-        decimal pricierPrice = ParseMoney(RowCells(pricierLines, "$400")[2]);
+        decimal baselinePrice = ParseMoney(RowCells(baselineLines, "$400")[1]);
+        decimal pricierPrice = ParseMoney(RowCells(pricierLines, "$400")[1]);
         Assert.True(pricierPrice < baselinePrice, $"expected {pricierPrice} to be below {baselinePrice}");
-        Assert.Equal("$89", RowCells(pricierLines, "$400")[1]);
+    }
+
+    [Fact]
+    public void Render_AprIsALooseRange_MaxPriceColumnIsABand()
+    {
+        Scenario scenario = BuildScenario() with { Apr = Parameter.Loose(0.065m, 0.095m) };
+
+        string[] lines = SplitLines(RenderWithNoColor(scenario));
+
+        Assert.Contains('-', RowCells(lines, "$400")[1]);
     }
 
     [Fact]
@@ -158,11 +180,12 @@ public class BudgetCommandRenderingTests
 
     private static string[] SplitLines(string output) => output.Replace("\r\n", "\n").Split('\n');
 
-    /// <summary>The whitespace-separated cells of the table row that starts with the budget figure.</summary>
-    private static string[] RowCells(string[] lines, string budgetCell) =>
+    /// <summary>The whitespace-separated cells of the table row that starts with the target-payment
+    /// figure.</summary>
+    private static string[] RowCells(string[] lines, string targetCell) =>
         lines
             .Select(line => line.Split(['│', ' '], StringSplitOptions.RemoveEmptyEntries))
-            .First(cells => cells.Length == 3 && cells[0] == budgetCell);
+            .First(cells => cells.Length == 2 && cells[0] == targetCell);
 
     private static decimal ParseMoney(string cell) => decimal.Parse(cell.TrimStart('$'), CultureInfo.InvariantCulture);
 }

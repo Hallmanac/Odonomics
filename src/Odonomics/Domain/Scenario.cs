@@ -70,6 +70,11 @@ public sealed record Scenario
 
     public required HardFilters Filters { get; init; }
 
+    /// <summary>Monthly loan-payment targets, not total-cost targets: what the buyer wants the car
+    /// payment itself to come to, running costs (insurance, fuel, maintenance, the emergency
+    /// reserve) aside. <c>odo budget</c> solves each one for the highest purchase price whose loan
+    /// payment fits it (see <see cref="BudgetSolver.MaxPurchasePrice"/>), and <c>odo rank</c> checks
+    /// the cheapest rankable vehicle's loan payment against them.</summary>
     public required IReadOnlyList<decimal> TargetMonthlyBudgets { get; init; }
 
     public int HoldMonths => HoldYears * 12;
