@@ -524,6 +524,20 @@ public class VehiclePricingTests
     }
 
     [Fact]
+    public void OnlyAtOutOfRadiusStore_OnlyPostingIsAnOutOfRadiusOnlyAtClearwaterStore_ReturnsTheStoreAndExcludesTheVehicle()
+    {
+        // Clearwater is a real Florida CarMax store, about 110 miles from the daughter scenario's own
+        // zip (32833, Orlando FL): still out of its 50-mile radius, unlike the in-state Orlando and
+        // Daytona stores CarMaxStores also knows.
+        PostingEntity onlyAt = Posting("carmax", 19998m, shippingFee: 0m, pickupLocation: "Only at Clearwater");
+        VehicleEntity vehicle = Vehicle(onlyAt);
+
+        Assert.Equal("Clearwater", VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, NoCoverage, DaughterZip, DaughterRadiusMiles));
+        Assert.Null(VehiclePricing.LowestCurrentPurchasePrice(vehicle, NoCoverage, Fulfillment.Delivery, DaughterZip, DaughterRadiusMiles));
+        Assert.Null(VehiclePricing.UnmeasuredOnlyAtStore(vehicle, NoCoverage, DaughterZip, DaughterRadiusMiles));
+    }
+
+    [Fact]
     public void OnlyAtOutOfRadiusStore_OnlyPostingIsAnInRadiusOnlyAtStore_ReturnsNullAndStillRanks()
     {
         PostingEntity onlyAt = Posting("carmax", 19998m, shippingFee: 0m, pickupLocation: "Only at Orlando");

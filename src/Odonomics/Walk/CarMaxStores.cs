@@ -62,6 +62,7 @@ public static class CarMaxStores
         ["Doral"] = (25.8195, -80.3553),
         ["Ft. Lauderdale"] = (26.0744, -80.2569),
         ["Daytona"] = (29.1400, -81.0600),
+        ["Clearwater"] = (28.0064, -82.7395),
     };
 
     /// <summary>The centroid of a scenario zip this file knows the location of, for
