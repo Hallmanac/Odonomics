@@ -148,9 +148,9 @@ public class SearchPageLoadMoreTests
     [Theory]
     [InlineData(LoadMoreStopReason.StalledPress, true)]
     [InlineData(LoadMoreStopReason.ControlGone, true)]
-    [InlineData(LoadMoreStopReason.ClickFailed, true)]
+    [InlineData(LoadMoreStopReason.ClickFailed, false)]
     [InlineData(LoadMoreStopReason.PressLimit, false)]
-    public void LoadedAll_WithNoStatedCount_MeansTheRunDidNotHitThePressLimit(LoadMoreStopReason stopReason, bool expected)
+    public void LoadedAll_WithNoStatedCount_MeansTheRunDidNotHitThePressLimitOrFailAClick(LoadMoreStopReason stopReason, bool expected)
     {
         Assert.Equal(expected, new LoadMoreResult(75, 75, stopReason).LoadedAll(null));
     }
@@ -243,6 +243,33 @@ public class SearchPageLoadMoreTests
         Assert.Equal(new LoadMoreResult(0, 503, LoadMoreStopReason.ControlGone), result);
         Assert.False(result.LoadedAll(523));
         Assert.False(result.WithinTolerance(523));
+    }
+
+    /// <summary>A search small enough that the show-more control was never on the page at all (no press
+    /// ever happened) is not the same as one that pressed the control for a while and then found it gone:
+    /// reading nothing at all must not be waved through by the tolerance meant for a couple of cards'
+    /// render slop.</summary>
+    [Fact]
+    public async Task RunAsync_ControlNeverPresentAndNoCardsRead_StaysPartialEvenWithinTolerance()
+    {
+        var page = new FakePage(0) { ControlPresent = false };
+
+        LoadMoreResult result = await RunAsync(page, statedCount: 2);
+
+        Assert.Equal(new LoadMoreResult(0, 0, LoadMoreStopReason.ControlGone), result);
+        Assert.False(result.LoadedAll(2));
+        Assert.False(result.WithinTolerance(2));
+    }
+
+    [Fact]
+    public async Task RunAsync_ReachesStatedCountExactlyOnTheLastPress_IsNotTaggedPressLimit()
+    {
+        var page = new FakePage(0, [.. Enumerable.Repeat(1, SearchPageLoadMore.MaxPresses)]);
+
+        LoadMoreResult result = await RunAsync(page, statedCount: SearchPageLoadMore.MaxPresses);
+
+        Assert.Equal(new LoadMoreResult(SearchPageLoadMore.MaxPresses, SearchPageLoadMore.MaxPresses, LoadMoreStopReason.None), result);
+        Assert.True(result.LoadedAll(SearchPageLoadMore.MaxPresses));
     }
 
     [Fact]

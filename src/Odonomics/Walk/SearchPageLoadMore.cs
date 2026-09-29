@@ -31,24 +31,27 @@ public readonly record struct LoadMoreResult(int Presses, int Cards, LoadMoreSto
 {
     /// <summary>True when the page holds every card the run set out to load: at least as many as
     /// <paramref name="statedCount"/>, or, when the page states no count, a run that did not end on
-    /// <see cref="SearchPageLoadMore.MaxPresses"/>. A run that ends short of that (a control that could not
-    /// be clicked, the press limit) leaves results the walk never saw, which must not be read as cars that
-    /// left the market. The one exception is a run that ended because the control is gone or because a
-    /// press added nothing, with the cards within <see cref="SearchPageLoadMore.ToleranceFor"/> of the
-    /// stated count: a site's stated count can run a card or two past what it will render, and that run is
-    /// complete.</summary>
+    /// <see cref="SearchPageLoadMore.MaxPresses"/> or on a control that could not be clicked. A run that
+    /// ends short of that (a control that could not be clicked, the press limit) leaves results the walk
+    /// never saw, which must not be read as cars that left the market. The one exception is a run that
+    /// ended because the control is gone or because a press added nothing, with the cards within
+    /// <see cref="SearchPageLoadMore.ToleranceFor"/> of the stated count: a site's stated count can run a
+    /// card or two past what it will render, and that run is complete.</summary>
     public bool LoadedAll(int? statedCount) =>
         statedCount is int stated
             ? Cards >= stated || WithinTolerance(stated)
-            : StopReason != LoadMoreStopReason.PressLimit;
+            : StopReason is not (LoadMoreStopReason.PressLimit or LoadMoreStopReason.ClickFailed);
 
-    /// <summary>True when the run ended because the control is gone or a press added nothing, it did not
-    /// hit <see cref="SearchPageLoadMore.MaxPresses"/>, and the cards fall short of <paramref name="stated"/>
-    /// by no more than <see cref="SearchPageLoadMore.ToleranceFor"/>, so the run counts as complete only
-    /// because of the tolerance. A control that could not be clicked, and a run that hit
-    /// <see cref="SearchPageLoadMore.MaxPresses"/>, are never within tolerance.</summary>
+    /// <summary>True when the run ended because the control is gone or a press added nothing, it pressed
+    /// the control at least once and did not hit <see cref="SearchPageLoadMore.MaxPresses"/>, and the cards
+    /// fall short of <paramref name="stated"/> by no more than <see cref="SearchPageLoadMore.ToleranceFor"/>,
+    /// so the run counts as complete only because of the tolerance. A control that was never there to press
+    /// (the page never held a control at all) is not a case of a couple of cards' render slop, so it never
+    /// qualifies, and neither does a control that could not be clicked or a run that hit
+    /// <see cref="SearchPageLoadMore.MaxPresses"/>.</summary>
     public bool WithinTolerance(int stated) =>
         StopReason is LoadMoreStopReason.ControlGone or LoadMoreStopReason.StalledPress
+        && Presses > 0
         && Presses < SearchPageLoadMore.MaxPresses
         && Cards < stated
         && stated - Cards <= SearchPageLoadMore.ToleranceFor(stated);
@@ -123,7 +126,8 @@ public static class SearchPageLoadMore
             cards = afterPress;
         }
 
-        if (stopReason == LoadMoreStopReason.None && presses >= MaxPresses)
+        bool reachedStatedCount = statedCount is int stated && cards >= stated;
+        if (stopReason == LoadMoreStopReason.None && presses >= MaxPresses && !reachedStatedCount)
         {
             stopReason = LoadMoreStopReason.PressLimit;
         }
