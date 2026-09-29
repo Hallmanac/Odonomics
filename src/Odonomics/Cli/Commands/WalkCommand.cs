@@ -821,23 +821,23 @@ public static class WalkCommand
         async Task<int> CountCardsAsync(CancellationToken ct) =>
             SearchPageLinks.CountDistinctDetailLinks(await page.EvaluateAsync<string[][]>(SearchPageLinks.AnchorScript), site);
 
-        async Task<bool> PressControlAsync(CancellationToken ct)
+        async Task<LoadMorePress> PressControlAsync(CancellationToken ct)
         {
             ILocator control = page.GetByText(controlPattern).First;
             if (await control.CountAsync() == 0)
             {
-                return false;
+                return LoadMorePress.ControlGone;
             }
 
             try
             {
                 await control.ClickAsync(new LocatorClickOptions { Timeout = ControlClickTimeoutMs });
-                return true;
+                return LoadMorePress.Pressed;
             }
             catch (PlaywrightException)
             {
-                // A control that cannot be clicked (covered, or gone since it was found) is no more to load.
-                return false;
+                // A control that is on the page but cannot be clicked (covered, or gone since it was found).
+                return LoadMorePress.ClickFailed;
             }
         }
 
@@ -856,7 +856,16 @@ public static class WalkCommand
         }
         else if (!result.LoadedAll(statedCount))
         {
-            AnsiConsole.MarkupLineInterpolated($"[yellow]the show-more control stopped short of the stated count, so the results past those cards are not read and the pair's coverage is partial[/]");
+            string reason = result.StopReason switch
+            {
+                LoadMoreStopReason.ControlGone => "the show-more control is no longer on the page",
+                LoadMoreStopReason.ClickFailed => "the show-more control could not be clicked",
+                LoadMoreStopReason.StalledPress => "pressing the show-more control added no new cards",
+                LoadMoreStopReason.PressLimit => "the show-more control hit its press limit",
+                _ => "the show-more control stopped",
+            };
+            string shortfall = statedCount is int statedShort ? $", {statedShort - result.Cards} card(s) short of the stated count," : ",";
+            AnsiConsole.MarkupLineInterpolated($"[yellow]{reason}{shortfall} so the results past those cards are not read and the pair's coverage is partial[/]");
         }
 
         return result.LoadedAll(statedCount);

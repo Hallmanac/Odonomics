@@ -3,7 +3,7 @@ using Odonomics.Walk;
 namespace Odonomics.Tests.Walk;
 
 /// <summary>Proves how a search page's "Show 25 matches" control is pressed: until the page holds the stated
-/// count, until a press adds nothing new, or until the control is gone.</summary>
+/// count, until a press adds nothing new, until the control is gone, or until a click on it fails.</summary>
 public class SearchPageLoadMoreTests
 {
     /// <summary>A page that starts with <paramref name="initial"/> cards and gains the next entry of
@@ -20,18 +20,29 @@ public class SearchPageLoadMoreTests
 
         public bool ControlPresent { get; set; } = true;
 
+        /// <summary>When set, the control reports gone once this many presses have already succeeded,
+        /// instead of being gone (or present) from the start.</summary>
+        public int? GoneAfterPresses { get; set; }
+
+        public bool ClickFails { get; set; }
+
         public Task<int> CountAsync(CancellationToken ct) => Task.FromResult(Cards);
 
-        public Task<bool> PressAsync(CancellationToken ct)
+        public Task<LoadMorePress> PressAsync(CancellationToken ct)
         {
-            if (!ControlPresent)
+            if (!ControlPresent || (GoneAfterPresses is int goneAfter && _presses >= goneAfter))
             {
-                return Task.FromResult(false);
+                return Task.FromResult(LoadMorePress.ControlGone);
+            }
+
+            if (ClickFails)
+            {
+                return Task.FromResult(LoadMorePress.ClickFailed);
             }
 
             Cards += _presses < gains.Length ? gains[_presses] : 0;
             _presses++;
-            return Task.FromResult(true);
+            return Task.FromResult(LoadMorePress.Pressed);
         }
 
         public Task PauseAsync(CancellationToken ct)
@@ -76,7 +87,7 @@ public class SearchPageLoadMoreTests
 
         LoadMoreResult result = await RunAsync(page, statedCount: 526);
 
-        Assert.Equal(new LoadMoreResult(2, 50, EndedOnStalledPress: true), result);
+        Assert.Equal(new LoadMoreResult(2, 50, LoadMoreStopReason.StalledPress), result);
         // Each press pauses once, and the press that added nothing pauses a second time before giving up.
         Assert.Equal(3, page.Pauses);
     }
@@ -88,7 +99,7 @@ public class SearchPageLoadMoreTests
 
         LoadMoreResult result = await RunAsync(page, statedCount: 526);
 
-        Assert.Equal(new LoadMoreResult(2, 45, EndedOnStalledPress: true), result);
+        Assert.Equal(new LoadMoreResult(2, 45, LoadMoreStopReason.StalledPress), result);
     }
 
     [Fact]
@@ -96,7 +107,15 @@ public class SearchPageLoadMoreTests
     {
         var page = new FakePage(25) { ControlPresent = false };
 
-        Assert.Equal(new LoadMoreResult(0, 25), await RunAsync(page, statedCount: 526));
+        Assert.Equal(new LoadMoreResult(0, 25, LoadMoreStopReason.ControlGone), await RunAsync(page, statedCount: 526));
+    }
+
+    [Fact]
+    public async Task RunAsync_ClickFails_StopsWithoutCountingAPress()
+    {
+        var page = new FakePage(25) { ClickFails = true };
+
+        Assert.Equal(new LoadMoreResult(0, 25, LoadMoreStopReason.ClickFailed), await RunAsync(page, statedCount: 526));
     }
 
     [Fact]
@@ -104,7 +123,7 @@ public class SearchPageLoadMoreTests
     {
         var page = new FakePage(25, 25, 25);
 
-        Assert.Equal(new LoadMoreResult(3, 75, EndedOnStalledPress: true), await RunAsync(page, statedCount: null));
+        Assert.Equal(new LoadMoreResult(3, 75, LoadMoreStopReason.StalledPress), await RunAsync(page, statedCount: null));
     }
 
     [Fact]
@@ -114,7 +133,7 @@ public class SearchPageLoadMoreTests
 
         LoadMoreResult result = await RunAsync(page, statedCount: null);
 
-        Assert.Equal(new LoadMoreResult(SearchPageLoadMore.MaxPresses, SearchPageLoadMore.MaxPresses), result);
+        Assert.Equal(new LoadMoreResult(SearchPageLoadMore.MaxPresses, SearchPageLoadMore.MaxPresses, LoadMoreStopReason.PressLimit), result);
     }
 
     [Theory]
@@ -127,11 +146,13 @@ public class SearchPageLoadMoreTests
     }
 
     [Theory]
-    [InlineData(3, true)]
-    [InlineData(SearchPageLoadMore.MaxPresses, false)]
-    public void LoadedAll_WithNoStatedCount_MeansTheRunDidNotHitThePressLimit(int presses, bool expected)
+    [InlineData(LoadMoreStopReason.StalledPress, true)]
+    [InlineData(LoadMoreStopReason.ControlGone, true)]
+    [InlineData(LoadMoreStopReason.ClickFailed, true)]
+    [InlineData(LoadMoreStopReason.PressLimit, false)]
+    public void LoadedAll_WithNoStatedCount_MeansTheRunDidNotHitThePressLimit(LoadMoreStopReason stopReason, bool expected)
     {
-        Assert.Equal(expected, new LoadMoreResult(presses, 75).LoadedAll(null));
+        Assert.Equal(expected, new LoadMoreResult(75, 75, stopReason).LoadedAll(null));
     }
 
     [Theory]
@@ -146,7 +167,7 @@ public class SearchPageLoadMoreTests
     [InlineData(520, 526, false)]
     public void LoadedAll_RunEndedOnAStalledPress_AllowsAShortfallOfTwoCardsOrOnePercent(int cards, int stated, bool expected)
     {
-        var result = new LoadMoreResult(11, cards, EndedOnStalledPress: true);
+        var result = new LoadMoreResult(11, cards, LoadMoreStopReason.StalledPress);
 
         Assert.Equal(expected, result.LoadedAll(stated));
         Assert.Equal(expected, result.WithinTolerance(stated));
@@ -164,7 +185,7 @@ public class SearchPageLoadMoreTests
     [Fact]
     public void LoadedAll_ShortByOneAtThePressLimit_StaysPartial()
     {
-        var result = new LoadMoreResult(SearchPageLoadMore.MaxPresses, 521, EndedOnStalledPress: true);
+        var result = new LoadMoreResult(SearchPageLoadMore.MaxPresses, 521, LoadMoreStopReason.StalledPress);
 
         Assert.False(result.LoadedAll(522));
     }
@@ -172,7 +193,7 @@ public class SearchPageLoadMoreTests
     [Fact]
     public void WithinTolerance_CardsReachedTheCount_IsFalse()
     {
-        Assert.False(new LoadMoreResult(3, 522, EndedOnStalledPress: true).WithinTolerance(522));
+        Assert.False(new LoadMoreResult(3, 522, LoadMoreStopReason.StalledPress).WithinTolerance(522));
     }
 
     [Fact]
@@ -182,7 +203,7 @@ public class SearchPageLoadMoreTests
 
         LoadMoreResult result = await RunAsync(page, statedCount: 522);
 
-        Assert.Equal(new LoadMoreResult(2, 521, EndedOnStalledPress: true), result);
+        Assert.Equal(new LoadMoreResult(2, 521, LoadMoreStopReason.StalledPress), result);
         Assert.True(result.LoadedAll(522));
         Assert.True(result.WithinTolerance(522));
     }
@@ -197,13 +218,42 @@ public class SearchPageLoadMoreTests
         Assert.False(result.LoadedAll(526));
     }
 
+    /// <summary>Pins the 2026-09-28 Camry Hybrid recording's shape: 523 stated, the page settling at 522
+    /// once the control is gone after 10 presses, a single card short of a 5-card tolerance, so the run
+    /// counts as complete the same as one that ended on a stalled press.</summary>
     [Fact]
-    public async Task RunAsync_ControlGoneOneCardShort_IsNotLoadedAll()
+    public async Task RunAsync_CamryHybrid20260928Shape_ControlGoneWithinTolerance_IsLoadedAll()
     {
-        var page = new FakePage(521) { ControlPresent = false };
+        var page = new FakePage(0, 50, 50, 50, 50, 50, 50, 50, 50, 50, 72) { GoneAfterPresses = 10 };
 
-        LoadMoreResult result = await RunAsync(page, statedCount: 522);
+        LoadMoreResult result = await RunAsync(page, statedCount: 523);
 
-        Assert.False(result.LoadedAll(522));
+        Assert.Equal(new LoadMoreResult(10, 522, LoadMoreStopReason.ControlGone), result);
+        Assert.True(result.LoadedAll(523));
+        Assert.True(result.WithinTolerance(523));
+    }
+
+    [Fact]
+    public async Task RunAsync_ControlGoneTwentyShortOfStated_StaysPartial()
+    {
+        var page = new FakePage(503) { ControlPresent = false };
+
+        LoadMoreResult result = await RunAsync(page, statedCount: 523);
+
+        Assert.Equal(new LoadMoreResult(0, 503, LoadMoreStopReason.ControlGone), result);
+        Assert.False(result.LoadedAll(523));
+        Assert.False(result.WithinTolerance(523));
+    }
+
+    [Fact]
+    public async Task RunAsync_ClickFailureOneShortOfStated_StaysPartial()
+    {
+        var page = new FakePage(522) { ClickFails = true };
+
+        LoadMoreResult result = await RunAsync(page, statedCount: 523);
+
+        Assert.Equal(new LoadMoreResult(0, 522, LoadMoreStopReason.ClickFailed), result);
+        Assert.False(result.LoadedAll(523));
+        Assert.False(result.WithinTolerance(523));
     }
 }
