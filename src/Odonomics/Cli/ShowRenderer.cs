@@ -47,7 +47,8 @@ public static class ShowRenderer
         PurchasePrice? purchasePrice = null,
         string? priceNote = null,
         VehicleEquipment equipment = default,
-        IReadOnlyList<string>? requiredFeatures = null)
+        IReadOnlyList<string>? requiredFeatures = null,
+        IReadOnlyList<string>? preferredFeatures = null)
     {
         (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
@@ -181,7 +182,7 @@ public static class ShowRenderer
 
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Equipment[/]");
-        foreach (string line in EquipmentLines(equipment, requiredFeatures ?? []))
+        foreach (string line in EquipmentLines(equipment, requiredFeatures ?? [], preferredFeatures ?? []))
         {
             AnsiConsole.MarkupLine(line);
         }
@@ -216,8 +217,12 @@ public static class ShowRenderer
 
     /// <summary>The Equipment section's markup lines: each feature's status and where it came from, then, for a
     /// feature the scenario requires, a yellow "confirm ..." note when the status is unknown or a red line when it
-    /// is absent, since `odo rank` excludes the car for that. `odo show` itself still prints the car.</summary>
-    public static IReadOnlyList<string> EquipmentLines(VehicleEquipment equipment, IReadOnlyList<string> requiredFeatures)
+    /// is absent, since `odo rank` excludes the car for that. `odo show` itself still prints the car. A feature the
+    /// scenario prefers and the car is known to have closes the section with a green marker such as "smart key".</summary>
+    public static IReadOnlyList<string> EquipmentLines(
+        VehicleEquipment equipment,
+        IReadOnlyList<string> requiredFeatures,
+        IReadOnlyList<string>? preferredFeatures = null)
     {
         List<string> lines = [];
         foreach (string feature in EquipmentFeatures.All)
@@ -237,6 +242,11 @@ public static class ShowRenderer
                     lines.Add($"  [red]- the scenario requires {Markup.Escape(feature)}, so odo rank excludes this car[/]");
                     break;
             }
+        }
+
+        foreach (string feature in Scorer.PreferredPresent(equipment, preferredFeatures ?? []))
+        {
+            lines.Add($"  [green]{Markup.Escape(EquipmentFeatures.Marker(feature))}[/]");
         }
 
         return lines;

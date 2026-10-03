@@ -69,6 +69,15 @@ public static class EquipmentFeatures
     /// <summary>The note for a required feature whose status is unknown, for example "confirm push-button start".</summary>
     public static string ConfirmNote(string feature) => $"confirm {feature}";
 
+    /// <summary>The short marker `odo rank` and `odo show` print for a car that has a preferred feature,
+    /// for example "smart key" for "smart-key entry".</summary>
+    public static string Marker(string feature) => feature switch
+    {
+        SmartKeyEntry => "smart key",
+        KeylessEntry => "keyless",
+        _ => feature,
+    };
+
     /// <summary>The canonical spelling of <paramref name="name"/>, matched ignoring case, or null when it is
     /// not a feature this project tracks.</summary>
     public static string? Canonical(string name) =>
