@@ -226,9 +226,6 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
     /// here.</summary>
     public static IReadOnlyList<RedFlag> RedFlagsForCached(VinRecordEntity record, decimal? currentPrice)
     {
-        IReadOnlyList<VinHistoryListing> priorListings = record.HistoryRawJson is null
-            ? []
-            : JsonSerializer.Deserialize<List<VinHistoryListing>>(record.HistoryRawJson) ?? [];
         IReadOnlyList<RecallEntry> recalls = record.RecallsRawJson is null
             ? []
             : JsonSerializer.Deserialize<List<RecallEntry>>(record.RecallsRawJson) ?? [];
@@ -236,8 +233,25 @@ public sealed class VinResearchService(NhtsaClient nhtsa, MarketcheckHistoryClie
         return RedFlagsEvaluator.Evaluate(
             [.. recalls.Select(r => new RecallForFlagging(r.RemedyAvailable))],
             record.SafetyOverallRating,
-            [.. priorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))],
+            CachedHistoryPoints(record),
             currentPrice).Flags;
+    }
+
+    /// <summary>The salvage-seller sighting `odo rank` excludes a vehicle for (see
+    /// <see cref="RedFlagsEvaluator.FirstSalvageSellerSighting"/>), read from the stored VIN history without
+    /// re-fetching anything. Null for a vehicle never researched, one whose history was not fetched, and one
+    /// whose history names no salvage or repairable-vehicle seller.</summary>
+    public static string? CachedSalvageSellerSighting(VinRecordEntity? record) =>
+        record is null
+            ? null
+            : RedFlagsEvaluator.FirstSalvageSellerSighting(CachedHistoryPoints(record));
+
+    private static List<VinHistoryPoint> CachedHistoryPoints(VinRecordEntity record)
+    {
+        IReadOnlyList<VinHistoryListing> priorListings = record.HistoryRawJson is null
+            ? []
+            : JsonSerializer.Deserialize<List<VinHistoryListing>>(record.HistoryRawJson) ?? [];
+        return [.. priorListings.Select(l => new VinHistoryPoint(l.Dealer, l.FirstSeen, l.LastSeen, l.Price, l.Mileage))];
     }
 
     public static IReadOnlyList<RedFlag> RedFlags(VinResearchResult research, decimal? currentPrice) =>

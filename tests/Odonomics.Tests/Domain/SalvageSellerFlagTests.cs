@@ -63,6 +63,14 @@ public class SalvageSellerFlagTests
     [InlineData("a better bid llc")]
     [InlineData("AutoBidMaster")]
     [InlineData("Auto Bid Master")]
+    [InlineData("Salvage Autos Auction")]
+    [InlineData("Ridesafely")]
+    [InlineData("Bid N Drive Inc")]
+    [InlineData("Auto4export Llc")]
+    [InlineData("Midwest Salvage Pool")]
+    [InlineData("SALVAGE, LLC")]
+    [InlineData("Repairable Vehicle Exchange")]
+    [InlineData("National Repairables Inc.")]
     public void IsSalvageSeller_KnownOutlet_Matches(string dealer)
     {
         Assert.True(SalvageSellers.IsSalvageSeller(dealer));
@@ -78,6 +86,13 @@ public class SalvageSellerFlagTests
     [InlineData("Copartner Auto")]
     [InlineData("Maiaa Motors")]
     [InlineData("Auto Auctions of Dallas")]
+    [InlineData("Manheim")]
+    [InlineData("Manheim Orlando")]
+    [InlineData("ADESA Orlando")]
+    [InlineData("Auction Direct USA")]
+    [InlineData("Global Export Motors")]
+    [InlineData("Salvageable Finds")]
+    [InlineData("Unrepairables Inc")]
     public void IsSalvageSeller_OrdinaryDealer_DoesNotMatch(string? dealer)
     {
         Assert.False(SalvageSellers.IsSalvageSeller(dealer));

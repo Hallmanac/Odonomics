@@ -156,9 +156,40 @@ public static partial class RedFlagsEvaluator
     /// date it was first listed there, earliest first. Several rows from one seller collapse to its
     /// earliest. It states what the history shows, a damaged-vehicle marketplace sighting, and tells the
     /// reader to confirm the title status; it does not claim a salvage title. A clean NICB VINCheck does
-    /// not clear it, since not every insurer reports to NICB. A warning only: it never removes the vehicle
-    /// from anything. Null when no row matches.</summary>
+    /// not clear it, since not every insurer reports to NICB. The flag itself is a warning; `odo rank`
+    /// excludes on the same sighting separately (see <see cref="FirstSalvageSellerSighting"/>). Null when
+    /// no row matches.</summary>
     private static RedFlag? FindSalvageSeller(IReadOnlyList<VinHistoryPoint> priorListings)
+    {
+        List<string> sightings = [.. SalvageSellerSightings(priorListings)
+            .Select(s => s.FirstSeen is DateTimeOffset date
+                ? $"{s.Seller} on {date:yyyy-MM-dd}"
+                : $"{s.Seller} on an unknown date")];
+
+        return sightings.Count == 0
+            ? null
+            : new RedFlag(
+                "salvage-seller",
+                $"listed by a salvage or repairable-vehicle seller ({string.Join("; ", sightings)}); confirm the title status before buying");
+    }
+
+    /// <summary>What `odo rank` names when it excludes a vehicle for its VIN history: the earliest
+    /// salvage or repairable-vehicle seller sighting (see <see cref="SalvageSellers"/>), as the seller
+    /// spelled in the history and the date it was first listed there, such as "Salvage Autos Auction
+    /// 2025-08-26", or "Salvage Autos Auction, date unknown" when no row of that seller carries a date.
+    /// Null when no row of the history names such a seller.</summary>
+    public static string? FirstSalvageSellerSighting(IReadOnlyList<VinHistoryPoint> priorListings)
+    {
+        List<(string Seller, DateTimeOffset? FirstSeen)> sightings = SalvageSellerSightings(priorListings);
+        return sightings switch
+        {
+            [] => null,
+            [(string seller, DateTimeOffset date), ..] => $"{seller} {date:yyyy-MM-dd}",
+            [(string seller, null), ..] => $"{seller}, date unknown",
+        };
+    }
+
+    private static List<(string Seller, DateTimeOffset? FirstSeen)> SalvageSellerSightings(IReadOnlyList<VinHistoryPoint> priorListings)
     {
         Dictionary<string, DateTimeOffset?> earliestBySeller = new(StringComparer.OrdinalIgnoreCase);
         foreach (VinHistoryPoint point in priorListings.OrderBy(p => p.FirstSeen ?? DateTimeOffset.MaxValue))
@@ -169,18 +200,10 @@ public static partial class RedFlagsEvaluator
             }
         }
 
-        List<string> sightings = [.. earliestBySeller
+        return [.. earliestBySeller
             .OrderBy(s => s.Value is null)
             .ThenBy(s => s.Value)
-            .Select(s => s.Value is DateTimeOffset date
-                ? $"{s.Key} on {date:yyyy-MM-dd}"
-                : $"{s.Key} on an unknown date")];
-
-        return sightings.Count == 0
-            ? null
-            : new RedFlag(
-                "salvage-seller",
-                $"listed by a salvage or repairable-vehicle seller ({string.Join("; ", sightings)}); confirm the title status before buying");
+            .Select(s => (s.Key, s.Value))];
     }
 
     /// <summary>The flag for a listing whose price may not be the price at the desk: its fee posture is
