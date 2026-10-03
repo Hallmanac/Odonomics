@@ -23,7 +23,7 @@ It handles one VIN at a time and waits between VINs the way the walk waits betwe
 2. Takes the search results that are on a known archive site (the list is `AuctionSearchPageReader.ArchiveHosts`: bid.cars, copart.com, iaai.com, and a few similar sites), in the order DuckDuckGo ranked them, and opens at most three of them, one after another with a short pause.
 3. Reads the auction, lot number, sale date, sale document, primary and secondary damage, ACV, repair estimate, and odometer off each page, and stops at the first page that has them.
 
-A page counts only if it names the VIN. A page for a different VIN is ignored, and a page that names the VIN but has none of the lot fields the parser knows is could not read, not "not found", so a changed layout is never mistaken for a car with no auction history.
+A page counts only if it names the VIN as the lot's own labelled VIN field. A page whose own VIN is a different one is ignored, even when it lists the checked VIN in a compare list of other lots. A page that names the VIN without a labelled VIN field, or that names it but has none of the lot fields the parser knows, is could not read rather than "not found", so a changed layout is never mistaken for a car with no auction history.
 
 ## What is stored
 
