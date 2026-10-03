@@ -20,8 +20,10 @@ public static partial class WindowStickerEquipment
     /// a dealer's description elsewhere on the page cannot stand in for the sticker's own wording.</summary>
     private const int StickerSectionChars = 2_500;
 
-    /// <summary>The words that mark a section as the factory's own statement of equipment.</summary>
-    [GeneratedRegex(@"window\s+sticker|monroney|factory\s+equipment|equipment\s+list|standard\s+equipment", RegexOptions.IgnoreCase)]
+    /// <summary>A heading that marks a section as the factory's own statement of equipment. It has to be the
+    /// whole line, since the same words run through dealer prose ("options in addition to the standard
+    /// equipment", "any equipment listed") and in links such as "View Window Sticker".</summary>
+    [GeneratedRegex(@"^[ \t]*(?:window\s+sticker|monroney(?:\s+label)?|factory\s+equipment(?:\s+list)?)[ \t]*:?[ \t]*$", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
     private static partial Regex StickerMarker();
 
     /// <summary>What a sticker or equipment list says when the car has proximity entry.</summary>
@@ -48,10 +50,11 @@ public static partial class WindowStickerEquipment
 
     /// <summary><paramref name="claimed"/> when the page text backs it for <paramref name="feature"/> (a name from
     /// <see cref="EquipmentFeatures"/>), otherwise null. The evidence has to sit in a sticker section: the stretch
-    /// of the page that starts at a window-sticker or equipment-list marker. "present" needs the feature's own
-    /// wording there; "absent" needs a fob-and-key wording such as "Keyless Entry", since the sticker states a
-    /// missing feature by listing only that. Wording elsewhere on the page, such as a dealer's description
-    /// claiming push-button start, is no evidence either way.</summary>
+    /// of the page that starts at a window-sticker or factory-equipment heading. "present" needs the feature's own
+    /// wording there. "absent" needs a fob-and-key wording such as "Keyless Entry" there, since the sticker states
+    /// a missing feature by listing only that, and no smart-key, proximity or push-button wording in any sticker
+    /// section, since a sticker that names either item shows the car has it. Wording elsewhere on the page, such
+    /// as a dealer's description claiming push-button start, is no evidence either way.</summary>
     public static string? Ground(string? claimed, string feature, string pageText)
     {
         EquipmentStatus status = StatusOf(claimed);
@@ -60,19 +63,20 @@ public static partial class WindowStickerEquipment
             return null;
         }
 
-        Regex evidence = status == EquipmentStatus.Absent
-            ? FobTerm()
-            : feature == EquipmentFeatures.SmartKeyEntry ? SmartKeyTerm() : PushButtonTerm();
-        bool backed = StickerMarker().Matches(pageText).Any(marker =>
-            evidence.IsMatch(pageText.AsSpan(marker.Index, Math.Min(StickerSectionChars, pageText.Length - marker.Index))));
+        List<string> sections = [.. StickerMarker().Matches(pageText).Select(marker =>
+            pageText.Substring(marker.Index, Math.Min(StickerSectionChars, pageText.Length - marker.Index)))];
+        bool backed = status == EquipmentStatus.Absent
+            ? sections.Any(section => FobTerm().IsMatch(section))
+                && !sections.Any(section => SmartKeyTerm().IsMatch(section) || PushButtonTerm().IsMatch(section))
+            : sections.Any(section => (feature == EquipmentFeatures.SmartKeyEntry ? SmartKeyTerm() : PushButtonTerm()).IsMatch(section));
         return backed
             ? status.ToString().ToLowerInvariant()
             : null;
     }
 
     /// <summary>The page text the extraction reads: the first <paramref name="maxChars"/> characters, plus, when
-    /// a window-sticker marker only appears after that cut, an excerpt around it, so a long page does not hide
-    /// its sticker from the extraction.</summary>
+    /// no sticker heading appears within them but one does after the cut, an excerpt around the first such
+    /// heading, so a long page does not hide its sticker from the extraction.</summary>
     public static string TextForExtraction(string pageText, int maxChars)
     {
         if (pageText.Length <= maxChars)
@@ -82,7 +86,7 @@ public static partial class WindowStickerEquipment
 
         string head = pageText[..maxChars];
         Match marker = StickerMarker().Match(pageText, maxChars);
-        if (!marker.Success)
+        if (!marker.Success || StickerMarker().IsMatch(head))
         {
             return head;
         }

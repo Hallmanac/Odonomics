@@ -90,6 +90,33 @@ public class WindowStickerEquipmentTests
     }
 
     [Theory]
+    [InlineData("absent")]
+    [InlineData("present")]
+    public void Ground_DealerProseUsingStickerWords_IsNotASticker(string claimed)
+    {
+        const string dealerProse = """
+            Seller's notes
+            Options in addition to the standard equipment: Keyless Entry, Push Button Start.
+            Not responsible for any equipment listed above. Keyless Entry, Push Button Start, Smart Key.
+            View Window Sticker
+            Keyless Entry, Push Button Start, Smart Key
+            """;
+
+        Assert.Null(WindowStickerEquipment.Ground(claimed, EquipmentFeatures.PushButtonStart, dealerProse));
+        Assert.Null(WindowStickerEquipment.Ground(claimed, EquipmentFeatures.SmartKeyEntry, dealerProse));
+    }
+
+    [Fact]
+    public void Ground_AbsentClaimOnAStickerThatAlsoListsASmartKeyAndKeylessEntry_IsDropped()
+    {
+        const string sticker = "Window Sticker\nSmart Key System on front doors w/ Push Button Start\nRemote Keyless Entry";
+
+        Assert.Null(WindowStickerEquipment.Ground("absent", EquipmentFeatures.SmartKeyEntry, sticker));
+        Assert.Null(WindowStickerEquipment.Ground("absent", EquipmentFeatures.PushButtonStart, sticker));
+        Assert.Equal("present", WindowStickerEquipment.Ground("present", EquipmentFeatures.PushButtonStart, sticker));
+    }
+
+    [Theory]
     [InlineData("present", EquipmentStatus.Present)]
     [InlineData("Absent", EquipmentStatus.Absent)]
     [InlineData(null, EquipmentStatus.Unknown)]
@@ -126,6 +153,14 @@ public class WindowStickerEquipmentTests
         Assert.StartsWith(new string('x', 100), text);
         Assert.Contains("Window Sticker", text);
         Assert.Contains("Keyless Entry", text);
+    }
+
+    [Fact]
+    public void TextForExtraction_StickerHeadingAlreadyWithinTheCut_AddsNoExcerpt()
+    {
+        string page = "Window Sticker\nKeyless Entry\n" + new string('x', 500) + "\nMonroney\nstandard equipment\n" + new string('y', 500);
+
+        Assert.Equal(page[..100], WindowStickerEquipment.TextForExtraction(page, 100));
     }
 
     [Fact]
