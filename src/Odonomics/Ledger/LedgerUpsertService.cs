@@ -50,6 +50,8 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
             vehicle.LastSeen = now;
         }
 
+        ApplyStickerEquipment(vehicle, candidate);
+
         PostingEntity? posting = await db.Postings
             .Include(p => p.PriceObservations)
             .Include(p => p.Dealer)
@@ -127,6 +129,25 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         }
 
         return new UpsertOutcome(vehicleIsNew, postingIsNew, priceChanged && !postingIsNew, previousPrice);
+    }
+
+    /// <summary>Stores what the candidate's window sticker said about each feature. A status the sticker did
+    /// state replaces the stored one, and the sticker is then its source. A candidate with no sticker (unknown)
+    /// leaves the stored status alone, since a page with no sticker is not evidence a sticker read earlier was
+    /// wrong.</summary>
+    private static void ApplyStickerEquipment(VehicleEntity vehicle, ListingCandidate candidate)
+    {
+        if (candidate.SmartKeyEntry != EquipmentStatus.Unknown)
+        {
+            vehicle.SmartKeyEntry = candidate.SmartKeyEntry;
+            vehicle.SmartKeyEntrySource = EquipmentSource.WindowSticker;
+        }
+
+        if (candidate.PushButtonStart != EquipmentStatus.Unknown)
+        {
+            vehicle.PushButtonStart = candidate.PushButtonStart;
+            vehicle.PushButtonStartSource = EquipmentSource.WindowSticker;
+        }
     }
 
     /// <summary>Sets the display-only attributes <paramref name="run"/> read from one posting's page

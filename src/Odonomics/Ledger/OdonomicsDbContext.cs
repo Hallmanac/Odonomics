@@ -23,6 +23,10 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
             entity.HasMany(v => v.Postings).WithOne(p => p.Vehicle).HasForeignKey(p => p.VehicleVin);
             entity.HasMany(v => v.Notes).WithOne(n => n.Vehicle).HasForeignKey(n => n.VehicleVin);
             entity.HasOne(v => v.VinRecord).WithOne(r => r.Vehicle).HasForeignKey<VinRecordEntity>(r => r.Vin);
+            entity.Property(v => v.SmartKeyEntry).HasConversion<string>();
+            entity.Property(v => v.SmartKeyEntrySource).HasConversion<string>();
+            entity.Property(v => v.PushButtonStart).HasConversion<string>();
+            entity.Property(v => v.PushButtonStartSource).HasConversion<string>();
         });
 
         modelBuilder.Entity<PostingEntity>(entity =>

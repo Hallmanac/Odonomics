@@ -42,8 +42,18 @@
     "fuelType": {
       "type": ["string", "null"],
       "description": "The fuel or drivetrain type as the page states it in a spec line, e.g. Gas, Hybrid, Plug-in Hybrid, Electric. Null if no spec line states one."
+    },
+    "smartKeyEntry": {
+      "type": ["string", "null"],
+      "enum": ["present", "absent", null],
+      "description": "Whether the car has smart-key (proximity) entry, read ONLY from the listing's window sticker or factory equipment list, never from the dealer's description, highlights, or feature badges. 'present' when the sticker lists a Smart Key System or proximity entry; 'absent' when the sticker's equipment list names only a fob 'Keyless Entry' (or turn-key ignition) and no smart key or proximity item. Null when the page has no window sticker or equipment list."
+    },
+    "pushButtonStart": {
+      "type": ["string", "null"],
+      "enum": ["present", "absent", null],
+      "description": "Whether the car has push-button start, read ONLY from the listing's window sticker or factory equipment list, never from the dealer's description, highlights, or feature badges. 'present' when the sticker lists push-button start (a Toyota 'Smart Key System' includes it); 'absent' when the sticker's equipment list names only a fob 'Keyless Entry' (or turn-key ignition) and no push-button or smart key item. Null when the page has no window sticker or equipment list."
     }
   },
-  "required": ["vin", "year", "make", "model", "trim", "price", "mileage", "dealerName", "dealerLocation", "fuelType"],
+  "required": ["vin", "year", "make", "model", "trim", "price", "mileage", "dealerName", "dealerLocation", "fuelType", "smartKeyEntry", "pushButtonStart"],
   "additionalProperties": false
 }

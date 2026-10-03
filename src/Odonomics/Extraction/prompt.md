@@ -21,6 +21,14 @@ Rules:
   such as Hybrid, Prime, or Plug-in stays part of the model; never move it into `trim`. `trim` is
   the grade alone (LE, SE, XLE, Limited). For example, a title of "2023 Toyota Corolla Hybrid"
   with the line "LE Sedan 4D" beneath it yields `model` "Corolla Hybrid" and `trim` "LE".
+- `smartKeyEntry` and `pushButtonStart` come only from the listing's window sticker (Monroney label) or
+  factory equipment list, which is a section the page labels as such. Never read them from the dealer's
+  description, seller notes, highlights, feature badges, or any other marketing text: a dealer saying "push
+  button start" proves nothing. A sticker that lists a Smart Key System or proximity entry (Toyota's Smart Key
+  System includes push-button start) makes both `"present"`. A sticker whose equipment list names only a
+  fob "Keyless Entry" (or a turn key) and no smart key, proximity, or push-button item makes both `"absent"`.
+  When the page has no window sticker or equipment list, or the sticker says nothing on the point, output
+  `null`, never `"absent"`.
 - `dealerName` and `dealerLocation` are the selling dealer's own name and city/state, not the
   listing site's name. Null for a private-party listing or when neither appears on the page.
 

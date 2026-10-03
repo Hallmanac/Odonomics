@@ -1,4 +1,5 @@
 using Odonomics.Auctions;
+using Odonomics.Domain;
 
 namespace Odonomics.Ledger;
 
@@ -15,6 +16,25 @@ public sealed class VehicleEntity
     public required DateTimeOffset FirstSeen { get; set; }
     public required DateTimeOffset LastSeen { get; set; }
     public DateTimeOffset? FinalistMarkedAt { get; set; }
+
+    /// <summary>Whether the car has smart-key (proximity) entry, as a listing's window sticker or factory
+    /// equipment list stated it; unknown until a walk reads one. A dealer's description never sets it. The
+    /// factory trim table fills an unknown one at rank time and is not stored here (see
+    /// <see cref="FactoryTrimTable"/>), so <see cref="SmartKeyEntrySource"/> is only ever none or the window
+    /// sticker.</summary>
+    public EquipmentStatus SmartKeyEntry { get; set; }
+
+    public EquipmentSource SmartKeyEntrySource { get; set; }
+
+    /// <summary>Whether the car has push-button start, stored the same way as <see cref="SmartKeyEntry"/>.</summary>
+    public EquipmentStatus PushButtonStart { get; set; }
+
+    public EquipmentSource PushButtonStartSource { get; set; }
+
+    /// <summary>The two stored statuses as one value, for the trim table to fill and the scorer to read.</summary>
+    public VehicleEquipment StoredEquipment => new(
+        new EquipmentFact(SmartKeyEntry, SmartKeyEntrySource),
+        new EquipmentFact(PushButtonStart, PushButtonStartSource));
 
     public List<PostingEntity> Postings { get; set; } = [];
     public List<NoteEntity> Notes { get; set; } = [];
