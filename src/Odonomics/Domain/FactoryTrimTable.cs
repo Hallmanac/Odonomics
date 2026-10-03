@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Odonomics.Domain;
 
@@ -63,6 +64,10 @@ public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
         ReadCommentHandling = JsonCommentHandling.Skip,
     };
 
+    private static readonly Regex DrivetrainSuffix = new(
+        @"^(?<base>.+?)\s+(?:FWD|AWD-e|AWD|4WD|2WD)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     public static FactoryTrimTable Empty { get; } = new([]);
 
     public IReadOnlyList<FactoryTrimEntry> Entries => entries;
@@ -87,7 +92,9 @@ public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
     }
 
     /// <summary>What the table says about the car's smart-key entry, keyless fob, and push-button start. A car with no
-    /// trim, or with no row for its model, year, and trim, gets unknown for both.</summary>
+    /// trim, or with no row for its model, year, and trim, gets unknown for both. When no row matches the trim as
+    /// stored, a trailing drivetrain token is dropped and the lookup retried, so "Limited FWD" reads the "Limited" row;
+    /// a row that matches the stored trim exactly (such as "LE AWD-e") always wins.</summary>
     public VehicleEquipment Lookup(string make, string model, int year, string? trim)
     {
         if (string.IsNullOrWhiteSpace(trim))
@@ -95,11 +102,29 @@ public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
             return VehicleEquipment.Unknown;
         }
 
-        FactoryTrimEntry[] matches = [.. entries.Where(entry => entry.Matches(make, model, year, trim))];
+        FactoryTrimEntry[] matches = MatchesFor(make, model, year, trim);
+        if (matches.Length == 0 && StripDrivetrain(trim) is string baseTrim)
+        {
+            matches = MatchesFor(make, model, year, baseTrim);
+        }
+
         return new VehicleEquipment(
             Definite(matches, EquipmentFeatures.SmartKeyEntry),
             Definite(matches, EquipmentFeatures.PushButtonStart),
             Definite(matches, EquipmentFeatures.KeylessFobEntry));
+    }
+
+    private FactoryTrimEntry[] MatchesFor(string make, string model, int year, string trim) =>
+        [.. entries.Where(entry => entry.Matches(make, model, year, trim))];
+
+    /// <summary>The trim without a trailing drivetrain token (FWD, AWD, AWD-e, 4WD, 2WD), or null when it has none
+    /// or nothing would be left.</summary>
+    private static string? StripDrivetrain(string trim)
+    {
+        Match match = DrivetrainSuffix.Match(trim.Trim());
+        return match.Success
+            ? match.Groups["base"].Value
+            : null;
     }
 
     /// <summary>Fills each status of <paramref name="fromSticker"/> that is still unknown from the table.</summary>
