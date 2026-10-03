@@ -57,7 +57,7 @@ A car whose status for a required feature is absent is excluded by `odo rank`, w
 
 ### The factory trim table
 
-The trim table is one data file, `src/Odonomics/Data/factory-trim-equipment.json`, copied beside the program and read each time `odo rank`, `odo show`, `odo research`, or `odo title check` runs. It starts empty. Each row names a make, a model as the ledger spells it (for example "Corolla Hybrid"), a range of model years, a trim, an answer of `"present"` or `"absent"` for `smartKeyEntry`, `pushButtonStart`, or both, and a `source` that says where the answer came from:
+The trim table is one data file, `src/Odonomics/Data/factory-trim-equipment.json`, copied beside the program and read each time `odo rank`, `odo show`, `odo research`, or `odo title check` runs. Its rows come from a sourced research note, [factory-trim-sources.md](factory-trim-sources.md), which holds the research as written and says how each of its rows became an entry. The table covers the Honda Insight, Toyota Corolla Hybrid, Toyota Camry Hybrid, and Toyota Prius, and only where that research rated the answer high or medium confidence; a car with no row falls back to its window sticker. Each row names a make, a model as the ledger spells it (for example "Corolla Hybrid"), a range of model years, a trim, an answer of `"present"` or `"absent"` for `smartKeyEntry`, `pushButtonStart`, or both, and a `source` that says where the answer came from, plus an optional `confidence` and an optional `note` for a caveat (the shipped rows give both where they apply):
 
 ```json
 {
@@ -70,7 +70,9 @@ The trim table is one data file, `src/Odonomics/Data/factory-trim-equipment.json
       "trim": "LE",
       "smartKeyEntry": "present",
       "pushButtonStart": "present",
-      "source": "where the answer was read"
+      "source": "where the answer was read",
+      "confidence": "high",
+      "note": "optional caveat"
     }
   ]
 }
