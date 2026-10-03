@@ -1,3 +1,4 @@
+using System.Globalization;
 using Odonomics.Auctions;
 using Odonomics.Domain;
 
@@ -47,4 +48,27 @@ public static class AuctionChecks
         check is { Outcome: AuctionCheckOutcome.Found }
             ? [RedFlagsEvaluator.SalvageAuction(check.SaleDocument, check.PrimaryDamage, check.SecondaryDamage, check.SaleDate)]
             : [];
+
+    /// <summary>What `odo rank` names when it excludes a vehicle whose stored lookup found a sale: the
+    /// auction, the sale date, and the sale document, in that order, such as "Copart 2026-07-16, Salvage
+    /// certificate (CA)". Any part the record did not print is left out. Null for a lookup that found
+    /// nothing, could not read, or never ran, none of which excludes a vehicle. Any found sale counts
+    /// whatever its sale document, since Copart and IAA are insurance-salvage auctions even when a lot
+    /// sells on a clean title.</summary>
+    public static string? ExclusionSale(AuctionCheckEntity? check)
+    {
+        if (check is not { Outcome: AuctionCheckOutcome.Found })
+        {
+            return null;
+        }
+
+        string auctionAndDate = string.Join(" ", PrintedParts(check.Auction, check.SaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+        string sale = string.Join(", ", PrintedParts(auctionAndDate, check.SaleDocument));
+        return sale.Length == 0
+            ? "no sale details printed"
+            : sale;
+    }
+
+    private static IEnumerable<string> PrintedParts(params string?[] parts) =>
+        parts.OfType<string>().Select(part => part.Trim()).Where(part => part.Length > 0);
 }

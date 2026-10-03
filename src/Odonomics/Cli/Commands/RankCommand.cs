@@ -67,7 +67,8 @@ public static class RankCommand
     /// <paramref name="radiusMiles"/> are the scenario's own, for judging whether a CarMax "Only at"
     /// posting's store is close enough to still purchase. The equipment is the vehicle's stored window-sticker
     /// status with <paramref name="trimTable"/> filling what it left unknown; null means no table, so only the
-    /// stored statuses count.</summary>
+    /// stored statuses count. The salvage-auction sale is the vehicle's stored lookup's, so a caller must load
+    /// <see cref="VehicleEntity.AuctionCheck"/> or the vehicle is never excluded for it.</summary>
     public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string zip, int radiusMiles, FactoryTrimTable? trimTable = null)
     {
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles);
@@ -95,6 +96,7 @@ public static class RankCommand
             OnlyAtOutOfRadiusStore = VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, latestCoverageBySource, zip, radiusMiles),
             UnmeasuredOnlyAtStore = VehiclePricing.UnmeasuredOnlyAtStore(vehicle, latestCoverageBySource, zip, radiusMiles),
             OnlyCarsComCarMaxPostings = VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, latestCoverageBySource),
+            SalvageAuctionSale = AuctionChecks.ExclusionSale(vehicle.AuctionCheck),
             Equipment = (trimTable ?? FactoryTrimTable.Empty).Fill(vehicle.StoredEquipment, vehicle.Make, vehicle.Model, vehicle.Year, vehicle.Trim),
         };
     }
