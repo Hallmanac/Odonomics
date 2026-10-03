@@ -68,7 +68,7 @@ Instead, the walk touches that posting from its card. It stamps the posting as s
 
 A touched link never enters the pool of detail visits and never spends any of `--max`. That means `--max`, when you give it, goes only to cars the ledger has never seen, and paging on Carvana goes on past pages made only of known cars until the pool of new links is full or the search runs out. What a card can't tell the walk stays as the last detail visit left it: the dealer, the Carvana shipping fee and pickup option, the fee posture, and the vehicle's year, mileage, and trim. A card price under $1,000 is treated as a misread and not a price.
 
-`--revisit` turns all of this off and opens a detail page for every link, as the walk did before. Use it to refresh the dealer, shipping fee, pickup option, or fee posture of cars the ledger already holds, or to check a site whose cards the walk can't read yet. A posting that was dropped on its detail visit (the wrong model, a new car) never reached the ledger, so it's opened again on every walk.
+`--revisit` turns all of this off and opens a detail page for every link, as the walk did before. Use it to refresh the dealer, shipping fee, pickup option, fee posture, or CarGurus vehicle-history summary of cars the ledger already holds, or to check a site whose cards the walk can't read yet. A posting that was dropped on its detail visit (the wrong model, a new car) never reached the ledger, so it's opened again on every walk.
 
 ### Badges
 
@@ -316,6 +316,20 @@ Each card also carries fee facts:
 - A known car's card replaces the stored posture and shipping fee without a detail visit. A card that names none of the three fee statements, and one that prints no shipping line, leaves the stored posture and shipping fee alone, so a card that merely omits a line never erases what an earlier card said.
 
 The deal badge is a line of the card that is exactly one of Great Deal, Good Deal, Fair Deal, High Priced, or Overpriced, stored as the `deal` attribute in CarGurus's own words (see [Badges](#badges)).
+
+#### Vehicle-history summary
+
+CarGurus prints a vehicle-history summary from its AutoCheck data, and the walk stores what it says on the posting. A fixed reader (`CarGurusHistory`) reads the detail page's text, with no model in between, for five fields:
+
+- The title wording is the first line under the page's "History" heading when it is about the title, such as "Clean title" or a brand, stored as printed.
+- The accident count comes from a line of its own that reads "N accident(s) reported". "0 accidents reported" is a stated zero.
+- The previous-owner count comes from a line of its own that reads "N previous owner(s)".
+- The use statement is a "Reported as ..." line that names rental or fleet use, such as "Reported as previous rental vehicle" or "Reported as corporate leased vehicle" (under a "Work fleet vehicle use" heading), stored without its closing period. A "... rental vehicle use" or "... fleet vehicle use" heading with no such line is stored in its place.
+- The frame-damage statement is "(Frame damage reported)", the parenthetical CarGurus prints beside the price. Only text ahead of the dealer's description is read for it, so a dealer's own copy cannot state it.
+
+A field the page does not show is stored as not stated (null), never as zero, clean, or no frame damage. Every pattern is a whole line, so a dealer description that says "no accidents" in a sentence states nothing. Each detail visit replaces the whole stored summary, so a page that has dropped a field clears it, and `--revisit` is how to refresh the summary of cars the ledger already holds. The search card is read too: when a known car's card carries any of these fields (no recorded card has carried one yet, so the card read is the same reader run over the card's text), the card read stores those fields without a detail visit and leaves the others as the last visit stored them, since a card's silence is not a fresh reading. A new car's card fills in only what its detail page leaves out.
+
+The summary raises the `frame-damage`, `accident-reported`, and `rental-history` red flags, described in [research.md](research.md#red-flags), and `odo show` prints it under "Listing history summaries" with the site it came from. None of them excludes a car from `odo rank`. Only walks made after this reader existed have a summary, and the fixtures for it are the recorded clean and fleet-use pages plus two copies of a recorded page with their History block and price area edited to the wording a rental car with accidents and a frame-damage car print, since neither was recorded.
 
 The detail page's visible text prints the VIN ("VIN:" and the number on the next line), so the walk needs no HTML reader for it. The year, mileage, and model come from the extraction as on the other sites, but the dealer name and location are read from the page's own text directly (`CarGurusDealer`), ahead of the extraction, the same way CarMax's own store is (see [CarMax](#carmax)): CarGurus has no fallback dealer, so a page the extraction misreads would otherwise store a wrong hub rather than nothing.
 
