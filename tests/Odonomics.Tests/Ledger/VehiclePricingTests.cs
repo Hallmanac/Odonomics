@@ -742,4 +742,46 @@ public class VehiclePricingTests
         Assert.Null(price?.AppliedFee);
         Assert.Equal(19998m, price?.Total);
     }
+
+    private static VehicleEntity ComparableCorolla(string vin, decimal price, int year = 2025, int mileage = 80000, DateTimeOffset? lastSeen = null)
+    {
+        PostingEntity posting = Posting("carvana", price, lastSeen: lastSeen);
+        posting.VehicleVin = vin;
+        return new VehicleEntity
+        {
+            Vin = vin,
+            Year = year,
+            Make = "Toyota",
+            Model = "Corolla Hybrid",
+            Mileage = mileage,
+            FirstSeen = RunTime,
+            LastSeen = RunTime,
+            Postings = [posting],
+        };
+    }
+
+    [Fact]
+    public void SimilarPriceNotes_CheapCarAmongFiveSimilarOnes_NamesItsPercentAndTheMedian()
+    {
+        List<VehicleEntity> ledger = [ComparableCorolla("CHEAP", 17289m), .. Enumerable.Range(0, 5).Select(i => ComparableCorolla($"SIMILAR{i}", 22800m))];
+
+        IReadOnlyDictionary<string, string> notes = VehiclePricing.SimilarPriceNotes(ledger, NoCoverage);
+
+        Assert.Equal("priced 24% below 5 similar cars (median $22,800); confirm the title", Assert.Single(notes).Value);
+        Assert.True(notes.ContainsKey("CHEAP"));
+    }
+
+    [Fact]
+    public void SimilarPriceNotes_SimilarCarWhoseEveryPostingIsGone_IsNotCounted()
+    {
+        var coverage = new Dictionary<string, DateTimeOffset> { [RunSources.Key("carvana", "Corolla Hybrid")] = RunTime.AddDays(1) };
+        List<VehicleEntity> ledger =
+        [
+            ComparableCorolla("CHEAP", 17289m, lastSeen: RunTime.AddDays(1)),
+            .. Enumerable.Range(0, 4).Select(i => ComparableCorolla($"SIMILAR{i}", 22800m, lastSeen: RunTime.AddDays(1))),
+            ComparableCorolla("GONE", 22800m),
+        ];
+
+        Assert.Empty(VehiclePricing.SimilarPriceNotes(ledger, coverage));
+    }
 }

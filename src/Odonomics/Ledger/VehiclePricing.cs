@@ -24,6 +24,13 @@ public static class VehiclePricing
         return known.Length == 0 ? null : known.Min();
     }
 
+    /// <summary>The soft "priced well below similar cars" note for each ledger vehicle that earns one,
+    /// keyed by VIN (see <see cref="SimilarPriceNote"/>). Every vehicle is compared by its asking price
+    /// (see <see cref="LowestCurrentPrice"/>), the same figure the price red flags use, and every ledger
+    /// vehicle with a price is a candidate comparison car, not only the ones the scenario would rank.</summary>
+    public static IReadOnlyDictionary<string, string> SimilarPriceNotes(IEnumerable<VehicleEntity> vehicles, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
+        SimilarPriceNote.For([.. vehicles.Select(v => new PriceComparable(v.Vin, v.Year, v.Make, v.Model, v.Mileage, LowestCurrentPrice(v, latestCoverageBySource)))]);
+
     /// <summary>The cheapest way to take this vehicle home among its active, purchasable postings (see
     /// <see cref="LowestCurrentPrice"/> for which are active; a posting currently reserved or in transit,
     /// see <see cref="IsReservedOrInTransit"/>, or a CarMax "Only at" posting whose store sits outside
