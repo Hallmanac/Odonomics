@@ -81,6 +81,11 @@ public static class Scorer
             }
         }
 
+        if (vehicle.SalvageAuctionSale is string salvageAuctionSale)
+        {
+            reasons.Add($"sold at salvage auction: {salvageAuctionSale}");
+        }
+
         // Spike finding: exclude new stock, since this scenario is shopping used. A vehicle with
         // under 500 miles or a model year beyond the current year is new inventory, not used.
         if (vehicle.Mileage < 500 || vehicle.Year > DateTime.UtcNow.Year)

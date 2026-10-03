@@ -114,6 +114,12 @@ public sealed record VehicleForScoring
     /// requires, and <see cref="Scorer.UnconfirmedFeatures"/> turns an unknown one into a note.</summary>
     public VehicleEquipment Equipment { get; init; } = VehicleEquipment.Unknown;
 
+    /// <summary>The salvage-auction sale `odo title check` found for this vehicle, as the auction, sale date, and
+    /// sale document it printed (see <see cref="Ledger.AuctionChecks.ExclusionSale"/>); null when the stored lookup
+    /// found none, could not read, or never ran. <see cref="Scorer.FilterReasons"/> excludes a vehicle this is set
+    /// for, naming the sale, whatever the sale document says.</summary>
+    public string? SalvageAuctionSale { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>
