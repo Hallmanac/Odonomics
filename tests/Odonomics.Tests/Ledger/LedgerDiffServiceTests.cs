@@ -1218,6 +1218,114 @@ public class LedgerDiffServiceTests
     }
 
     [Fact]
+    public async Task ComputeAsync_AFullSweepWhosePairWasStampedPartialForAnUnrenderedCard_ReadsAbsentKnownPostingsAsNotOnSearchPage()
+    {
+        // The Prius shape from walk 20260928-184522: every page read to the site's natural end, the pair
+        // still stamped unread because a card never rendered, and known postings absent from every page.
+        (SearchDiff diff, string sources) = await ReplayPriusSweepAsync(failPageThree: false);
+
+        Assert.Equal("carvana:Prius,unread:carvana:Prius,swept:carvana:Prius", sources);
+        Dictionary<string, string> reasonsByUrl = diff.Gone.ToDictionary(g => g.Url, g => g.Reason);
+        Assert.Equal(GoneReasons.NotOnSearchPage, reasonsByUrl["https://www.carvana.com/vehicle/absent0"]);
+        Assert.Equal(GoneReasons.NotOnSearchPage, reasonsByUrl["https://www.carvana.com/vehicle/absent1"]);
+        Assert.Equal(GoneReasons.CardNeverRendered, reasonsByUrl["https://www.carvana.com/vehicle/a2"]);
+        Assert.Equal(3, reasonsByUrl.Count);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_AWalkThatLostAPageAndHadAnUnrenderedCard_StillReadsAbsentKnownPostingsAsPagesUnread()
+    {
+        (SearchDiff diff, string sources) = await ReplayPriusSweepAsync(failPageThree: true);
+
+        Assert.Equal("carvana:Prius,unread:carvana:Prius", sources);
+        Assert.Equal(
+            [GoneReasons.PagesUnread, GoneReasons.PagesUnread],
+            [.. diff.Gone.Where(g => g.Url.Contains("absent")).Select(g => g.Reason)]);
+        Assert.Equal(GoneReasons.CardNeverRendered, Assert.Single(diff.Gone, g => g.Url.EndsWith("/a2", StringComparison.Ordinal)).Reason);
+    }
+
+    /// <summary>Walks a carvana-shaped search of two full pages then a page adding nothing (the natural end),
+    /// where known posting a2 on page 1 never renders (so the pair's rendering reads as degraded) and two
+    /// other known postings sit on no page at all. With <paramref name="failPageThree"/> the third page
+    /// instead throws, so the walk lost a page.</summary>
+    private static async Task<(SearchDiff Diff, string Sources)> ReplayPriusSweepAsync(bool failPageThree)
+    {
+        ListingCandidate onPageOne = Candidate("JTDKN3DU0A0000040", 15000m, "https://www.carvana.com/vehicle/a0", "carvana");
+        ListingCandidate unrendered = Candidate("JTDKN3DU0A0000041", 15500m, "https://www.carvana.com/vehicle/a2", "carvana");
+        ListingCandidate absentOne = Candidate("JTDKN3DU0A0000042", 16000m, "https://www.carvana.com/vehicle/absent0", "carvana");
+        ListingCandidate absentTwo = Candidate("JTDKN3DU0A0000043", 16500m, "https://www.carvana.com/vehicle/absent1", "carvana");
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var upsert = new LedgerUpsertService(db);
+        RunEntity run1 = Run(FirstRunAt, "carvana:Prius", "32833", 50);
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        foreach (ListingCandidate candidate in new[] { onPageOne, unrendered, absentOne, absentTwo })
+        {
+            await upsert.UpsertAsync(candidate, run1, CancellationToken.None);
+        }
+
+        RunEntity run2 = Run(SecondRunAt, "", "32833", 50);
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        int? failedPage = null;
+        bool renderingDegraded = false;
+        List<string> unrenderedKnownUrls = [];
+        await WalkCoverage.RunAsync(
+            run2,
+            [WalkSites.Carvana],
+            ["Toyota Prius"],
+            async (site, _, ct) =>
+            {
+                await WalkSearchPages.CollectLinksAsync(
+                    site,
+                    "https://www.carvana.com/cars/filters?zip=32833",
+                    WalkPairSearches.UnboundedPool,
+                    async (url, _, _, _, touchCt) =>
+                    {
+                        if (url != onPageOne.Url)
+                        {
+                            return false;
+                        }
+
+                        await upsert.UpsertAsync(onPageOne, run2, touchCt);
+                        return true;
+                    },
+                    (_, pageNumber, _) => pageNumber switch
+                    {
+                        1 => Task.FromResult(new SearchPageContent(
+                            [.. Enumerable.Range(0, 3).Select(i => new PageLink($"https://www.carvana.com/vehicle/a{i}", ""))],
+                            "",
+                            null,
+                            ["https://www.carvana.com/vehicle/a2"])),
+                        2 => Task.FromResult(new SearchPageContent(
+                            [.. Enumerable.Range(0, 3).Select(i => new PageLink($"https://www.carvana.com/vehicle/b{i}", ""))])),
+                        _ when failPageThree => throw new TimeoutException("page 3 timed out"),
+                        _ => Task.FromResult(new SearchPageContent([])),
+                    },
+                    (pageNumber, _) => failedPage ??= pageNumber,
+                    _ => { },
+                    () => { },
+                    ct,
+                    onUnrendered: url =>
+                    {
+                        unrenderedKnownUrls.Add(url);
+                        renderingDegraded = true;
+                    });
+                return new WalkPairOutcome(0, 0, new DroppedBreakdown(0, 0, 0, 0), FailedPage: failedPage, RenderingDegraded: renderingDegraded);
+            },
+            (_, _) => { },
+            (_, _, ex) => throw ex,
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        SearchDiff diff = await new LedgerDiffService(db).ComputeAsync(run2, DaughterScenario, unrenderedKnownUrls, CancellationToken.None);
+        return (diff, run2.Sources);
+    }
+
+    [Fact]
     public async Task ComputeAsync_AWalkWhoseSecondAutotraderPageFailed_ReportsPagesUnreadForAKnownPostingThatSortedOntoPageTwo()
     {
         // The gap from run session odonomics-cd, 2026-09-27: a 39-match search whose second page

@@ -286,9 +286,84 @@ public class WalkCoverageTests
 
         Assert.Equal([true, false], summaries.Select(s => s.RenderingDegraded));
         Assert.Equal([false, false], summaries.Select(s => s.Capped));
-        Assert.Equal("site-a:Insight,unread:site-a:Insight,site-a:Prius", run.Sources);
+        Assert.Equal("site-a:Insight,unread:site-a:Insight,swept:site-a:Insight,site-a:Prius", run.Sources);
         Assert.Equal(["site-a:Insight"], RunSources.UnreadCoverage(run));
         Assert.Empty(RunSources.PartialCoverage(run));
+    }
+
+    [Fact]
+    public async Task RunAsync_APairReadToItsNaturalEndWhoseRenderingLookedDegraded_AlsoStampsASweptToken()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), RenderingDegraded: true)),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Equal("site-a:Insight,unread:site-a:Insight,swept:site-a:Insight", run.Sources);
+        Assert.Equal(["site-a:Insight"], RunSources.SweptCoverage(run));
+        Assert.Equal(["site-a:Insight"], RunSources.Split(run));
+    }
+
+    [Theory]
+    [InlineData(true, null, false)]
+    [InlineData(false, 3, false)]
+    [InlineData(false, null, true)]
+    public async Task RunAsync_APairThatStoppedEarlyOrLostAPage_NeverStampsASweptToken(bool capped, int? failedPage, bool fellShortOfStatedCount)
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), Capped: capped, FailedPage: failedPage, SearchFellShortOfStatedCount: fellShortOfStatedCount, RenderingDegraded: true)),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Empty(RunSources.SweptCoverage(run));
+        Assert.Equal(["site-a:Insight"], RunSources.UnreadCoverage(run));
+    }
+
+    [Fact]
+    public async Task RunAsync_APairWithNothingUnread_NeverStampsASweptToken()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0))),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Equal("site-a:Insight", run.Sources);
     }
 
     [Fact]

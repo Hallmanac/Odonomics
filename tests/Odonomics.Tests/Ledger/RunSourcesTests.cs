@@ -64,6 +64,16 @@ public class RunSourcesTests
     }
 
     [Fact]
+    public void Split_LeavesOutTheSweptMarkersAndSweptCoverageNamesThem()
+    {
+        RunEntity run = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), $"cars.com:Prius,{RunSources.UnreadKey("cars.com:Prius")},{RunSources.SweptKey("cars.com:Prius")}");
+
+        Assert.Equal(["cars.com:Prius"], RunSources.Split(run));
+        Assert.Equal(["cars.com:Prius"], RunSources.SweptCoverage(run));
+        Assert.True(RunSources.IsPartial(run, "cars.com:Prius"));
+    }
+
+    [Fact]
     public void LatestCoverageBySource_APartialMarker_IsNotACoverageEntryOfItsOwn()
     {
         RunEntity run = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), $"carvana:Prius,{RunSources.PartialKey("carvana:Prius")}");
