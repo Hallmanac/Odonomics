@@ -20,9 +20,16 @@ public static class AuctionChecks
         || now - check.CheckedAt > RecheckInterval;
 
     /// <summary>Stores <paramref name="result"/> on <paramref name="vehicle"/>, replacing whatever the
-    /// last lookup stored, and stamps it with <paramref name="checkedAt"/>.</summary>
+    /// last lookup stored, and stamps it with <paramref name="checkedAt"/>. A could-not-read result tells
+    /// nothing about whether a sale happened, so it never replaces a stored found sale: that row is left
+    /// exactly as it was, its old <c>CheckedAt</c> included, so the vehicle stays due for another lookup.</summary>
     public static AuctionCheckEntity Apply(VehicleEntity vehicle, AuctionLookupResult result, DateTimeOffset checkedAt)
     {
+        if (vehicle.AuctionCheck is { Outcome: AuctionCheckOutcome.Found } stored && result.Outcome == AuctionCheckOutcome.CouldNotRead)
+        {
+            return stored;
+        }
+
         AuctionCheckEntity check = vehicle.AuctionCheck ?? new AuctionCheckEntity { Vin = vehicle.Vin, Outcome = result.Outcome, CheckedAt = checkedAt };
         AuctionRecord? record = result.Record;
         check.Outcome = result.Outcome;

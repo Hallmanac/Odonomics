@@ -55,7 +55,7 @@ The exclusion reads the stored result and makes no network call, so it holds for
 
 - A vehicle drops out of the rank only after `odo title check` has looked it up. Until then it ranks, with the check's result unknown.
 - `odo research` and `odo title check` with no VINs both pick vehicles the way rank scores them, so neither spends a lookup on a vehicle rank excludes for its sale. A found sale is therefore not looked up again on the seven-day schedule unless you name its VIN.
-- The exclusion goes away on its own if a later lookup of that VIN stores not found or could not read, since it is recomputed from the stored result on every run.
+- The exclusion goes away on its own if a later lookup of that VIN stores not found, since it is recomputed from the stored result on every run. A later lookup that could not read the archives never replaces a stored found sale: the sale and the exclusion stay, and the stored lookup keeps its old date so naming the VIN looks it up again.
 
 The `salvage-seller` red flag from `odo research` (a dealer name that is a known salvage marketplace in the Marketcheck history) is a different signal and stays a warning only.
 
