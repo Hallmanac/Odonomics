@@ -685,7 +685,14 @@ public static class WalkCommand
                     FeePosture = feeStatement?.Posture,
                     ItemizedFeesTotal = feeStatement?.ItemizedTotal,
                     TitleBrandPhrase = TitleBrandStatements.Read(bodyText),
+                    SmartKeyEntry = WindowStickerEquipment.StatusOf(outcome.Result.SmartKeyEntry),
+                    PushButtonStart = WindowStickerEquipment.StatusOf(outcome.Result.PushButtonStart),
                 };
+                if (candidate.SmartKeyEntry != EquipmentStatus.Unknown || candidate.PushButtonStart != EquipmentStatus.Unknown)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: window sticker says smart-key entry {candidate.SmartKeyEntry.ToString().ToLowerInvariant()}, push-button start {candidate.PushButtonStart.ToString().ToLowerInvariant()}[/]");
+                }
+
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);
 

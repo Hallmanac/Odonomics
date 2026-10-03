@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Odonomics.Domain;
 using Odonomics.Ledger;
 using Odonomics.Marketcheck;
 
@@ -666,5 +667,77 @@ public class LedgerUpsertServiceTests
         PostingEntity posting = db.Postings.Single();
         Assert.Equal(149m, posting.ShippingFee);
         Assert.Null(posting.PickupLocation);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_CandidateWithNoSticker_StoresUnknownEquipmentWithNoSource()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("JTDBCMFE7P3014805", 19990m), run, CancellationToken.None);
+
+        VehicleEntity vehicle = db.Vehicles.Single();
+        Assert.Equal(VehicleEquipment.Unknown, vehicle.StoredEquipment);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_CandidateReadFromAWindowSticker_StoresBothStatusesWithTheStickerAsSource()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("JTDBCMFE7P3014805", 19990m) with { SmartKeyEntry = EquipmentStatus.Absent, PushButtonStart = EquipmentStatus.Absent }, run, CancellationToken.None);
+
+        using OdonomicsDbContext reread = testDb.CreateContext();
+        VehicleEntity vehicle = reread.Vehicles.Single();
+        Assert.Equal(new EquipmentFact(EquipmentStatus.Absent, EquipmentSource.WindowSticker), vehicle.StoredEquipment.SmartKeyEntry);
+        Assert.Equal(new EquipmentFact(EquipmentStatus.Absent, EquipmentSource.WindowSticker), vehicle.StoredEquipment.PushButtonStart);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_RevisitWithoutAStickerAfterOneWasRead_KeepsTheStoredStatuses()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "walk");
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "walk");
+        db.Runs.AddRange(run1, run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("JTDBCMFE7P3014805", 19990m) with { PushButtonStart = EquipmentStatus.Absent }, run1, CancellationToken.None);
+        await service.UpsertAsync(Candidate("JTDBCMFE7P3014805", 19990m), run2, CancellationToken.None);
+
+        VehicleEntity vehicle = db.Vehicles.Single();
+        Assert.Equal(new EquipmentFact(EquipmentStatus.Absent, EquipmentSource.WindowSticker), vehicle.StoredEquipment.PushButtonStart);
+        Assert.Equal(EquipmentStatus.Unknown, vehicle.StoredEquipment.SmartKeyEntry.Status);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_RevisitThatReadsAStickerOnACarWithNoneStored_FillsItIn()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "walk");
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "walk");
+        db.Runs.AddRange(run1, run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("JTDBCMFE7P3014805", 19990m), run1, CancellationToken.None);
+        await service.UpsertAsync(Candidate("JTDBCMFE7P3014805", 19990m) with { SmartKeyEntry = EquipmentStatus.Present, PushButtonStart = EquipmentStatus.Present }, run2, CancellationToken.None);
+
+        VehicleEntity vehicle = db.Vehicles.Single();
+        Assert.Equal(EquipmentStatus.Present, vehicle.StoredEquipment.SmartKeyEntry.Status);
+        Assert.Equal(EquipmentSource.WindowSticker, vehicle.StoredEquipment.PushButtonStart.Source);
     }
 }

@@ -1,3 +1,5 @@
+using Odonomics.Domain;
+
 namespace Odonomics.Ledger;
 
 /// <summary>A fully-resolved candidate ready to reach the ledger: it always carries a VIN and a
@@ -61,4 +63,12 @@ public sealed record ListingCandidate
     /// <summary>The title-brand phrase the page's own text stated, as read (see
     /// <see cref="Walk.TitleBrandStatements"/>); null when it stated none.</summary>
     public string? TitleBrandPhrase { get; init; }
+
+    /// <summary>What the listing's window sticker or factory equipment list says about smart-key entry, when the
+    /// page had one. Unknown when it had none (a dealer's description does not count), in which case the
+    /// upsert leaves whatever an earlier sighting stored.</summary>
+    public EquipmentStatus SmartKeyEntry { get; init; }
+
+    /// <summary>What that same sticker says about push-button start, with the same rule as <see cref="SmartKeyEntry"/>.</summary>
+    public EquipmentStatus PushButtonStart { get; init; }
 }

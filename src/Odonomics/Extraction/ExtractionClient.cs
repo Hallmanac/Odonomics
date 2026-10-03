@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Odonomics.Domain;
 
 namespace Odonomics.Extraction;
 
@@ -16,7 +17,9 @@ public sealed record ExtractionResult(
     [property: JsonPropertyName("mileage")] int? Mileage,
     [property: JsonPropertyName("dealerName")] string? DealerName,
     [property: JsonPropertyName("dealerLocation")] string? DealerLocation,
-    [property: JsonPropertyName("fuelType")] string? FuelType = null);
+    [property: JsonPropertyName("fuelType")] string? FuelType = null,
+    [property: JsonPropertyName("smartKeyEntry")] string? SmartKeyEntry = null,
+    [property: JsonPropertyName("pushButtonStart")] string? PushButtonStart = null);
 
 public sealed record ExtractionOutcome(ExtractionResult? Result, decimal CostUsd, string? Error);
 
@@ -62,7 +65,7 @@ public sealed class ExtractionClient
     public Task<ExtractionOutcome> ExtractAsync(string pageText, CancellationToken cancellationToken)
     {
         const int maxChars = 12_000;
-        string truncated = pageText.Length > maxChars ? pageText[..maxChars] : pageText;
+        string truncated = WindowStickerEquipment.TextForExtraction(pageText, maxChars);
         string userPrompt = _promptTemplate.Replace("{{PAGE_TEXT}}", truncated);
 
         return !string.IsNullOrWhiteSpace(_anthropicApiKey) && _http is not null
@@ -270,7 +273,11 @@ public sealed class ExtractionClient
             extracted = extracted with { DealerLocation = null };
         }
 
-        return extracted;
+        return extracted with
+        {
+            SmartKeyEntry = WindowStickerEquipment.Ground(extracted.SmartKeyEntry, EquipmentFeatures.SmartKeyEntry, pageText),
+            PushButtonStart = WindowStickerEquipment.Ground(extracted.PushButtonStart, EquipmentFeatures.PushButtonStart, pageText),
+        };
     }
 
     private static readonly Regex NumberToken = new(@"\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
