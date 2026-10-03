@@ -33,19 +33,20 @@ public static class ScenarioLoader
         {
             Filters = scenario.Filters with
             {
-                RequiredFeatures = CanonicalRequiredFeatures(scenario.Filters.RequiredFeatures ?? []),
+                RequiredFeatures = CanonicalFeatures("requiredFeatures", scenario.Filters.RequiredFeatures ?? []),
+                PreferredFeatures = CanonicalFeatures("preferredFeatures", scenario.Filters.PreferredFeatures ?? []),
             },
         };
     }
 
-    private static List<string> CanonicalRequiredFeatures(IReadOnlyList<string> requiredFeatures)
+    private static List<string> CanonicalFeatures(string field, IReadOnlyList<string> names)
     {
         List<string> result = [];
-        foreach (string name in requiredFeatures)
+        foreach (string name in names)
         {
             string feature = EquipmentFeatures.Canonical(name)
                 ?? throw new JsonException(
-                    $"filters.requiredFeatures has \"{name}\", which is not a tracked feature (use {string.Join(" or ", EquipmentFeatures.All.Select(f => $"\"{f}\""))})");
+                    $"filters.{field} has \"{name}\", which is not a tracked feature (use {string.Join(" or ", EquipmentFeatures.All.Select(f => $"\"{f}\""))})");
             if (!result.Contains(feature))
             {
                 result.Add(feature);

@@ -34,6 +34,7 @@ public static class Scorer
             MpgUnknown = mpgUnknown,
             Cost = cost,
             UnconfirmedFeatures = UnconfirmedFeatures(vehicle, scenario),
+            PreferredPresent = PreferredPresent(vehicle.Equipment, scenario.Filters.PreferredFeatures),
         };
     }
 
@@ -41,6 +42,11 @@ public static class Scorer
     /// order. A car with an unknown status is never excluded for it, only flagged to confirm.</summary>
     public static IReadOnlyList<string> UnconfirmedFeatures(VehicleForScoring vehicle, Scenario scenario) =>
         [.. scenario.Filters.RequiredFeatures.Where(feature => vehicle.Equipment.For(feature).Status == EquipmentStatus.Unknown)];
+
+    /// <summary>The preferred features whose status is present, in the scenario's order. Absent and unknown are
+    /// left out on purpose: a preference only ever adds a marker.</summary>
+    public static IReadOnlyList<string> PreferredPresent(VehicleEquipment equipment, IReadOnlyList<string> preferredFeatures) =>
+        [.. preferredFeatures.Where(feature => equipment.For(feature).Status == EquipmentStatus.Present)];
 
     public static IReadOnlyList<string> FilterReasons(VehicleForScoring vehicle, Scenario scenario)
     {

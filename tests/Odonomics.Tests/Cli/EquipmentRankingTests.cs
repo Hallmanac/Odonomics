@@ -146,6 +146,61 @@ public class EquipmentRankingTests
         Assert.Equal(["keyless entry"], score.UnconfirmedFeatures);
     }
 
+    [Theory]
+    [InlineData(EquipmentStatus.Present, true)]
+    [InlineData(EquipmentStatus.Absent, false)]
+    [InlineData(EquipmentStatus.Unknown, false)]
+    public void Score_SmartKeyEntryIsPreferred_MarksOnlyACarWhereItIsKnownPresent(EquipmentStatus smartKey, bool marked)
+    {
+        VehicleEntity vehicle = CorollaHybrid(smartKey: smartKey, pushButton: EquipmentStatus.Present, fob: EquipmentStatus.Present);
+
+        Score score = Scorer.Score(RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery, DaughterScenario.Zip, DaughterScenario.RadiusMiles), DaughterScenario);
+
+        Assert.True(score.Passes, string.Join("; ", score.FailureReasons));
+        Assert.Equal(marked ? ["smart-key entry"] : [], score.PreferredPresent);
+    }
+
+    [Fact]
+    public void Score_SmartKeyAbsentWithAFob_StillRanksWithTheSameCostAsAScenarioWithoutThePreference()
+    {
+        VehicleEntity vehicle = CorollaHybrid(smartKey: EquipmentStatus.Absent, pushButton: EquipmentStatus.Present, fob: EquipmentStatus.Present);
+        Scenario withoutPreference = DaughterScenario with { Filters = DaughterScenario.Filters with { PreferredFeatures = [] } };
+
+        Score preferring = Scorer.Score(RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery, DaughterScenario.Zip, DaughterScenario.RadiusMiles), DaughterScenario);
+        Score plain = Scorer.Score(RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery, DaughterScenario.Zip, DaughterScenario.RadiusMiles), withoutPreference);
+
+        Assert.True(preferring.Passes, string.Join("; ", preferring.FailureReasons));
+        Assert.Empty(preferring.PreferredPresent);
+        Assert.Empty(preferring.UnconfirmedFeatures);
+        Assert.Equal(plain.Cost, preferring.Cost);
+    }
+
+    [Fact]
+    public void Score_NoPreferredFeatures_MarksNothingEvenWhenSmartKeyIsPresent()
+    {
+        VehicleEntity vehicle = CorollaHybrid(smartKey: EquipmentStatus.Present);
+        Scenario withoutPreference = DaughterScenario with { Filters = DaughterScenario.Filters with { PreferredFeatures = [] } };
+
+        Score score = Scorer.Score(RankCommand.ForScoring(vehicle, NoCoverage, Fulfillment.Delivery, DaughterScenario.Zip, DaughterScenario.RadiusMiles), withoutPreference);
+
+        Assert.Empty(score.PreferredPresent);
+    }
+
+    [Theory]
+    [InlineData(EquipmentStatus.Present, true)]
+    [InlineData(EquipmentStatus.Absent, false)]
+    [InlineData(EquipmentStatus.Unknown, false)]
+    public void EquipmentLines_SmartKeyIsPreferred_PrintsTheMarkerOnlyWhenPresent(EquipmentStatus smartKey, bool marked)
+    {
+        var equipment = new VehicleEquipment(
+            new EquipmentFact(smartKey, smartKey == EquipmentStatus.Unknown ? EquipmentSource.None : EquipmentSource.WindowSticker),
+            EquipmentFact.Unknown);
+
+        IReadOnlyList<string> lines = ShowRenderer.EquipmentLines(equipment, DaughterScenario.Filters.RequiredFeatures, DaughterScenario.Filters.PreferredFeatures);
+
+        Assert.Equal(marked, lines.Contains("  [green]smart key[/]"));
+    }
+
     [Fact]
     public void EquipmentLines_ShowsBothStatusesWithTheirSourcesAndTheRequirementOutcome()
     {

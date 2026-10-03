@@ -52,7 +52,7 @@ Four fields are keyed by model, and each key is the same "Make Model" string, su
 - `"keyless entry"` is satisfied by either a remote keyless fob or smart-key proximity entry. It is present when either is present, absent only when the window sticker or the trim table confirms neither, and unknown otherwise. A car whose proximity entry is absent but whose fob is not yet known stays unknown, so it is ranked with a "confirm keyless entry" note and not excluded.
 - `"smart-key entry"` is the stricter reading: proximity entry only. A plain fob "Keyless Entry" does not satisfy it, and a car with only a fob is excluded when a scenario sets it.
 
-The shipped scenario requires `"keyless entry"` and `"push-button start"`, following Brian's words "keyless or smart key entry and push-to-start". If he rules that a fob is not enough, changing the one entry to `"smart-key entry"` in `scenarios/daughter.json` is the whole change. A scenario that leaves the field out requires nothing, and a car is then ranked as it was before.
+The shipped scenario requires `"keyless entry"` and `"push-button start"`, following Brian's words "keyless or smart key entry and push-to-start". If he rules that a fob is not enough, changing the one entry to `"smart-key entry"` in `scenarios/daughter.json` is the whole change. His ruling so far is that touch-to-unlock is preferred but a fob alone is not a deal breaker, which is what `filters.preferredFeatures` (below) is for. A scenario that leaves the field out requires nothing, and a car is then ranked as it was before.
 
 Each vehicle carries a status for each feature: present, absent, or unknown, with its source. The sources rank in this order:
 
@@ -61,6 +61,14 @@ Each vehicle carries a status for each feature: present, absent, or unknown, wit
 3. Nothing else. A dealer's description never confirms or rules out either feature.
 
 A car whose status for a required feature is absent is excluded by `odo rank`, with the feature and the source named in its reason, such as "push-button start is absent (window sticker), which the scenario requires". The exclusion only applies to a confirmed absence. A car whose status is unknown is still ranked, and `odo rank` prints a yellow note under its row for each unknown required feature, such as "confirm push-button start", so it is a prompt to check with the dealer and not a penalty. `odo research` and `odo title check` score cars the same way, so neither spends a lookup on a car `odo rank` excludes for equipment. `odo show` prints both statuses and their sources in an Equipment section, along with the same "confirm" note or a line saying `odo rank` excludes the car, but it still shows the car, as it does for any other filter.
+
+### Preferred features
+
+`filters.preferredFeatures` is optional and takes the same names as `requiredFeatures`, with the same case-insensitive matching and the same `ScenarioLoader` check. It names equipment you would like a car to have but will not insist on. A preference only ever adds a marker: it never excludes a car, never adds a "confirm" note, and never changes a score or a monthly cost.
+
+When a car's status for a preferred feature is present, `odo rank` prints the feature's short marker on its own green line under the car's row, and `odo show` prints the same marker at the end of its Equipment section. The marker for `"smart-key entry"` is `smart key`, and the one for `"keyless entry"` is `keyless`. A car whose status is absent or unknown prints nothing, so a car with only a remote fob ranks exactly where it would without the preference, just without the marker.
+
+The shipped scenario sets `"preferredFeatures": ["smart-key entry"]` while still requiring `"keyless entry"` and `"push-button start"`, per Brian's ruling of 2026-10-03: "Prefer the touch-to-unlock, but it's not a deal breaker if it's only keyless fob."
 
 ### The factory trim table
 

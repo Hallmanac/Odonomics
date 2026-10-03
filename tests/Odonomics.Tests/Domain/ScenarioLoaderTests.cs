@@ -434,6 +434,38 @@ public class ScenarioLoaderTests
     }
 
     [Fact]
+    public void Parse_PreferredFeaturesOmitted_PrefersNothing()
+    {
+        Assert.Empty(ScenarioLoader.Parse(ScenarioWithFilters("")).Filters.PreferredFeatures);
+    }
+
+    [Fact]
+    public void Parse_PreferredFeaturesNamed_AreReadInTheirCanonicalSpelling()
+    {
+        Scenario scenario = ScenarioLoader.Parse(ScenarioWithFilters("\"preferredFeatures\": [\"Smart-Key Entry\", \"smart-key entry\"],"));
+
+        Assert.Equal(["smart-key entry"], scenario.Filters.PreferredFeatures);
+    }
+
+    [Fact]
+    public void Parse_PreferredFeatureNotTracked_ThrowsNamingTheField()
+    {
+        JsonException error = Assert.ThrowsAny<JsonException>(() => ScenarioLoader.Parse(ScenarioWithFilters("\"preferredFeatures\": [\"heated seats\"],")));
+
+        Assert.Contains("filters.preferredFeatures", error.Message);
+        Assert.Contains("heated seats", error.Message);
+    }
+
+    [Fact]
+    public void Load_ShippedDaughterScenario_PrefersSmartKeyEntryWithoutRequiringIt()
+    {
+        Scenario scenario = ScenarioLoader.Load(DaughterScenarioPath);
+
+        Assert.Equal(["smart-key entry"], scenario.Filters.PreferredFeatures);
+        Assert.Equal(["keyless entry", "push-button start"], scenario.Filters.RequiredFeatures);
+    }
+
+    [Fact]
     public void Load_ShippedDaughterScenario_RequiresKeylessEntryAndPushButtonStart()
     {
         Scenario scenario = ScenarioLoader.Load(DaughterScenarioPath);

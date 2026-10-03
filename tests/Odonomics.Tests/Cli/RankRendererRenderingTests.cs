@@ -30,7 +30,8 @@ public class RankRendererRenderingTests
         decimal? itemizedFees = null,
         string? unmeasuredOnlyAtStore = null,
         string? priceNote = null,
-        IReadOnlyList<string>? unconfirmedFeatures = null)
+        IReadOnlyList<string>? unconfirmedFeatures = null,
+        IReadOnlyList<string>? preferredPresent = null)
     {
         var vehicle = new VehicleForScoring
         {
@@ -60,6 +61,7 @@ public class RankRendererRenderingTests
             MpgUnknown = mpgUnknown,
             Cost = cost,
             UnconfirmedFeatures = unconfirmedFeatures ?? [],
+            PreferredPresent = preferredPresent ?? [],
         };
     }
 
@@ -199,6 +201,22 @@ public class RankRendererRenderingTests
         string afterRow = string.Join(" ", lines.Skip(row + 1).Take(3).Select(line => line.Trim()));
         Assert.Contains("confirm push-button start", afterRow);
         Assert.Single(lines, line => line.Contains("confirm push-button start"));
+    }
+
+    [Fact]
+    public void Render_VehicleWithAPreferredFeaturePresent_PrintsItsMarkerUnderItsRowAndNothingForOneWithout()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score withSmartKey = BuildScore("JTDBCMFE7P3014805", 2023, "Toyota", "Corolla Hybrid", 19990m, cost: cost, preferredPresent: ["smart-key entry"]);
+        Score without = BuildScore("4T1G11AK0LU654321", 2025, "Toyota", "Corolla Hybrid", 22800m, cost: cost);
+
+        string[] lines = Render([withSmartKey, without], budget: null);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Contains(lines, line => line.Contains("Ranked (2)"));
+        Assert.Single(lines, line => line.Contains("smart key"));
+        int row = Array.FindIndex(lines, line => line.Contains("JTDBCMFE7P3014805"));
+        Assert.Contains("smart key", string.Join(" ", lines.Skip(row + 1).Take(3)));
     }
 
     [Fact]

@@ -22,6 +22,13 @@ public sealed record HardFilters
     /// <see cref="ScenarioLoader"/> rejects a name that is not a tracked feature.</summary>
     public IReadOnlyList<string> RequiredFeatures { get; init; } = [];
 
+    /// <summary>Equipment the scenario would like a candidate to have, by the same names as
+    /// <see cref="RequiredFeatures"/>. It is display only: `odo rank` and `odo show` print a short marker
+    /// (see <see cref="EquipmentFeatures.Marker"/>) for a car whose status for one is present, and a car
+    /// without it, or with it unknown, is neither excluded, noted, nor scored any differently.
+    /// <see cref="ScenarioLoader"/> rejects a name that is not a tracked feature.</summary>
+    public IReadOnlyList<string> PreferredFeatures { get; init; } = [];
+
     public int MinYearFor(string makeModel) =>
         MinModelYearOverrides.GetValueOrDefault(makeModel, MinModelYear);
 }

@@ -14,4 +14,9 @@ public sealed record Score
     /// <summary>The required features (see <see cref="HardFilters.RequiredFeatures"/>) whose status is still
     /// unknown for this vehicle, so `odo rank` can say "confirm ...". Display only: it never excludes the car.</summary>
     public IReadOnlyList<string> UnconfirmedFeatures { get; init; } = [];
+
+    /// <summary>The preferred features (see <see cref="HardFilters.PreferredFeatures"/>) this vehicle is known
+    /// to have, so `odo rank` can print their markers. Display only: absent and unknown print nothing, and no
+    /// vehicle is excluded or scored differently for it.</summary>
+    public IReadOnlyList<string> PreferredPresent { get; init; } = [];
 }

@@ -70,7 +70,7 @@ public static class ShowCommand
 
         VehicleEquipment equipment = FactoryTrimTable.LoadShipped().Fill(vehicle.StoredEquipment, vehicle.Make, vehicle.Model, vehicle.Year, vehicle.Trim);
 
-        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice, priceNote, equipment, scenario.Filters.RequiredFeatures);
+        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice, priceNote, equipment, scenario.Filters.RequiredFeatures, scenario.Filters.PreferredFeatures);
         return 0;
     }
 

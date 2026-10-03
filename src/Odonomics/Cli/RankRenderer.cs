@@ -200,6 +200,11 @@ public static class RankRenderer
                 console.MarkupLine(confirmLine);
             }
 
+            if (PreferredMarkersLine(score) is string preferredLine)
+            {
+                console.MarkupLine(preferredLine);
+            }
+
             if (detail)
             {
                 if (PurchasePriceLine(score) is string purchasePriceLine)
@@ -250,6 +255,14 @@ public static class RankRenderer
         score.UnconfirmedFeatures.Count == 0
             ? null
             : $"    [yellow]{Markup.Escape(string.Join(", ", score.UnconfirmedFeatures.Select(EquipmentFeatures.ConfirmNote)))}[/]";
+
+    /// <summary>The line under a row's figures naming each preferred feature this vehicle is known to have, such as
+    /// "smart key" (see <see cref="Score.PreferredPresent"/>): green, on its own line so the row above keeps its
+    /// 80-column fit. Null when the vehicle has none, which includes a feature that is absent or unknown.</summary>
+    private static string? PreferredMarkersLine(Score score) =>
+        score.PreferredPresent.Count == 0
+            ? null
+            : $"    [green]{Markup.Escape(string.Join(", ", score.PreferredPresent.Select(EquipmentFeatures.Marker)))}[/]";
 
     private static string VehicleName(Score score) =>
         Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", VehicleNameMaxWidth);
