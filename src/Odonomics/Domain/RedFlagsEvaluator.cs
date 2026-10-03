@@ -51,7 +51,9 @@ public sealed record SellerGroupSummary(
 /// current price well above the listing-history price trajectory, or a listing that does not say what
 /// fees sit on top of its price at a dealer CarEdge says sells add-ons (see
 /// <see cref="AddOnsDealer"/>), or a stored salvage-auction sale (see <see cref="SalvageAuction"/>), or a title brand a listing's own
-/// text states (see <see cref="TitleBrandListed"/>).
+/// text states (see <see cref="TitleBrandListed"/>), or frame damage, a reported accident, or rental or fleet use that a
+/// listing's vehicle-history summary states (see <see cref="FrameDamageListed"/>, <see cref="AccidentReported"/>, and
+/// <see cref="RentalHistory"/>).
 /// Every threshold below is a
 /// deliberate v0 simplification, not a value NHTSA or Marketcheck hand us.
 /// </summary>
@@ -260,6 +262,60 @@ public static partial class RedFlagsEvaluator
                 "title-brand-listed",
                 $"the listing text says so: {string.Join("; ", named)}; confirm the title status before buying");
     }
+
+    /// <summary>The flag for a vehicle whose own listings state frame damage in their vehicle-history summary (see
+    /// <c>Walk.CarGurusHistory</c>). Each sighting is a source and the statement its listing printed, and the detail reads
+    /// like <c>cargurus states "Frame damage reported"</c>; a repeat (same source and statement, without regard to case)
+    /// is named once, and the sightings keep the order given. Tagged <c>frame-damage</c>. It states what the listing says
+    /// and tells the reader to confirm it; it is not a check of any record. Null when there are no sightings.</summary>
+    public static RedFlag? FrameDamageListed(IEnumerable<(string Source, string Statement)> sightings)
+    {
+        List<string> named = NamedSightings(sightings.Select(s => (s.Source, $"states \"{s.Statement}\"")));
+
+        return named.Count == 0
+            ? null
+            : new RedFlag(
+                "frame-damage",
+                $"the listing says frame damage was reported: {string.Join("; ", named)}; a frame-damaged car is a safety risk, so confirm it with the seller and an inspection before buying");
+    }
+
+    /// <summary>The flag for a vehicle whose own listings state one or more accidents in their vehicle-history summary.
+    /// Each sighting is a source and the count it printed; a count of zero or less raises nothing, a source naming
+    /// several counts is named once for each, and the sightings keep the order given. The tag is
+    /// <c>accident-reported</c> and the detail names the count, like <c>cargurus reports 2 accidents</c>. Null when no
+    /// sighting is of one or more.</summary>
+    public static RedFlag? AccidentReported(IEnumerable<(string Source, int Count)> sightings)
+    {
+        List<string> named = NamedSightings(sightings
+            .Where(s => s.Count >= 1)
+            .Select(s => (s.Source, $"reports {s.Count.ToString(CultureInfo.InvariantCulture)} {(s.Count == 1 ? "accident" : "accidents")}")));
+
+        return named.Count == 0
+            ? null
+            : new RedFlag(
+                "accident-reported",
+                $"the listing's history summary says so: {string.Join("; ", named)}; ask for the full history report and the repair records before buying");
+    }
+
+    /// <summary>The flag for a vehicle whose own listings state rental or fleet use in their vehicle-history summary.
+    /// Each sighting is a source and the statement it printed ("Reported as previous rental vehicle"); the tag is
+    /// <c>rental-history</c>, the detail names each statement, and the sightings keep the order given. Null when there
+    /// are none.</summary>
+    public static RedFlag? RentalHistory(IEnumerable<(string Source, string Statement)> sightings)
+    {
+        List<string> named = NamedSightings(sightings.Select(s => (s.Source, $"states \"{s.Statement}\"")));
+
+        return named.Count == 0
+            ? null
+            : new RedFlag(
+                "rental-history",
+                $"the listing's history summary says rental or fleet use: {string.Join("; ", named)}; ask how the car was used and maintained before buying");
+    }
+
+    private static List<string> NamedSightings(IEnumerable<(string Source, string Text)> sightings) =>
+        [.. sightings
+            .Select(s => $"{s.Source} {s.Text}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>The listing history grouped by seller (see <see cref="BuildSellerGroups"/>), for a
     /// caller like `odo show` that wants to render a syndicated 50-row history as a handful of

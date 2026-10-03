@@ -195,6 +195,13 @@ public static class ShowRenderer
         }
 
         AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Listing history summaries[/]");
+        foreach (string line in HistorySummaryLines(vehicle.Postings))
+        {
+            AnsiConsole.WriteLine(line);
+        }
+
+        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Postings[/]");
         AnsiConsole.Write(BuildPostingsTable(vehicle.Postings));
         foreach (string line in PostingAttributeLines(vehicle.Postings))
@@ -410,6 +417,23 @@ public static class ShowRenderer
     /// showed it, in posting order and then name order; empty when no posting has any.</summary>
     public static IReadOnlyList<string> PostingAttributeLines(IEnumerable<PostingEntity> postings) =>
         [.. postings.SelectMany(p => p.Attributes.OrderBy(a => a.Name, StringComparer.Ordinal).Select(a => $"  {p.Source} {a.Name}: {a.Value}"))];
+
+    /// <summary>The Listing history summaries section's lines: one per posting whose listing stated any of the
+    /// vehicle-history summary (see <see cref="PostingHistory"/>), newest first, each naming its source and when that
+    /// posting was last seen and then every field the listing stated, as it printed it. A posting stating none is left
+    /// out, since its silence is not a claim, and a vehicle none of whose postings stated any says so in one line.</summary>
+    public static IReadOnlyList<string> HistorySummaryLines(IEnumerable<PostingEntity> postings)
+    {
+        List<string> lines = [.. postings
+            .OrderByDescending(p => p.LastSeen)
+            .Select(p => (Posting: p, Phrases: p.History.Phrases()))
+            .Where(s => s.Phrases.Count > 0)
+            .Select(s => $"  {s.Posting.Source} (last seen {s.Posting.LastSeen:yyyy-MM-dd}): {string.Join(", ", s.Phrases)}")];
+
+        return lines.Count == 0
+            ? ["  none stated by any listing (only the CarGurus walk reads one)"]
+            : lines;
+    }
 
     /// <summary>A recall's report date as yyyy-MM-dd. NHTSA's recallsByVehicle endpoint reports it as
     /// dd/MM/yyyy text; anything that does not parse as that (an ISO date already, or a blank) is

@@ -46,7 +46,7 @@ public static class ShowCommand
         // itemized fees included. The fee and title-brand flags come from the postings and the salvage-auction flag from
         // the stored auction lookup, not the research.
         decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-        IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck), .. TitleBrandFlags.For(vehicle)];
+        IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck), .. TitleBrandFlags.For(vehicle), .. HistoryFlags.For(vehicle)];
 
         // The similar-price note compares against every vehicle in the ledger, so it needs them all, not just this
         // one. The dealers come too: a cars.com copy of a CarMax posting is told apart by its dealer's name, and

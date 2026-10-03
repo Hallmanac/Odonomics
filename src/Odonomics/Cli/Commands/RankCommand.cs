@@ -50,7 +50,7 @@ public static class RankCommand
             research[vehicle.Vin] = ResearchStatusFor(
                 vinRecordsByVin.GetValueOrDefault(vehicle.Vin),
                 VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource),
-                [.. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck), .. TitleBrandFlags.For(vehicle)]);
+                [.. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck), .. TitleBrandFlags.For(vehicle), .. HistoryFlags.For(vehicle)]);
         }
 
         RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets, detail);

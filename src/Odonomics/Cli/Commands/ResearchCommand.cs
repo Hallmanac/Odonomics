@@ -102,7 +102,7 @@ public static class ResearchCommand
                     }
 
                     decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-                    IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck), .. TitleBrandFlags.For(vehicle)];
+                    IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck), .. TitleBrandFlags.For(vehicle), .. HistoryFlags.For(vehicle)];
 
                     bool anyPieceFailed = IsPartiallyResearched(research);
 
