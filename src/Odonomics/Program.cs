@@ -145,6 +145,23 @@ var dealerCommand = new Command("dealer", "dealer-grade commands");
 dealerCommand.Add(dealerGradeCommand);
 rootCommand.Add(dealerCommand);
 
+var titleCheckVinsArgument = new Argument<string[]>("vins") { Description = "specific VINs to check; omit to check the top of the current rank", Arity = ArgumentArity.ZeroOrMore };
+var titleCheckTopOption = new Option<int?>("--top") { Description = $"check the first N vehicles of the current rank (default {TitleCheckCommand.DefaultTop}); not combined with VINs" };
+var titleCheckCommand = new Command("check", "look top-ranked VINs up in public salvage-auction archives over the browser you already launched, and flag a VIN that sold at a salvage auction");
+titleCheckCommand.Add(titleCheckVinsArgument);
+titleCheckCommand.Add(titleCheckTopOption);
+titleCheckCommand.Add(scenarioOption);
+titleCheckCommand.SetAction(async (parseResult, cancellationToken) =>
+{
+    string[] vins = parseResult.GetValue(titleCheckVinsArgument) ?? [];
+    int? top = parseResult.GetValue(titleCheckTopOption);
+    string scenarioPath = parseResult.GetValue(scenarioOption)!;
+    return await TitleCheckCommand.RunAsync(scenarioPath, vins, top, cancellationToken);
+});
+var titleCommand = new Command("title", "title-risk commands");
+titleCommand.Add(titleCheckCommand);
+rootCommand.Add(titleCommand);
+
 var budgetCommand = new Command("budget", "the fixed monthly running cost, then the max purchase price under the scenario for each target loan payment");
 budgetCommand.Add(scenarioOption);
 budgetCommand.Add(fulfillmentOption);

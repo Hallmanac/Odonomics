@@ -107,6 +107,19 @@ public class RankRendererRenderingTests
     }
 
     [Fact]
+    public void RankedVehicles_ReturnsOnlyTheRankedSectionBestFirst()
+    {
+        Score cheaper = BuildScore("VIN00000000000002", 2022, "Toyota", "Prius", 18000m, cost: BuildCost(Band.Point(300m), Band.Point(400m)));
+        Score dearer = BuildScore("VIN00000000000001", 2021, "Toyota", "Prius", 19000m, cost: BuildCost(Band.Point(300m), Band.Point(450m)));
+        Score excluded = BuildScore("VIN00000000000003", 2015, "Toyota", "Prius", 9000m, passes: false, failureReasons: ["too old"]);
+        Score noInsurance = BuildScore("VIN00000000000004", 2022, "Honda", "Insight", 17000m, insuranceUnknown: true, cost: BuildCost(Band.Point(250m), Band.Point(350m)));
+
+        IReadOnlyList<Score> ranked = RankRenderer.RankedVehicles([dearer, excluded, noInsurance, cheaper]);
+
+        Assert.Equal(["VIN00000000000002", "VIN00000000000001"], ranked.Select(s => s.Vehicle.Vin));
+    }
+
+    [Fact]
     public void Render_RankedCorollaHybridWithRedFlagAndTwoDigitRecalls_KeepsEveryValueUnbrokenAt80Columns()
     {
         CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
