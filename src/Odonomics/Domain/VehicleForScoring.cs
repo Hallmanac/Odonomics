@@ -108,7 +108,7 @@ public sealed record VehicleForScoring
     /// whether the research column reads as flagged.</summary>
     public string? PriceNote { get; init; }
 
-    /// <summary>The vehicle's smart-key entry and push-button start, from its window sticker where a listing had
+    /// <summary>The vehicle's smart-key entry, keyless fob, and push-button start, from its window sticker where a listing had
     /// one and otherwise from the factory trim table (see <see cref="FactoryTrimTable"/>); unknown when neither
     /// says. <see cref="Scorer.FilterReasons"/> excludes on a confirmed absence of a feature the scenario
     /// requires, and <see cref="Scorer.UnconfirmedFeatures"/> turns an unknown one into a note.</summary>

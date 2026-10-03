@@ -412,6 +412,20 @@ public class ScenarioLoaderTests
     }
 
     [Fact]
+    public void Parse_RequiredFeatureKeylessEntry_IsATrackedFeatureApartFromSmartKeyEntry()
+    {
+        Scenario scenario = ScenarioLoader.Parse(ScenarioWithFilters("\"requiredFeatures\": [\"Keyless Entry\", \"smart-key entry\"],"));
+
+        Assert.Equal(["keyless entry", "smart-key entry"], scenario.Filters.RequiredFeatures);
+    }
+
+    [Fact]
+    public void Parse_RequiredFeatureKeylessFobEntry_IsNotRequirable()
+    {
+        Assert.ThrowsAny<JsonException>(() => ScenarioLoader.Parse(ScenarioWithFilters("\"requiredFeatures\": [\"keyless fob entry\"],")));
+    }
+
+    [Fact]
     public void Parse_RequiredFeatureNotTracked_Throws()
     {
         JsonException error = Assert.ThrowsAny<JsonException>(() => ScenarioLoader.Parse(ScenarioWithFilters("\"requiredFeatures\": [\"heated seats\"],")));
@@ -420,10 +434,10 @@ public class ScenarioLoaderTests
     }
 
     [Fact]
-    public void Load_ShippedDaughterScenario_RequiresSmartKeyEntryAndPushButtonStart()
+    public void Load_ShippedDaughterScenario_RequiresKeylessEntryAndPushButtonStart()
     {
         Scenario scenario = ScenarioLoader.Load(DaughterScenarioPath);
 
-        Assert.Equal(["smart-key entry", "push-button start"], scenario.Filters.RequiredFeatures);
+        Assert.Equal(["keyless entry", "push-button start"], scenario.Filters.RequiredFeatures);
     }
 }

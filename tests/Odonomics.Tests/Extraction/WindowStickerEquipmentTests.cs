@@ -41,10 +41,78 @@ public class WindowStickerEquipmentTests
         ?? throw new InvalidOperationException("ExtractionClient.GroundInPageText not found");
 
     [Fact]
-    public void Ground_StickerListsOnlyKeylessEntry_KeepsAbsentForBothFeatures()
+    public void Ground_StickerListsOnlyKeylessEntry_KeepsSmartKeyAbsentAndFobPresent()
     {
         Assert.Equal("absent", WindowStickerEquipment.Ground("absent", EquipmentFeatures.SmartKeyEntry, DealerClaimsPushButtonStickerDoesNot));
-        Assert.Equal("absent", WindowStickerEquipment.Ground("absent", EquipmentFeatures.PushButtonStart, DealerClaimsPushButtonStickerDoesNot));
+        Assert.Equal("present", WindowStickerEquipment.Ground("present", EquipmentFeatures.KeylessFobEntry, DealerClaimsPushButtonStickerDoesNot));
+        Assert.Null(WindowStickerEquipment.Ground("absent", EquipmentFeatures.KeylessFobEntry, DealerClaimsPushButtonStickerDoesNot));
+    }
+
+    [Theory]
+    [InlineData("absent")]
+    [InlineData("present")]
+    public void Ground_StickerListsOnlyKeylessEntry_LeavesPushButtonStartUnknown(string claimed)
+    {
+        Assert.Null(WindowStickerEquipment.Ground(claimed, EquipmentFeatures.PushButtonStart, DealerClaimsPushButtonStickerDoesNot));
+    }
+
+    [Theory]
+    [InlineData("Window Sticker\nStandard Equipment\nTurn Key Ignition\nPower Door Locks")]
+    [InlineData("Window Sticker\nStandard Equipment\nKeyed Ignition\nKeyless Entry")]
+    [InlineData("Window Sticker\nStandard Equipment\nNo Push Button Start\nPower Door Locks")]
+    [InlineData("Window Sticker\nStandard Equipment\nWithout push-to-start\nKeyless Entry")]
+    public void Ground_StickerStatesATurnKeyOrNoPushButtonStart_KeepsAbsent(string sticker)
+    {
+        Assert.Equal("absent", WindowStickerEquipment.Ground("absent", EquipmentFeatures.PushButtonStart, sticker));
+    }
+
+    [Fact]
+    public void Ground_PushButtonStartAbsentOnAStickerThatAlsoListsIt_IsDropped()
+    {
+        const string sticker = "Window Sticker\nTurn Key Ignition\nPush Button Start";
+
+        Assert.Null(WindowStickerEquipment.Ground("absent", EquipmentFeatures.PushButtonStart, sticker));
+    }
+
+    [Fact]
+    public void Ground_NoPushButtonStartStatement_DoesNotBackAPresentClaim()
+    {
+        const string sticker = "Window Sticker\nNo Push Button Start\nKeyless Entry";
+
+        Assert.Null(WindowStickerEquipment.Ground("present", EquipmentFeatures.PushButtonStart, sticker));
+    }
+
+    [Theory]
+    [InlineData("Window Sticker\nStandard Equipment\nTurn Key Ignition\nPower Door Locks", "absent")]
+    [InlineData("Window Sticker\nStandard Equipment\nNo Keyless Entry\nPower Door Locks", "absent")]
+    [InlineData("Window Sticker\nStandard Equipment\nTurn Key Ignition\nKeyless Entry", null)]
+    [InlineData("Window Sticker\nStandard Equipment\nPower Door Locks", null)]
+    public void Ground_KeylessFobAbsentClaim_NeedsAStatedLackAndNoFobWording(string sticker, string? expected)
+    {
+        Assert.Equal(expected, WindowStickerEquipment.Ground("absent", EquipmentFeatures.KeylessFobEntry, sticker));
+    }
+
+    [Fact]
+    public void Ground_KeylessFobPresentClaimFromDealerText_IsDropped()
+    {
+        Assert.Null(WindowStickerEquipment.Ground("present", EquipmentFeatures.KeylessFobEntry, DealerTextOnly + "\nKeyless Entry"));
+    }
+
+    [Fact]
+    public void StickerShapeOfJtdbcmfe7p3014805_ReadsAsKeylessEntryPresentSmartKeyAbsentAndPushButtonStartUnknown()
+    {
+        var extracted = new ExtractionResult("JTDBCMFE7P3014805", 2023, "Toyota", "Corolla Hybrid", "LE", 19990m, 41200, null, null, "Hybrid",
+            SmartKeyEntry: "absent", PushButtonStart: "absent", KeylessFobEntry: "present");
+
+        ExtractionResult grounded = (ExtractionResult)GroundInPageTextMethod.Invoke(null, [extracted, DealerClaimsPushButtonStickerDoesNot])!;
+        var equipment = new VehicleEquipment(
+            new EquipmentFact(WindowStickerEquipment.StatusOf(grounded.SmartKeyEntry), EquipmentSource.WindowSticker),
+            new EquipmentFact(WindowStickerEquipment.StatusOf(grounded.PushButtonStart), EquipmentSource.WindowSticker),
+            new EquipmentFact(WindowStickerEquipment.StatusOf(grounded.KeylessFobEntry), EquipmentSource.WindowSticker));
+
+        Assert.Equal(EquipmentStatus.Present, equipment.For(EquipmentFeatures.KeylessEntry).Status);
+        Assert.Equal(EquipmentStatus.Absent, equipment.For(EquipmentFeatures.SmartKeyEntry).Status);
+        Assert.Equal(EquipmentStatus.Unknown, equipment.For(EquipmentFeatures.PushButtonStart).Status);
     }
 
     [Fact]
@@ -58,6 +126,7 @@ public class WindowStickerEquipmentTests
     [Fact]
     public void Ground_StickerListsASmartKeySystemWithPushButtonStart_KeepsPresentForBothFeatures()
     {
+        Assert.Null(WindowStickerEquipment.Ground("present", EquipmentFeatures.KeylessFobEntry, "Window Sticker\nSmart Key System with Push Button Start"));
         Assert.Equal("present", WindowStickerEquipment.Ground("present", EquipmentFeatures.SmartKeyEntry, StickerWithSmartKeySystem));
         Assert.Equal("present", WindowStickerEquipment.Ground("present", EquipmentFeatures.PushButtonStart, StickerWithSmartKeySystem));
     }

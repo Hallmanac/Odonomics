@@ -45,7 +45,12 @@ Four fields are keyed by model, and each key is the same "Make Model" string, su
 
 ## Required features
 
-`filters.requiredFeatures` is optional. It lists equipment every candidate must have, using the names `"smart-key entry"` (proximity entry) and `"push-button start"`. A name matches ignoring case, and `ScenarioLoader` rejects any other name. The shipped scenario requires both, because Brian ruled that a candidate must have keyless or smart-key entry and push-to-start. A scenario that leaves the field out requires nothing, and a car is then ranked as it was before.
+`filters.requiredFeatures` is optional. It lists equipment every candidate must have, using the names `"keyless entry"`, `"smart-key entry"`, and `"push-button start"`. A name matches ignoring case, and `ScenarioLoader` rejects any other name. The two entry names mean different things:
+
+- `"keyless entry"` is satisfied by either a remote keyless fob or smart-key proximity entry. It is present when either is present, absent only when the window sticker or the trim table confirms neither, and unknown otherwise. A car whose proximity entry is absent but whose fob is not yet known stays unknown, so it is ranked with a "confirm keyless entry" note and not excluded.
+- `"smart-key entry"` is the stricter reading: proximity entry only. A plain fob "Keyless Entry" does not satisfy it, and a car with only a fob is excluded when a scenario sets it.
+
+The shipped scenario requires `"keyless entry"` and `"push-button start"`, following Brian's words "keyless or smart key entry and push-to-start". If he rules that a fob is not enough, changing the one entry to `"smart-key entry"` in `scenarios/daughter.json` is the whole change. A scenario that leaves the field out requires nothing, and a car is then ranked as it was before.
 
 Each vehicle carries a status for each feature: present, absent, or unknown, with its source. The sources rank in this order:
 
@@ -57,7 +62,7 @@ A car whose status for a required feature is absent is excluded by `odo rank`, w
 
 ### The factory trim table
 
-The trim table is one data file, `src/Odonomics/Data/factory-trim-equipment.json`, copied beside the program and read each time `odo rank`, `odo show`, `odo research`, or `odo title check` runs. Its rows come from a sourced research note, [factory-trim-sources.md](factory-trim-sources.md), which holds the research as written and says how each of its rows became an entry. The table covers the Honda Insight, Toyota Corolla Hybrid, Toyota Camry Hybrid, and Toyota Prius, and only where that research rated the answer high or medium confidence; a car with no row falls back to its window sticker. Each row names a make, a model as the ledger spells it (for example "Corolla Hybrid"), a range of model years, a trim, an answer of `"present"` or `"absent"` for `smartKeyEntry`, `pushButtonStart`, or both, and a `source` that says where the answer came from, plus an optional `confidence` and an optional `note` for a caveat (the shipped rows give both where they apply):
+The trim table is one data file, `src/Odonomics/Data/factory-trim-equipment.json`, copied beside the program and read each time `odo rank`, `odo show`, `odo research`, or `odo title check` runs. Its rows come from a sourced research note, [factory-trim-sources.md](factory-trim-sources.md), which holds the research as written and says how each of its rows became an entry. The table covers the Honda Insight, Toyota Corolla Hybrid, Toyota Camry Hybrid, and Toyota Prius, and only where that research rated the answer high or medium confidence; a car with no row falls back to its window sticker. Each row names a make, a model as the ledger spells it (for example "Corolla Hybrid"), a range of model years, a trim, an answer of `"present"` or `"absent"` for `smartKeyEntry`, `keylessFobEntry` (a remote keyless fob), `pushButtonStart`, or any of them, and a `source` that says where the answer came from, plus an optional `confidence` and an optional `note` for a caveat (the shipped rows give both where they apply):
 
 ```json
 {
@@ -78,6 +83,8 @@ The trim table is one data file, `src/Odonomics/Data/factory-trim-equipment.json
 }
 ```
 
+A row only needs `keylessFobEntry` where it says `smartKeyEntry` is absent, since proximity entry already makes `"keyless entry"` present. The shipped Honda Insight LX row (2019 to 2021, remote entry only) states `smartKeyEntry` absent and `keylessFobEntry` present, so those cars read keyless entry present. A row that says proximity entry is absent and says nothing about a fob leaves `"keyless entry"` unknown.
+
 A row applies to a car whose make, model, and trim match ignoring case and whose model year is inside the range. A car with no trim never matches. When more than one row applies to a car and they disagree about a feature, the table gives no answer for that feature, since a table that contradicts itself is not definite. The table is only ever read to fill an unknown status. It never replaces one a window sticker read, and what it fills is not stored in the ledger, so editing the file changes the next run's ranking with no walk. A malformed row stops the command with an error that names the row.
 
-To set the requirement on a scenario that does not have it, add `"requiredFeatures": ["smart-key entry", "push-button start"]` to its `filters` object, then run `odo walk <site> --revisit` so the cars already on the ledger get their window stickers read.
+To set the requirement on a scenario that does not have it, add `"requiredFeatures": ["keyless entry", "push-button start"]` to its `filters` object, then run `odo walk <site> --revisit` so the cars already on the ledger get their window stickers read.

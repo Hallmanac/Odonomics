@@ -148,6 +148,12 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
             vehicle.PushButtonStart = candidate.PushButtonStart;
             vehicle.PushButtonStartSource = EquipmentSource.WindowSticker;
         }
+
+        if (candidate.KeylessFobEntry != EquipmentStatus.Unknown)
+        {
+            vehicle.KeylessFobEntry = candidate.KeylessFobEntry;
+            vehicle.KeylessFobEntrySource = EquipmentSource.WindowSticker;
+        }
     }
 
     /// <summary>Sets the display-only attributes <paramref name="run"/> read from one posting's page

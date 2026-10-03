@@ -27,6 +27,8 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
             entity.Property(v => v.SmartKeyEntrySource).HasConversion<string>();
             entity.Property(v => v.PushButtonStart).HasConversion<string>();
             entity.Property(v => v.PushButtonStartSource).HasConversion<string>();
+            entity.Property(v => v.KeylessFobEntry).HasConversion<string>();
+            entity.Property(v => v.KeylessFobEntrySource).HasConversion<string>();
         });
 
         modelBuilder.Entity<PostingEntity>(entity =>

@@ -19,7 +19,8 @@ public sealed record ExtractionResult(
     [property: JsonPropertyName("dealerLocation")] string? DealerLocation,
     [property: JsonPropertyName("fuelType")] string? FuelType = null,
     [property: JsonPropertyName("smartKeyEntry")] string? SmartKeyEntry = null,
-    [property: JsonPropertyName("pushButtonStart")] string? PushButtonStart = null);
+    [property: JsonPropertyName("pushButtonStart")] string? PushButtonStart = null,
+    [property: JsonPropertyName("keylessFobEntry")] string? KeylessFobEntry = null);
 
 public sealed record ExtractionOutcome(ExtractionResult? Result, decimal CostUsd, string? Error);
 
@@ -277,6 +278,7 @@ public sealed class ExtractionClient
         {
             SmartKeyEntry = WindowStickerEquipment.Ground(extracted.SmartKeyEntry, EquipmentFeatures.SmartKeyEntry, pageText),
             PushButtonStart = WindowStickerEquipment.Ground(extracted.PushButtonStart, EquipmentFeatures.PushButtonStart, pageText),
+            KeylessFobEntry = WindowStickerEquipment.Ground(extracted.KeylessFobEntry, EquipmentFeatures.KeylessFobEntry, pageText),
         };
     }
 

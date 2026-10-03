@@ -63,6 +63,54 @@ public class FactoryTrimTableTests
     }
 
     [Theory]
+    [InlineData(2019)]
+    [InlineData(2020)]
+    [InlineData(2021)]
+    public void LoadShipped_HondaInsightLx_HasNoProximityEntryButAFobSoKeylessEntryIsPresent(int year)
+    {
+        FactoryTrimTable table = FactoryTrimTable.LoadShipped();
+
+        VehicleEquipment equipment = table.Lookup("Honda", "Insight", year, "LX");
+
+        Assert.Equal(EquipmentStatus.Absent, equipment.SmartKeyEntry.Status);
+        Assert.Equal(EquipmentStatus.Present, equipment.KeylessFobEntry.Status);
+        Assert.Equal(new EquipmentFact(EquipmentStatus.Present, EquipmentSource.TrimTable), equipment.KeylessEntry);
+    }
+
+    [Fact]
+    public void Lookup_RowThatStatesOnlyAFob_IsValidAndLeavesTheOtherFeaturesUnknown()
+    {
+        FactoryTrimTable table = FactoryTrimTable.Parse("""
+            { "entries": [
+              { "make": "Honda", "model": "Fit", "yearFrom": 2020, "yearTo": 2020, "trim": "LX",
+                "keylessFobEntry": "present", "source": "test sheet" }
+            ] }
+            """);
+
+        VehicleEquipment equipment = table.Lookup("Honda", "Fit", 2020, "LX");
+
+        Assert.Equal(EquipmentStatus.Present, equipment.KeylessFobEntry.Status);
+        Assert.Equal(EquipmentStatus.Unknown, equipment.SmartKeyEntry.Status);
+        Assert.Equal(EquipmentStatus.Unknown, equipment.PushButtonStart.Status);
+    }
+
+    [Fact]
+    public void Lookup_ProximityAbsentWithNoFobStatement_LeavesKeylessEntryUnknown()
+    {
+        FactoryTrimTable table = FactoryTrimTable.Parse("""
+            { "entries": [
+              { "make": "Honda", "model": "Fit", "yearFrom": 2020, "yearTo": 2020, "trim": "LX",
+                "smartKeyEntry": "absent", "source": "test sheet" }
+            ] }
+            """);
+
+        VehicleEquipment equipment = table.Lookup("Honda", "Fit", 2020, "LX");
+
+        Assert.Equal(EquipmentStatus.Absent, equipment.SmartKeyEntry.Status);
+        Assert.Equal(EquipmentStatus.Unknown, equipment.KeylessEntry.Status);
+    }
+
+    [Theory]
     [InlineData(2019, "L Eco")]
     [InlineData(2019, "LE")]
     [InlineData(2020, "LE")]
