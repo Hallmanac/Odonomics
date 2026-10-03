@@ -13,6 +13,8 @@ odo research [<vin> ...] [--refresh] [--quiet]
                                     safety ratings and VIN history, with a red-flags summary
 odo dealer grade (--all | <vin>) [--refresh]
                                     look up each ungraded dealer's CarEdge grade
+odo title check [<vin> ...] [--top N]
+                                    look top-ranked VINs up in public salvage-auction archives
 odo budget [--fulfillment delivery|pickup]
                                     the fixed monthly running cost, then the max purchase price
                                     for each target monthly loan payment
@@ -45,6 +47,10 @@ odo finalist <vin>                  mark a vehicle a finalist
 ## dealer grade
 
 `odo dealer grade` looks up each ungraded dealer's grade on CarEdge, and it needs the same hand-launched browser the walk uses. Pass exactly one of them. `--all` grades every dealer the ledger has never checked, and `<vin>` grades the dealers behind that one VIN's postings that haven't been checked yet. `--refresh` also looks up dealers that already have a grade, so ones graded before the ledger kept the doc fee and add-ons note can pick them up. [dealers.md](dealers.md) has the details.
+
+## title check
+
+`odo title check` looks vehicles up in the public Copart and IAA salvage-auction archives, over the same hand-launched browser the walk uses, and raises a `salvage-auction` red flag for one that sold at a salvage auction. With no arguments it checks the first 20 vehicles of the current rank, `--top N` changes that number, and explicit VINs check just those. It makes no paid API call, and a VIN it already checked is looked up again only after seven days or after a result it could not read. [title-check.md](title-check.md) has the details, including that archive sites change and may block automated reads.
 
 ## budget
 
