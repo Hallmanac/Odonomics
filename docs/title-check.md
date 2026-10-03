@@ -41,11 +41,23 @@ Every page it reads is also written as text under the data directory, in `walks/
 
 A found sale raises the `salvage-auction` red flag, which names the sale document, the damage, and the date, for example `sold at salvage auction (Salvage certificate (CA), Side/Front end, 2026-07-16)`. Any part the record did not print is left out of that text. The flag comes from the stored lookup and not from the research fetch, so it appears with the other red flags:
 
-- `odo show <vin>` lists it under Red flags and prints the whole stored record (auction, lot, sale date, sale document, damage, ACV, repair estimate, odometer, and the page it came from) under "Salvage-auction archives". For a vehicle with no sale it says that none was found or why the archives could not be read.
-- `odo rank` marks the vehicle `flag`, the same marker every other red flag uses, even if the vehicle has never been researched.
+- `odo show <vin>` lists it under Red flags and prints the whole stored record (auction, lot, sale date, sale document, damage, ACV, repair estimate, odometer, and the page it came from) under "Salvage-auction archives". For a vehicle with no sale it says that none was found or why the archives could not be read. It still shows a vehicle `odo rank` excludes for its sale, the same as it does for any other filter.
+- `odo rank` excludes the vehicle, as described below.
 - `odo research` includes `salvage-auction` among a vehicle's short tags.
 
-The flag is a warning only and does not exclude a vehicle from the rank. A Copart or IAA sale does not always mean a salvage title (an archive also lists clean-title sales), so the flag's text carries the sale document the archive printed, and that is what to read.
+## What rank does with a found sale
+
+`odo rank` excludes a vehicle whose stored result is found, and lists it under Excluded with a reason that names the auction, the sale date, and the sale document, for example `sold at salvage auction: Copart 2026-07-16, Salvage certificate (CA)`. Any part the record did not print is left out of that text. A not found result, a could not read result, and a vehicle that has never been checked are not affected and rank as before.
+
+The exclusion applies to any found sale whatever its sale document, which is Brian's ruling ("drop any salvage-auction sales"). A Copart or IAA sale does not always mean a salvage title, since an archive also lists clean-title sales, but both are insurance-salvage auctions and a car that went through one is dropped even when the lot sold on a clean title. The sale document is in the reason so it is still there to read.
+
+The exclusion reads the stored result and makes no network call, so it holds for a vehicle nobody has researched. Three consequences follow from the stored result being what decides:
+
+- A vehicle drops out of the rank only after `odo title check` has looked it up. Until then it ranks, with the check's result unknown.
+- `odo research` and `odo title check` with no VINs both pick vehicles the way rank scores them, so neither spends a lookup on a vehicle rank excludes for its sale. A found sale is therefore not looked up again on the seven-day schedule unless you name its VIN.
+- The exclusion goes away on its own if a later lookup of that VIN stores not found or could not read, since it is recomputed from the stored result on every run.
+
+The `salvage-seller` red flag from `odo research` (a dealer name that is a known salvage marketplace in the Marketcheck history) is a different signal and stays a warning only.
 
 ## Archive sites change and may block
 

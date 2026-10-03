@@ -53,7 +53,7 @@ odo finalist <vin>                  mark a vehicle a finalist
 
 ## title check
 
-`odo title check` looks vehicles up in the public Copart and IAA salvage-auction archives, over the same hand-launched browser the walk uses, and raises a `salvage-auction` red flag for one that sold at a salvage auction. With no arguments it checks the first 20 vehicles of the current rank, `--top N` changes that number, and explicit VINs check just those. It makes no paid API call, and a VIN it already checked is looked up again only after seven days or after a result it could not read. [title-check.md](title-check.md) has the details, including that archive sites change and may block automated reads.
+`odo title check` looks vehicles up in the public Copart and IAA salvage-auction archives, over the same hand-launched browser the walk uses, and raises a `salvage-auction` red flag for one that sold at a salvage auction, which `odo rank` then excludes with the sale named in its reason. With no arguments it checks the first 20 vehicles of the current rank, `--top N` changes that number, and explicit VINs check just those. It makes no paid API call, and a VIN it already checked is looked up again only after seven days or after a result it could not read. [title-check.md](title-check.md) has the details, including that archive sites change and may block automated reads.
 
 ## budget
 
