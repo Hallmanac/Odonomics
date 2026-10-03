@@ -72,6 +72,13 @@ When a car's status for a preferred feature is present, `odo rank` prints the fe
 
 The shipped scenario sets `"preferredFeatures": ["smart-key entry"]` while still requiring `"keyless entry"` and `"push-button start"`, per Brian's ruling of 2026-10-03: "Prefer the touch-to-unlock, but it's not a deal breaker if it's only keyless fob."
 
+### Vehicle-history rulings
+
+Two of Brian's rulings of 2026-10-03 read the vehicle-history summary the CarGurus walk stores on a posting (see [walk.md](walk.md#vehicle-history-summary)), and neither is a scenario setting.
+
+- Frame damage excludes a car outright: "frame damage should exclude a car outright." When any posting of a vehicle, gone ones included, states frame damage, `odo rank` lists the car under Excluded with a reason naming the source, such as "frame damage reported (CarGurus AutoCheck summary)". `odo show` still prints the car and its `frame-damage` red flag. A reported accident does not exclude: the `accident-reported` flag stays a warning and the car ranks.
+- Zero accidents is a preference, a marker like smart key and never an exclusion: "I would prefer a car with zero accident history." When a listing's summary states zero accidents and no listing states one or more, `odo rank` prints a green `no accidents` marker on the line under the car's row (joined with a preferred-feature marker, as in `smart key, no accidents`), and `odo show` prints it at the end of its Listing history summaries section. A car whose listings state no accident count prints nothing, and the marker never changes a score or a monthly cost.
+
 ### The factory trim table
 
 The trim table is one data file, `src/Odonomics/Data/factory-trim-equipment.json`, copied beside the program and read each time `odo rank`, `odo show`, `odo research`, or `odo title check` runs. Its rows come from a sourced research note, [factory-trim-sources.md](factory-trim-sources.md), which holds the research as written and says how each of its rows became an entry. The table covers the Honda Insight, Toyota Corolla Hybrid, Toyota Camry Hybrid, and Toyota Prius, and only where that research rated the answer high or medium confidence; a car with no row falls back to its window sticker. Each row names a make, a model as the ledger spells it (for example "Corolla Hybrid"), a range of model years, a trim, an answer of `"present"` or `"absent"` for `smartKeyEntry`, `keylessFobEntry` (a remote keyless fob), `pushButtonStart`, or any of them, and a `source` that says where the answer came from, plus an optional `confidence` and an optional `note` for a caveat (the shipped rows give both where they apply):
