@@ -657,4 +657,54 @@ public class KnownCardTouchesTests
 
         Assert.Null((await db.Postings.AsNoTracking().SingleAsync()).FeePosture);
     }
+
+    [Fact]
+    public async Task ARepeatWalk_AKnownCardsHistoryFieldsAreStoredWithoutADetailVisit()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        PostingEntity seeded = await db.Postings.SingleAsync();
+        seeded.History = new PostingHistory("Clean title", 0, 1, null, null);
+        await db.SaveChangesAsync(CancellationToken.None);
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        await touches.TryTouchAsync(CardUrl(1), 18000m, NoBadges, CancellationToken.None);
+        touches.RememberCardHistory(CardUrl(1), new PostingHistory(FrameDamageStatement: "Frame damage reported"));
+        await touches.CommitAsync(CancellationToken.None);
+
+        Assert.Equal(new PostingHistory("Clean title", 0, 1, null, "Frame damage reported"), (await db.Postings.AsNoTracking().SingleAsync()).History);
+    }
+
+    [Fact]
+    public async Task ARepeatWalk_ACardThatStatesNoHistoryLeavesTheStoredSummaryAlone()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        PostingEntity seeded = await db.Postings.SingleAsync();
+        seeded.History = new PostingHistory("Clean title", 2, 1, "Reported as previous rental vehicle", null);
+        await db.SaveChangesAsync(CancellationToken.None);
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        await touches.TryTouchAsync(CardUrl(1), 18000m, NoBadges, CancellationToken.None);
+        touches.RememberCardHistory(CardUrl(1), PostingHistory.None);
+        await touches.CommitAsync(CancellationToken.None);
+
+        Assert.Equal(new PostingHistory("Clean title", 2, 1, "Reported as previous rental vehicle", null), (await db.Postings.AsNoTracking().SingleAsync()).History);
+    }
+
+    [Fact]
+    public async Task ARepeatWalk_ANewLinksCardHistoryIsNotWrittenToTheLedger()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        (LedgerUpsertService service, RunEntity second) = await LedgerWithFirstRunAsync(db, (1, 18000m));
+        KnownCardTouches touches = await KnownCardTouches.LoadAsync(service, "carvana", second, revisit: false, CancellationToken.None);
+
+        touches.RememberCardHistory(CardUrl(2), new PostingHistory(FrameDamageStatement: "Frame damage reported"));
+        await touches.CommitAsync(CancellationToken.None);
+
+        Assert.Equal(PostingHistory.None, (await db.Postings.AsNoTracking().SingleAsync()).History);
+    }
 }

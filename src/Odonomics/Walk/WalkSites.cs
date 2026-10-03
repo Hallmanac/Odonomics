@@ -128,7 +128,9 @@ namespace Odonomics.Walk;
 /// also happens to state a delivery fee (cars.com, see <see cref="CarsComCards.ReadsAsCarMax"/>): checked
 /// instead of <see cref="CardFeeReader"/> returning non-null for the <see cref="SkipsCarMaxDealer"/> check
 /// below, since an ordinary distant dealer's own delivery fee satisfies that too. Null for a site with no
-/// such distinction to draw.</summary>
+/// such distinction to draw. <paramref name="HistoryReader"/> reads the vehicle-history summary a listing states (title wording,
+/// accidents, previous owners, rental or fleet use, frame damage) off a detail page's text or a result card's (cargurus, see
+/// <see cref="CarGurusHistory"/>); null for a site that prints none, whose postings then store none.</summary>
 public sealed record WalkSite(
     string Name,
     Func<ListingQuery, IReadOnlyList<string>> BuildSearchUrls,
@@ -167,7 +169,8 @@ public sealed record WalkSite(
     Func<string, CardVehicleFacets>? CardFacetsReader = null,
     Regex? NoPriceCardPattern = null,
     bool SkipsCarMaxDealer = false,
-    Func<string, bool>? CarMaxCardReader = null)
+    Func<string, bool>? CarMaxCardReader = null,
+    Func<string, PostingHistory>? HistoryReader = null)
 {
     /// <summary>The candidate detail links on a search page, in page order, at most
     /// <paramref name="poolSize"/> of them: every link this site's <see cref="DetailUrlPattern"/>
@@ -475,6 +478,11 @@ public sealed record WalkSite(
     /// <summary>What a result card says about the fees behind its price, read off <paramref name="cardText"/> by this
     /// site's <see cref="CardFeeStatementReader"/>, or null when the site has none.</summary>
     public FeeStatement? ReadCardFeeStatement(string cardText) => CardFeeStatementReader?.Invoke(cardText);
+
+    /// <summary>The vehicle-history summary <paramref name="text"/> (a detail page's or a result card's) states, read by
+    /// this site's <see cref="HistoryReader"/>; <see cref="PostingHistory.None"/> when the site has none or the text
+    /// states none of it.</summary>
+    public PostingHistory ReadHistory(string text) => HistoryReader?.Invoke(text) ?? PostingHistory.None;
 
     /// <summary>The asking price to store for a detail page whose extraction read <paramref name="extractedPrice"/> and whose
     /// link's result card said <paramref name="cardText"/> (null when the search pages showed none). A site that stores
@@ -1091,7 +1099,9 @@ public static class WalkSites
     /// before it is ever a candidate (see <see cref="CarGurusCards.NoPriceListed"/>) rather than spending a detail
     /// visit finding that out the slow way. The detail page's text prints the VIN, so no HTML reader is needed for
     /// it, and its dealer name and location are read from its own text (see <see cref="CarGurusDealer"/>) rather
-    /// than left to the extraction, since CarGurus has no fallback dealer for a page that names none.</summary>
+    /// than left to the extraction, since CarGurus has no fallback dealer for a page that names none. The detail page also prints
+    /// the vehicle-history summary and its price area can print "(Frame damage reported)", a card can print the same marker, and
+    /// all of it is read by <see cref="CarGurusHistory"/>.</summary>
     public static readonly WalkSite CarGurus = new(
         "cargurus",
         query => query.HybridOnlyFromModelYear is int hybridOnlyYear
@@ -1114,7 +1124,8 @@ public static class WalkSites
         CardFeeStatementReader: FeeStatements.ReadCarGurusCard,
         NoPriceCardPattern: CarGurusCards.NoPriceListed,
         DetailDealerReader: CarGurusDealer.Read,
-        DetailTitleModelReader: ReadTitleModel);
+        DetailTitleModelReader: ReadTitleModel,
+        HistoryReader: CarGurusHistory.Read);
 
     public static WalkSite? Find(string name) => name.ToLowerInvariant() switch
     {

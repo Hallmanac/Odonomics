@@ -64,6 +64,10 @@ public sealed record ListingCandidate
     /// <see cref="Walk.TitleBrandStatements"/>); null when it stated none.</summary>
     public string? TitleBrandPhrase { get; init; }
 
+    /// <summary>The vehicle-history summary the page (and the card that linked to it) stated, a field null where it
+    /// stated none (see <see cref="PostingHistory"/>); stored on the posting in place of the last sighting's.</summary>
+    public PostingHistory History { get; init; } = PostingHistory.None;
+
     /// <summary>What the listing's window sticker or factory equipment list says about smart-key entry, when the
     /// page had one. Unknown when it had none (a dealer's description does not count), in which case the
     /// upsert leaves whatever an earlier sighting stored.</summary>

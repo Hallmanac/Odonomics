@@ -106,6 +106,10 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         // Replaced like the fee: a detail page that no longer states a brand is a fresh reading.
         posting.TitleBrandPhrase = candidate.TitleBrandPhrase;
 
+        // The history summary is replaced whole for the same reason: a field the page no longer states is
+        // stored as not stated, not kept from another day.
+        posting.History = candidate.History;
+
         // The pickup option is replaced the same way, for the same reason, and so is a page whose
         // block did not render: it leaves both null rather than keeping a figure from another day.
         posting.PickupFee = candidate.PickupFee;
@@ -236,6 +240,26 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         foreach (PostingEntity posting in postings)
         {
             (posting.FeePosture, posting.ItemizedFeesTotal) = posturesByUrl[posting.Url];
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Refreshes the vehicle-history summary of the postings of <paramref name="source"/> at each URL of
+    /// <paramref name="historyByUrl"/> from the summary their search card stated, in one save. Unlike an upsert it
+    /// replaces only the fields the card states and leaves the rest as the last detail visit stored them, since a
+    /// card shows a part of the summary and its silence is not a fresh reading. A URL that matches no posting writes
+    /// nothing.</summary>
+    public async Task SetCardHistoriesByUrlAsync(string source, IReadOnlyDictionary<string, PostingHistory> historyByUrl, CancellationToken cancellationToken)
+    {
+        string[] urls = [.. historyByUrl.Keys];
+        List<PostingEntity> postings = await db.Postings
+            .Where(p => p.Source == source && urls.Contains(p.Url))
+            .ToListAsync(cancellationToken);
+
+        foreach (PostingEntity posting in postings)
+        {
+            posting.History = historyByUrl[posting.Url].Over(posting.History);
         }
 
         await db.SaveChangesAsync(cancellationToken);

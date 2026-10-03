@@ -413,6 +413,7 @@ public static class WalkCommand
                     {
                         knownTouches.RememberCardFee(canonicalUrl, site.ReadCardFee(knownCardText));
                         knownTouches.RememberCardFeeStatement(canonicalUrl, site.ReadCardFeeStatement(knownCardText));
+                        knownTouches.RememberCardHistory(canonicalUrl, site.ReadHistory(knownCardText));
                     }
 
                     return known;
@@ -685,6 +686,9 @@ public static class WalkCommand
                     FeePosture = feeStatement?.Posture,
                     ItemizedFeesTotal = feeStatement?.ItemizedTotal,
                     TitleBrandPhrase = TitleBrandStatements.Read(bodyText),
+                    // The page's own summary wins field by field; the card that linked to it fills only what the page
+                    // left out (cargurus prints "(Frame damage reported)" on its card too).
+                    History = site.ReadHistory(bodyText).Over(cardText is null ? PostingHistory.None : site.ReadHistory(cardText)),
                     SmartKeyEntry = WindowStickerEquipment.StatusOf(outcome.Result.SmartKeyEntry),
                     PushButtonStart = WindowStickerEquipment.StatusOf(outcome.Result.PushButtonStart),
                     KeylessFobEntry = WindowStickerEquipment.StatusOf(outcome.Result.KeylessFobEntry),
