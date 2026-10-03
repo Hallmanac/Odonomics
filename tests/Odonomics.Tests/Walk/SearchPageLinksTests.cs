@@ -436,4 +436,62 @@ public class SearchPageLinksTests
         Assert.Equal(["$21,202 card", "$22,075 card"], cards.Select(c => c.CardText));
         Assert.Equal(WalkSites.CarsCom.CollectDetailLinks(links, int.MaxValue), cards.Select(c => c.Href));
     }
+
+    private sealed record RecordedCard(string Href, string Card);
+
+    // Cut from walks/cargurus/20261003-173812: the card text of a priced neighbor and of the two cards that run dropped at
+    // their detail pages as "missing fields: price" (corolla-hybrid/search-3.txt, JTDBCMFE8SJ038714, "Free home delivery"; and
+    // camry-hybrid/search-1-page-1.txt, 4T1F31AK8LU544312, at a dealer 24 mi away). Neither of those two has a dollar sign
+    // anywhere in it, so the run's recorded cards files hold an empty card for both.
+    private static List<RecordedCard> RecordedCarGurusNoPriceCards() =>
+        JsonSerializer.Deserialize<List<RecordedCard>>(
+            File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", "cargurus-no-price-cards-20261003.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+
+    private static FakeElement CarGurusResults(IEnumerable<RecordedCard> cards) =>
+        Div("CarGurus results",
+            Div(
+                "",
+                [
+                    .. cards.Select(c => Card(Anchor(c.Href, "", Div(c.Card)))),
+                    Div("Footer " + new string('y', SearchPageLinks.MaxCardTextLength)),
+                ]));
+
+    [Fact]
+    public async Task ReadAsync_RecordedCarGurusNoPriceCardsWithNoDollarSign_GetTheirOwnCardText()
+    {
+        List<RecordedCard> recorded = RecordedCarGurusNoPriceCards();
+        var page = new FakePage(CarGurusResults(recorded));
+
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.CarGurus);
+
+        Assert.Equal(recorded.Select(c => c.Card), links.Select(l => l.CardText));
+    }
+
+    [Fact]
+    public async Task ReadAsync_RecordedCarGurusNoPriceCardWithNoDollarSign_ReadsAsNoCardUnderTheDefaultPattern()
+    {
+        // The failure the run recorded: with only the dollar sign to climb to, the card is passed by and the results list is too long to be one.
+        List<RecordedCard> recorded = RecordedCarGurusNoPriceCards();
+        var page = new FakePage(CarGurusResults(recorded));
+
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.CarGurus with { CardAmountPattern = null });
+
+        Assert.Equal(recorded[0].Card, links[0].CardText);
+        Assert.All(links.Skip(1), l => Assert.Equal("", l.CardText));
+    }
+
+    [Fact]
+    public async Task CollectDetailCards_RecordedCarGurusNoPriceCards_AreDroppedAtTheSearchPageAndOnlyThePricedCardIsPooled()
+    {
+        List<RecordedCard> recorded = RecordedCarGurusNoPriceCards();
+        var page = new FakePage(CarGurusResults(recorded));
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.CarGurus);
+        List<string> dropped = [];
+
+        IReadOnlyList<PageLink> pooled = WalkSites.CarGurus.CollectDetailCards(links, poolSize: 200, onNoPriceStated: card => dropped.Add(card.Href));
+
+        Assert.Equal([recorded[0].Href], pooled.Select(c => c.Href));
+        Assert.Equal([recorded[1].Href, recorded[2].Href], dropped);
+    }
 }

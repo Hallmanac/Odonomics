@@ -900,6 +900,15 @@ public static class WalkSites
     /// clickType=listing, see <see cref="WalkSite.ResultCardLinkPattern"/>).</summary>
     private const string AutotraderCardAmountPattern = SearchPageLinks.CardAmountPattern + @"|See payment";
 
+    /// <summary>cargurus's own override of <see cref="SearchPageLinks.CardAmountPattern"/>: the default dollar sign, or
+    /// "No Price Listed" on its own. A card that states no price and names no shipping amount ("Free home delivery",
+    /// or a car at a nearby dealer) has no dollar sign anywhere in it, so a climb that looked only for one passed it by
+    /// and landed on the results list, which runs past <see cref="SearchPageLinks.MaxCardTextLength"/> and reads as no
+    /// card at all (recorded walk run 20261003-173812: JTDBCMFE8SJ038714 and 4T1F31AK8LU544312). Such a card then never
+    /// matched <see cref="CarGurusCards.NoPriceListed"/>, was pooled, and dropped at its detail page as "missing fields:
+    /// price".</summary>
+    private const string CarGurusCardAmountPattern = SearchPageLinks.CardAmountPattern + @"|No Price Listed";
+
     /// <summary>autotrader's zip, radius, minimum year, maximum mileage, and hybrid facets. Both dealers and
     /// private sellers list there, so the URL carries no sellerTypes parameter (sellerTypes=d and
     /// sellerTypes=p narrow to one or the other). autotrader has one model per base model, so a hybrid
@@ -1088,6 +1097,7 @@ public static class WalkSites
         PagedSearchUrl: CarGurusSearch.PagedSearchUrl,
         PagingTokenReader: CarGurusSearch.ReadPagingToken,
         CardPriceReader: CardPrices.CarGurusPrice,
+        CardAmountPattern: CarGurusCardAmountPattern,
         AskingPriceFromCard: true,
         CardBadgeReader: CardBadges.CarGurus,
         CardFeeReader: CarGurusCards.ReadFee,
