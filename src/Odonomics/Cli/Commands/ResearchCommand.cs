@@ -23,6 +23,7 @@ public static class ResearchCommand
             .Include(v => v.Postings).ThenInclude(p => p.PriceObservations)
             .Include(v => v.Postings).ThenInclude(p => p.Dealer)
             .Include(v => v.VinRecord)
+            .Include(v => v.AuctionCheck)
             .ToListAsync(cancellationToken);
 
         List<RunEntity> runs = await db.Runs.ToListAsync(cancellationToken);
@@ -101,7 +102,7 @@ public static class ResearchCommand
                     }
 
                     decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-                    IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles)];
+                    IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck)];
 
                     bool anyPieceFailed = IsPartiallyResearched(research);
 

@@ -50,7 +50,8 @@ public sealed record SellerGroupSummary(
 /// window, an open recall with no remedy published yet, a safety rating below four stars, or a
 /// current price well above the listing-history price trajectory, or a listing that does not say what
 /// fees sit on top of its price at a dealer CarEdge says sells add-ons (see
-/// <see cref="AddOnsDealer"/>). Every threshold below is a
+/// <see cref="AddOnsDealer"/>), or a stored salvage-auction sale (see <see cref="SalvageAuction"/>).
+/// Every threshold below is a
 /// deliberate v0 simplification, not a value NHTSA or Marketcheck hand us.
 /// </summary>
 public static partial class RedFlagsEvaluator
@@ -205,6 +206,38 @@ public static partial class RedFlagsEvaluator
         return new RedFlag(
             "add-ons-dealer",
             $"the listing does not say whether its price includes fees, and {dealerName.Trim()} sells add-ons per CarEdge ({dealerAddOnsNote.Trim()}){docFee}");
+    }
+
+    /// <summary>The flag for a VIN whose public salvage-auction archive record (see
+    /// <c>odo title check</c>) shows it sold at a Copart or IAA auction. Unlike
+    /// <c>salvage-seller</c>, which only says the VIN history names a damaged-vehicle marketplace, this
+    /// rests on a lot record, so it names the sale document, the damage, and the sale date, for example
+    /// "sold at salvage auction (Salvage certificate (CA), Side/Front end, 2026-07-16)". A part the
+    /// record did not carry is left out, and the primary and secondary damage read as one "Side/Front
+    /// end" phrase. A listing-level rule: it takes the stored lookup's facts and not a VIN history.</summary>
+    public static RedFlag SalvageAuction(string? saleDocument, string? primaryDamage, string? secondaryDamage, DateOnly? saleDate)
+    {
+        string damage = string.Join("/", new[] { primaryDamage, secondaryDamage }.OfType<string>().Select(d => d.Trim()).Where(d => d.Length > 0));
+        List<string> parts = [];
+        if (!string.IsNullOrWhiteSpace(saleDocument))
+        {
+            parts.Add(saleDocument.Trim());
+        }
+
+        if (damage.Length > 0)
+        {
+            parts.Add(damage);
+        }
+
+        if (saleDate is DateOnly date)
+        {
+            parts.Add(date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        }
+
+        string detail = parts.Count == 0
+            ? "sold at salvage auction"
+            : $"sold at salvage auction ({string.Join(", ", parts)})";
+        return new RedFlag("salvage-auction", detail);
     }
 
     /// <summary>The listing history grouped by seller (see <see cref="BuildSellerGroups"/>), for a

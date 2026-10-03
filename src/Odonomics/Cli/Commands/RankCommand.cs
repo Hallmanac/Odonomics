@@ -29,6 +29,7 @@ public static class RankCommand
             .Include(v => v.Postings).ThenInclude(p => p.PriceObservations)
             .Include(v => v.Postings).ThenInclude(p => p.Dealer)
             .Include(v => v.Postings).ThenInclude(p => p.Attributes)
+            .Include(v => v.AuctionCheck)
             .ToListAsync(cancellationToken);
 
         List<VinRecordEntity> vinRecords = await db.VinRecords.ToListAsync(cancellationToken);
@@ -43,7 +44,7 @@ public static class RankCommand
             research[vehicle.Vin] = ResearchStatusFor(
                 vinRecordsByVin.GetValueOrDefault(vehicle.Vin),
                 VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource),
-                FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles));
+                [.. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck)]);
         }
 
         RankRenderer.Render(AnsiConsole.Console, scores, budget, research, scenario.TargetMonthlyBudgets, detail);
@@ -90,7 +91,8 @@ public static class RankCommand
     }
 
     /// <summary>The research column's status for one vehicle. <paramref name="listingFlags"/> are the flags
-    /// its postings raise (see <see cref="FeeRedFlags"/>), which need no research, so a vehicle that has
+    /// its postings and its stored salvage-auction lookup raise (see <see cref="FeeRedFlags"/> and
+    /// <see cref="AuctionChecks.RedFlags"/>), which need no research, so a vehicle that has
     /// not been researched yet still reports one.</summary>
     private static ResearchStatus ResearchStatusFor(VinRecordEntity? record, decimal? currentPrice, IReadOnlyList<RedFlag> listingFlags)
     {

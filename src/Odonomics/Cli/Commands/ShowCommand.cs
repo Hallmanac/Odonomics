@@ -21,6 +21,7 @@ public static class ShowCommand
             .Include(v => v.Postings).ThenInclude(p => p.Attributes)
             .Include(v => v.Notes)
             .Include(v => v.VinRecord)
+            .Include(v => v.AuctionCheck)
             .FirstOrDefaultAsync(v => v.Vin == vin, cancellationToken);
 
         if (vehicle is null)
@@ -42,9 +43,10 @@ public static class ShowCommand
 
         // The red flags compare asking prices with other listings' asking prices, so they keep the
         // asking price alone; the monthly cost is what taking the car home costs under the scenario's fulfillment,
-        // itemized fees included. The fee flag comes from the postings, not the research.
+        // itemized fees included. The fee flag comes from the postings and the salvage-auction flag from the stored
+        // auction lookup, not the research.
         decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
-        IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles)];
+        IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck)];
 
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
         bool onlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);

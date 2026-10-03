@@ -9,6 +9,7 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
     public DbSet<PriceObservationEntity> PriceObservations => Set<PriceObservationEntity>();
     public DbSet<RunEntity> Runs => Set<RunEntity>();
     public DbSet<VinRecordEntity> VinRecords => Set<VinRecordEntity>();
+    public DbSet<AuctionCheckEntity> AuctionChecks => Set<AuctionCheckEntity>();
     public DbSet<NoteEntity> Notes => Set<NoteEntity>();
     public DbSet<DealerEntity> Dealers => Set<DealerEntity>();
     public DbSet<PostingAttributeEntity> PostingAttributes => Set<PostingAttributeEntity>();
@@ -39,6 +40,13 @@ public sealed class OdonomicsDbContext(DbContextOptions<OdonomicsDbContext> opti
         });
 
         modelBuilder.Entity<VinRecordEntity>().HasKey(r => r.Vin);
+
+        modelBuilder.Entity<AuctionCheckEntity>(entity =>
+        {
+            entity.HasKey(a => a.Vin);
+            entity.Property(a => a.Outcome).HasConversion<string>();
+            entity.HasOne(a => a.Vehicle).WithOne(v => v.AuctionCheck).HasForeignKey<AuctionCheckEntity>(a => a.Vin);
+        });
 
         modelBuilder.Entity<DealerEntity>(entity =>
         {
