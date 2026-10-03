@@ -4,9 +4,12 @@ namespace Odonomics.Domain;
 
 /// <summary>
 /// The one list of salvage and repairable-vehicle outlets a VIN-history dealer name is checked
-/// against (see <see cref="RedFlagsEvaluator.Evaluate"/>'s <c>salvage-seller</c> flag). A car that
-/// passed through one of these marketplaces was almost certainly an insurance total loss, which
-/// points to a salvage or rebuilt title. Matching is case-insensitive and word-for-word on the
+/// against (see <see cref="RedFlagsEvaluator.Evaluate"/>'s <c>salvage-seller</c> flag). A VIN history
+/// row from one of these marketplaces is a damaged-vehicle marketplace sighting, not a confirmed
+/// salvage title: the car may have been an insurance total loss, but a self-insured fleet, an insurer
+/// that does not report to NICB, uninsured damage, or a mechanical fault would also put it there. A
+/// clean NICB VINCheck therefore does not clear it, because not every insurer reports to NICB.
+/// Matching is case-insensitive and word-for-word on the
 /// dealer name with punctuation ignored, so "Erepairables.com" and "COPART INC" match while a dealer
 /// whose name merely contains the letters of a short outlet name does not. Each spelling variant
 /// listed here is one entry, since the data spells some outlets both joined and spaced.

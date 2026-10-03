@@ -150,7 +150,10 @@ public static partial class RedFlagsEvaluator
     /// <summary>The flag for a VIN-history row whose dealer is a salvage or repairable-vehicle outlet
     /// (see <see cref="SalvageSellers"/>), naming each such seller as it appears in the history with the
     /// date it was first listed there, earliest first. Several rows from one seller collapse to its
-    /// earliest. A warning only: it never removes the vehicle from anything. Null when no row matches.</summary>
+    /// earliest. It states what the history shows, a damaged-vehicle marketplace sighting, and tells the
+    /// reader to confirm the title status; it does not claim a salvage title. A clean NICB VINCheck does
+    /// not clear it, since not every insurer reports to NICB. A warning only: it never removes the vehicle
+    /// from anything. Null when no row matches.</summary>
     private static RedFlag? FindSalvageSeller(IReadOnlyList<VinHistoryPoint> priorListings)
     {
         Dictionary<string, DateTimeOffset?> earliestBySeller = new(StringComparer.OrdinalIgnoreCase);
@@ -173,7 +176,7 @@ public static partial class RedFlagsEvaluator
             ? null
             : new RedFlag(
                 "salvage-seller",
-                $"listed by a salvage or repairable-vehicle seller, which points to an insurance total loss and a likely salvage or rebuilt title: {string.Join("; ", sightings)}");
+                $"listed by a salvage or repairable-vehicle seller ({string.Join("; ", sightings)}); confirm the title status before buying");
     }
 
     /// <summary>The flag for a listing whose price may not be the price at the desk: its fee posture is
