@@ -102,6 +102,12 @@ public sealed record VehicleForScoring
     /// it applies.</summary>
     public bool OnlyCarsComCarMaxPostings { get; init; }
 
+    /// <summary>The soft note that this vehicle is priced well below similar ledger cars, for `odo rank`
+    /// to show on its own line under the row (see <see cref="SimilarPriceNote"/>); null when it earns
+    /// none. Display only, the same as <see cref="Availability"/>: it never changes the score, the cost, or
+    /// whether the research column reads as flagged.</summary>
+    public string? PriceNote { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>

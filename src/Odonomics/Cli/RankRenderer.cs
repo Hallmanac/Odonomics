@@ -190,6 +190,11 @@ public static class RankRenderer
             }
 
             console.MarkupLine(RankedDetailLine(score, status, anyGraded));
+            if (PriceNoteLine(score) is string priceNoteLine)
+            {
+                console.MarkupLine(priceNoteLine);
+            }
+
             if (detail)
             {
                 if (PurchasePriceLine(score) is string purchasePriceLine)
@@ -223,6 +228,14 @@ public static class RankRenderer
     /// when the vehicle carries no such note.</summary>
     private static string? AvailabilityLine(Score score) =>
         score.Vehicle.Availability is string note ? $"    [red]{Markup.Escape(note)}[/]" : null;
+
+    /// <summary>The line under a row's figures when the vehicle is priced well below similar ledger cars
+    /// (see <see cref="VehicleForScoring.PriceNote"/>): a soft note in yellow, not the red of a flag, on its
+    /// own line so the row above keeps its 80-column fit. The note is longer than a row, so the console
+    /// wraps it at a word boundary rather than cutting it. Null when the vehicle carries no such
+    /// note.</summary>
+    private static string? PriceNoteLine(Score score) =>
+        score.Vehicle.PriceNote is string note ? $"    [yellow]{Markup.Escape(note)}[/]" : null;
 
     private static string VehicleName(Score score) =>
         Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", VehicleNameMaxWidth);

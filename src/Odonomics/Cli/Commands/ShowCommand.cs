@@ -48,6 +48,15 @@ public static class ShowCommand
         decimal? currentPrice = VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource);
         IReadOnlyList<RedFlag> redFlags = [.. VinResearchService.RedFlags(research, currentPrice), .. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck)];
 
+        // The similar-price note compares against every vehicle in the ledger, so it needs them all, not just this
+        // one. The dealers come too: a cars.com copy of a CarMax posting is told apart by its dealer's name, and
+        // without it that copy would count as an active price here but not in `odo rank`.
+        List<VehicleEntity> ledgerVehicles = await db.Vehicles
+            .Include(v => v.Postings).ThenInclude(p => p.PriceObservations)
+            .Include(v => v.Postings).ThenInclude(p => p.Dealer)
+            .ToListAsync(cancellationToken);
+        string? priceNote = VehiclePricing.SimilarPriceNotes(ledgerVehicles, latestCoverageBySource).GetValueOrDefault(vehicle.Vin);
+
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
         bool onlyReservedOrInTransit = VehiclePricing.OnlyReservedOrInTransit(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);
         string? onlyAtOutOfRadiusStore = VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, latestCoverageBySource, scenario.Zip, scenario.RadiusMiles);
@@ -59,7 +68,7 @@ public static class ShowCommand
             AnsiConsole.MarkupLineInterpolated($"[yellow]only at {unmeasuredStore}: its distance from {scenario.Zip} is not in this project's curated store list, so it is being treated as in radius[/]");
         }
 
-        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice);
+        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice, priceNote);
         return 0;
     }
 
