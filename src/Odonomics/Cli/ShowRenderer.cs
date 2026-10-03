@@ -201,6 +201,11 @@ public static class ShowRenderer
             AnsiConsole.WriteLine(line);
         }
 
+        foreach (string line in HistoryMarkerLines(vehicle))
+        {
+            AnsiConsole.MarkupLine(line);
+        }
+
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Postings[/]");
         AnsiConsole.Write(BuildPostingsTable(vehicle.Postings));
@@ -434,6 +439,14 @@ public static class ShowRenderer
             ? ["  none stated by any listing (only the CarGurus walk reads one)"]
             : lines;
     }
+
+    /// <summary>The marker lines that close the Listing history summaries section: a green "no accidents" when the
+    /// vehicle's listings state zero accidents and none states one or more (see <see cref="HistoryFlags.NoAccidentsStated"/>),
+    /// and nothing where no count was stated. A reported accident is the accident-reported red flag instead.</summary>
+    public static IReadOnlyList<string> HistoryMarkerLines(VehicleEntity vehicle) =>
+        HistoryFlags.NoAccidentsStated(vehicle)
+            ? [$"  [green]{HistoryFlags.NoAccidentsMarker}[/]"]
+            : [];
 
     /// <summary>A recall's report date as yyyy-MM-dd. NHTSA's recallsByVehicle endpoint reports it as
     /// dd/MM/yyyy text; anything that does not parse as that (an ISO date already, or a blank) is

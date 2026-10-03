@@ -31,7 +31,8 @@ public class RankRendererRenderingTests
         string? unmeasuredOnlyAtStore = null,
         string? priceNote = null,
         IReadOnlyList<string>? unconfirmedFeatures = null,
-        IReadOnlyList<string>? preferredPresent = null)
+        IReadOnlyList<string>? preferredPresent = null,
+        bool noAccidentsStated = false)
     {
         var vehicle = new VehicleForScoring
         {
@@ -50,6 +51,7 @@ public class RankRendererRenderingTests
             OnlyFGradedDealers = onlyFGraded,
             UnmeasuredOnlyAtStore = unmeasuredOnlyAtStore,
             PriceNote = priceNote,
+            NoAccidentsStated = noAccidentsStated,
         };
 
         return new Score
@@ -217,6 +219,32 @@ public class RankRendererRenderingTests
         Assert.Single(lines, line => line.Contains("smart key"));
         int row = Array.FindIndex(lines, line => line.Contains("JTDBCMFE7P3014805"));
         Assert.Contains("smart key", string.Join(" ", lines.Skip(row + 1).Take(3)));
+    }
+
+    [Fact]
+    public void Render_VehicleStatingZeroAccidents_PrintsTheMarkerBesideAPreferredOneAndNothingForOneThatStatedNone()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score zero = BuildScore("JTDBCMFE7P3014805", 2023, "Toyota", "Corolla Hybrid", 19990m, cost: cost, preferredPresent: ["smart-key entry"], noAccidentsStated: true);
+        Score silent = BuildScore("4T1G11AK0LU654321", 2025, "Toyota", "Corolla Hybrid", 22800m, cost: cost);
+
+        string[] lines = Render([zero, silent], budget: null);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Single(lines, line => line.Contains("no accidents"));
+        int row = Array.FindIndex(lines, line => line.Contains("JTDBCMFE7P3014805"));
+        Assert.Contains("smart key, no accidents", string.Join(" ", lines.Skip(row + 1).Take(3)));
+    }
+
+    [Fact]
+    public void Render_VehicleExcludedForFrameDamage_ListsTheReasonNamingTheSource()
+    {
+        Score excluded = BuildScore("4T1DAACK8SU095738", 2025, "Toyota", "Camry Hybrid", 23249m, passes: false, failureReasons: ["frame damage reported (CarGurus AutoCheck summary)"]);
+
+        string[] lines = Render([excluded], budget: null);
+
+        string excludedText = Regex.Replace(string.Join(" ", lines.SkipWhile(line => !line.Contains("Excluded (1)"))).Replace('│', ' '), @"\s+", " ");
+        Assert.Contains("frame damage reported (CarGurus AutoCheck summary)", excludedText);
     }
 
     [Fact]

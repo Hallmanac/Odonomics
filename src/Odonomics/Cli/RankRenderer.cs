@@ -200,9 +200,9 @@ public static class RankRenderer
                 console.MarkupLine(confirmLine);
             }
 
-            if (PreferredMarkersLine(score) is string preferredLine)
+            if (MarkersLine(score) is string markersLine)
             {
-                console.MarkupLine(preferredLine);
+                console.MarkupLine(markersLine);
             }
 
             if (detail)
@@ -257,12 +257,22 @@ public static class RankRenderer
             : $"    [yellow]{Markup.Escape(string.Join(", ", score.UnconfirmedFeatures.Select(EquipmentFeatures.ConfirmNote)))}[/]";
 
     /// <summary>The line under a row's figures naming each preferred feature this vehicle is known to have, such as
-    /// "smart key" (see <see cref="Score.PreferredPresent"/>): green, on its own line so the row above keeps its
-    /// 80-column fit. Null when the vehicle has none, which includes a feature that is absent or unknown.</summary>
-    private static string? PreferredMarkersLine(Score score) =>
-        score.PreferredPresent.Count == 0
+    /// "smart key" (see <see cref="Score.PreferredPresent"/>), and "no accidents" when its listings' history summaries
+    /// state zero accidents (see <see cref="VehicleForScoring.NoAccidentsStated"/>): green, on its own line so the row
+    /// above keeps its 80-column fit. Null when the vehicle has none, which includes a feature that is absent or
+    /// unknown and an accident count no listing stated.</summary>
+    private static string? MarkersLine(Score score)
+    {
+        List<string> markers = [.. score.PreferredPresent.Select(EquipmentFeatures.Marker)];
+        if (score.Vehicle.NoAccidentsStated)
+        {
+            markers.Add(HistoryFlags.NoAccidentsMarker);
+        }
+
+        return markers.Count == 0
             ? null
-            : $"    [green]{Markup.Escape(string.Join(", ", score.PreferredPresent.Select(EquipmentFeatures.Marker)))}[/]";
+            : $"    [green]{Markup.Escape(string.Join(", ", markers))}[/]";
+    }
 
     private static string VehicleName(Score score) =>
         Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", VehicleNameMaxWidth);
