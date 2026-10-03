@@ -344,6 +344,30 @@ public class WalkCoverageTests
     }
 
     [Fact]
+    public async Task RunAsync_APairWhosePagingStoppedAmongNewUnrenderedCards_NeverStampsASweptToken()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        RunEntity run = Run(DateTimeOffset.UtcNow);
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await WalkCoverage.RunAsync(
+            run,
+            [SiteA],
+            ["Honda Insight"],
+            (_, _, _) => Task.FromResult(new WalkPairOutcome(1, 1, new DroppedBreakdown(0, 0, 0, 0), RenderingDegraded: true, StoppedAmongNewUnrenderedCards: true)),
+            (_, _) => { },
+            (_, _, _) => { },
+            _ => Task.CompletedTask,
+            ct => db.SaveChangesAsync(ct),
+            CancellationToken.None);
+
+        Assert.Empty(RunSources.SweptCoverage(run));
+        Assert.Equal(["site-a:Insight"], RunSources.UnreadCoverage(run));
+    }
+
+    [Fact]
     public async Task RunAsync_APairWithNothingUnread_NeverStampsASweptToken()
     {
         using var testDb = new LedgerTestDatabase();
