@@ -21,6 +21,32 @@ public static class RankRenderer
         IReadOnlyList<decimal> targetMonthlyBudgets,
         bool detail = false)
     {
+        (List<Score> ranked, List<Score> overBudget, List<Score> missingScenarioData, List<Score> excluded) = Partition(scores, budget);
+
+        RenderRunningCostsNote(console, [.. ranked, .. overBudget], detail);
+        RenderUnmetTargets(console, [.. ranked, .. overBudget], targetMonthlyBudgets);
+        RenderRanked(console, $"Ranked ({ranked.Count})", ranked, research, detail);
+
+        if (budget is decimal budgetValue && overBudget.Count > 0)
+        {
+            RenderRanked(console, $"Over the ${budgetValue:N0} budget ({overBudget.Count})", overBudget, research, detail);
+        }
+
+        RenderMissingScenarioData(console, missingScenarioData);
+        RenderExcluded(console, excluded);
+        RenderFGradedOnly(console, scores);
+        RenderUnmeasuredOnlyAtDistance(console, scores);
+    }
+
+    /// <summary>The vehicles `odo rank` lists under Ranked, best first: those that pass the filters, have
+    /// insurance and mpg figures and a cost, ordered by ten-year average monthly cost. `odo title check`
+    /// takes its top N from this, so it checks the same cars the Ranked section leads with.</summary>
+    public static IReadOnlyList<Score> RankedVehicles(IReadOnlyList<Score> scores) => Partition(scores, budget: null).Ranked;
+
+    /// <summary>Sorts every score into the section `odo rank` prints it under. Ranked and over-budget are
+    /// each ordered by ten-year average monthly cost.</summary>
+    private static (List<Score> Ranked, List<Score> OverBudget, List<Score> MissingScenarioData, List<Score> Excluded) Partition(IReadOnlyList<Score> scores, decimal? budget)
+    {
         List<Score> ranked = [];
         List<Score> overBudget = [];
         List<Score> missingScenarioData = [];
@@ -56,21 +82,8 @@ public static class RankRenderer
 
         int ByTenYearAverage(Score a, Score b) => a.Cost!.TenYearAverageMonthly.Expected.CompareTo(b.Cost!.TenYearAverageMonthly.Expected);
         ranked.Sort(ByTenYearAverage);
-
-        RenderRunningCostsNote(console, [.. ranked, .. overBudget], detail);
-        RenderUnmetTargets(console, [.. ranked, .. overBudget], targetMonthlyBudgets);
-        RenderRanked(console, $"Ranked ({ranked.Count})", ranked, research, detail);
-
-        if (budget is decimal budgetValue && overBudget.Count > 0)
-        {
-            overBudget.Sort(ByTenYearAverage);
-            RenderRanked(console, $"Over the ${budgetValue:N0} budget ({overBudget.Count})", overBudget, research, detail);
-        }
-
-        RenderMissingScenarioData(console, missingScenarioData);
-        RenderExcluded(console, excluded);
-        RenderFGradedOnly(console, scores);
-        RenderUnmeasuredOnlyAtDistance(console, scores);
+        overBudget.Sort(ByTenYearAverage);
+        return (ranked, overBudget, missingScenarioData, excluded);
     }
 
     /// <summary>Says plainly, above the Ranked section, which of the scenario's target monthly
