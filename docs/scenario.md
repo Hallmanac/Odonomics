@@ -35,6 +35,8 @@ A vehicle that fails the filters lands in the Excluded section of `odo rank` wit
 
 A vehicle whose stored `odo title check` result is a found Copart or IAA sale is excluded as well, with a reason such as "sold at salvage auction: Copart 2026-07-16, Salvage certificate (CA)", whatever the sale document says (see [title-check.md](title-check.md#what-rank-does-with-a-found-sale)). A not found result, a could not read result, and a vehicle never checked do not exclude.
 
+A vehicle whose stored Marketcheck VIN history lists it with a salvage or repairable-vehicle seller is excluded too, with a reason naming the earliest such seller and the date it was first listed there, such as "listed by a salvage seller: Salvage Autos Auction 2025-08-26". The sellers are the outlets in `SalvageSellers.Outlets` (Erepairables, Copart, IAA, Insurance Auto Auctions, SalvageBid, Salvage Reseller, A Better Bid, AutoBidMaster, Salvage Autos Auction, Ridesafely, Bid N Drive, and Auto4export) plus any dealer name containing the whole word salvage, repairable, or repairables. A generic word such as auction or export alone does not match, so dealer-only auctions such as Manheim and ADESA and ordinary exporters still rank. The history is the one `odo research` stored, so a vehicle nobody has researched is not excluded for this; see [research.md](research.md#red-flags).
+
 ## Per-model maps
 
 Four fields are keyed by model, and each key is the same "Make Model" string, such as `"Toyota Camry Hybrid"`.
