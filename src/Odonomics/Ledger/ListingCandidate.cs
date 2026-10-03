@@ -57,4 +57,8 @@ public sealed record ListingCandidate
     /// <see cref="FeePosture"/> is itemized, or already inside it when the posture is all-in; null
     /// when the page itemized none.</summary>
     public decimal? ItemizedFeesTotal { get; init; }
+
+    /// <summary>The title-brand phrase the page's own text stated, as read (see
+    /// <see cref="Walk.TitleBrandStatements"/>); null when it stated none.</summary>
+    public string? TitleBrandPhrase { get; init; }
 }

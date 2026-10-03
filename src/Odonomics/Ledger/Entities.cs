@@ -54,6 +54,13 @@ public sealed class PostingEntity
     /// the posture is all-in (and then only shown); null when none were read.</summary>
     public decimal? ItemizedFeesTotal { get; set; }
 
+    /// <summary>The title-brand phrase the listing's own detail text stated, such as "rebuilt title" or
+    /// "Title status: Salvage", exactly as the page printed it (see <see cref="Walk.TitleBrandStatements"/>);
+    /// null when the latest detail visit read none, which is not a claim that the title is clean. It is a
+    /// typed column because a red flag reads it. Each detail visit replaces the last one's value, since a
+    /// page that has dropped the wording is a fresh reading, and a visit-less card touch leaves it alone.</summary>
+    public string? TitleBrandPhrase { get; set; }
+
     /// <summary>The fee for picking the car up instead of having it delivered, recorded beside
     /// <see cref="ShippingFee"/> as an option and never as a default; null when the site offers none
     /// or none was read.</summary>

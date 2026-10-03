@@ -684,6 +684,7 @@ public static class WalkCommand
                     PickupLocation = cardFee?.PickupLocation ?? pickup?.Location,
                     FeePosture = feeStatement?.Posture,
                     ItemizedFeesTotal = feeStatement?.ItemizedTotal,
+                    TitleBrandPhrase = TitleBrandStatements.Read(bodyText),
                 };
                 await upsertService.UpsertAsync(candidate, currentRun, ct);
                 savedVinsThisPair.Add(candidate.Vin);
