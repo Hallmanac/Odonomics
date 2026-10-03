@@ -63,6 +63,23 @@ public class FactoryTrimTableTests
     }
 
     [Theory]
+    [InlineData("Camry Hybrid", "LE", EquipmentStatus.Present)]
+    [InlineData("Camry Hybrid", "SE", EquipmentStatus.Present)]
+    [InlineData("Corolla Hybrid", "LE", EquipmentStatus.Unknown)]
+    public void LoadShipped_Toyota2025StickerRows_HaveAFobAndKeepPackageDependentFeaturesUnknown(
+        string model, string trim, EquipmentStatus pushButton)
+    {
+        FactoryTrimTable table = FactoryTrimTable.LoadShipped();
+
+        VehicleEquipment equipment = table.Lookup("Toyota", model, 2025, trim);
+
+        Assert.Equal(EquipmentStatus.Present, equipment.KeylessFobEntry.Status);
+        Assert.Equal(EquipmentStatus.Unknown, equipment.SmartKeyEntry.Status);
+        Assert.Equal(pushButton, equipment.PushButtonStart.Status);
+        Assert.Equal(new EquipmentFact(EquipmentStatus.Present, EquipmentSource.TrimTable), equipment.KeylessEntry);
+    }
+
+    [Theory]
     [InlineData(2019)]
     [InlineData(2020)]
     [InlineData(2021)]
