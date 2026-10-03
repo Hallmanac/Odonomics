@@ -80,6 +80,33 @@ public class AuctionPageParserTests
     }
 
     [Fact]
+    public void Parse_VinOnlyInTheCompareListOfAnotherLot_IsReadableWithNoRecord()
+    {
+        // JTDBCMFE5R3056246 appears only under "Compare auctions" on the JTDBCMFEXS3070309 lot page.
+        AuctionPageReading reading = AuctionPageParser.Parse(
+            "JTDBCMFE5R3056246",
+            AuctionFixtures.CorollaHybridLotUrl,
+            "2025 Toyota Corolla JTDBCMFEXS3070309 - BidCars",
+            AuctionFixtures.Read("bid-cars-lot-JTDBCMFEXS3070309.txt"));
+
+        Assert.Equal(AuctionPageStatus.NoRecord, reading.Status);
+        Assert.Null(reading.Record);
+    }
+
+    [Fact]
+    public void Parse_VinInTheTextButNoLabelledVinField_IsCouldNotReadNotAnotherLotsRecord()
+    {
+        string page = AuctionFixtures.Read("bid-cars-lot-JTDBCMFEXS3070309.txt")
+            .Replace("VIN\nJTDBCMFEXS3070309 \n", "Chassis\nJTDBCMFEXS3070309 \n", StringComparison.Ordinal);
+
+        AuctionPageReading reading = AuctionPageParser.Parse(AuctionFixtures.CorollaHybridVin, AuctionFixtures.CorollaHybridLotUrl, "bid.cars", page);
+
+        Assert.Equal(AuctionPageStatus.CouldNotRead, reading.Status);
+        Assert.Null(reading.Record);
+        Assert.Contains("not as the lot's own VIN field", reading.Reason);
+    }
+
+    [Fact]
     public void Parse_CaptchaPage_IsCouldNotReadWithACaptchaReason()
     {
         AuctionPageReading reading = ParseCorollaHybrid("archive-page-captcha.txt", title: "Just a moment...");

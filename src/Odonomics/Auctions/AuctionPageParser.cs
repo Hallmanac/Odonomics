@@ -9,8 +9,9 @@ namespace Odonomics.Auctions;
 /// tab-separated row, or as a label on one line with its value on the next, so all three are read.
 /// A page that is a captcha or block, too short to be a lot page, or names the VIN without any lot
 /// field it recognises is a could-not-read with a reason, never a "not found": a changed layout must
-/// not be mistaken for a car with no auction history. A page that does not mention the VIN at all is
-/// a readable page with no record for it. These sites change and may block automated reads, so the
+/// not be mistaken for a car with no auction history. A page that does not mention the VIN at all, or
+/// whose own labelled VIN is a different one (the VIN only sits in a compare list), is a readable page
+/// with no record for it. These sites change and may block automated reads, so the
 /// label lists below are the one place to teach the parser a new spelling.</summary>
 public static partial class AuctionPageParser
 {
@@ -32,6 +33,7 @@ public static partial class AuctionPageParser
 
     private static readonly Dictionary<Field, string[]> Labels = new()
     {
+        [Field.Vin] = ["vin", "vin number", "vin #"],
         [Field.LotNumber] = ["lot number", "lot #", "lot no", "lot"],
         [Field.Auction] = ["auction", "auction name"],
         [Field.SaleDate] = ["sale date", "auction date", "sold date", "date of sale"],
@@ -52,6 +54,7 @@ public static partial class AuctionPageParser
 
     private enum Field
     {
+        Vin,
         LotNumber,
         Auction,
         SaleDate,
@@ -77,13 +80,28 @@ public static partial class AuctionPageParser
             return new AuctionPageReading(AuctionPageStatus.NoRecord, null, null);
         }
 
+        // A lot page also lists other lots' VINs (bid.cars "Compare auctions"), so the VIN appearing in
+        // the text is not enough: it must be the lot's own labelled VIN, the first one on the page.
         Dictionary<Field, string> values = ReadLabelledValues(pageText);
+        if (values.TryGetValue(Field.Vin, out string? lotVin) && !lotVin.Contains(vin, StringComparison.OrdinalIgnoreCase))
+        {
+            return new AuctionPageReading(AuctionPageStatus.NoRecord, null, null);
+        }
+
         if (!values.ContainsKey(Field.LotNumber) || values.Count < 2)
         {
             return new AuctionPageReading(
                 AuctionPageStatus.CouldNotRead,
                 null,
                 $"the page names the VIN but no lot fields were recognised, so its layout may have changed ({new Uri(url).Host})");
+        }
+
+        if (!values.ContainsKey(Field.Vin))
+        {
+            return new AuctionPageReading(
+                AuctionPageStatus.CouldNotRead,
+                null,
+                $"the page names the VIN but not as the lot's own VIN field, so it may be another lot's page ({new Uri(url).Host})");
         }
 
         // bid.cars prints "ACV / ERC" as one value, "$23,937 USD / $22,579 USD": the actual cash value,

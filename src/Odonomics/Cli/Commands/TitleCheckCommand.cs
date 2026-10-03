@@ -48,6 +48,11 @@ public static class TitleCheckCommand
             ? await ExplicitVehiclesAsync(db, vins, cancellationToken)
             : await TopRankedVehiclesAsync(db, scenarioPath, top ?? DefaultTop, cancellationToken);
 
+        if (vins.Count > 0 && vehicles.Count == 0)
+        {
+            return 1;
+        }
+
         DateTimeOffset now = DateTimeOffset.UtcNow;
         foreach (VehicleEntity vehicle in vehicles)
         {
@@ -203,9 +208,10 @@ public static class TitleCheckCommand
     private static async Task<List<VehicleEntity>> ExplicitVehiclesAsync(OdonomicsDbContext db, IReadOnlyList<string> vins, CancellationToken cancellationToken)
     {
         List<VehicleEntity> vehicles = [];
-        foreach (string vin in vins.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (string vin in vins.Select(v => v.Trim()).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            VehicleEntity? vehicle = await db.Vehicles.Include(v => v.AuctionCheck).FirstOrDefaultAsync(v => v.Vin == vin, cancellationToken);
+            string upperVin = vin.Trim().ToUpperInvariant();
+            VehicleEntity? vehicle = await db.Vehicles.Include(v => v.AuctionCheck).FirstOrDefaultAsync(v => v.Vin.ToUpper() == upperVin, cancellationToken);
             if (vehicle is null)
             {
                 AnsiConsole.MarkupLineInterpolated($"[red]no vehicle with VIN {vin} in the ledger[/]");
