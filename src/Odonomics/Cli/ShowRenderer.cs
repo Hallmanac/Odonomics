@@ -214,18 +214,6 @@ public static class ShowRenderer
 
     private const int MonthlyCostLabelWidth = 18;
 
-    /// <summary>Itemizes what the scenario says one vehicle costs a month: the loan payment and each
-    /// running cost as the scenario's expected value (or range, when an input feeding it is loose),
-    /// then the during-loan total and the ten-year average. Every figure is read from the same
-    /// <see cref="CostBreakdown"/> `odo rank` prints, so a "$592-$627" during-loan figure can be
-    /// seen to be a payment plus running costs, not a car payment. When the scenario cannot price the
-    /// vehicle, says why in place of the figures. When the vehicle's posting shows a shipping fee, a
-    /// pickup option or itemized fees, each sits on its own line under the asking price, both fees when
-    /// both are known, and the purchase price they add up to closes the group with the fulfillment the
-    /// analysis assumed ("with delivery" or "with pickup"), since that price is what the figures are
-    /// computed from; when the posting's fee posture was read, a last line says what it is. A vehicle
-    /// with none of these prints none of those lines. Written line by line rather than as a table so
-    /// nothing wraps at 80 columns.</summary>
     /// <summary>The Equipment section's markup lines: each feature's status and where it came from, then, for a
     /// feature the scenario requires, a yellow "confirm ..." note when the status is unknown or a red line when it
     /// is absent, since `odo rank` excludes the car for that. `odo show` itself still prints the car.</summary>
@@ -254,6 +242,18 @@ public static class ShowRenderer
         return lines;
     }
 
+    /// <summary>Itemizes what the scenario says one vehicle costs a month: the loan payment and each
+    /// running cost as the scenario's expected value (or range, when an input feeding it is loose),
+    /// then the during-loan total and the ten-year average. Every figure is read from the same
+    /// <see cref="CostBreakdown"/> `odo rank` prints, so a "$592-$627" during-loan figure can be
+    /// seen to be a payment plus running costs, not a car payment. When the scenario cannot price the
+    /// vehicle, says why in place of the figures. When the vehicle's posting shows a shipping fee, a
+    /// pickup option or itemized fees, each sits on its own line under the asking price, both fees when
+    /// both are known, and the purchase price they add up to closes the group with the fulfillment the
+    /// analysis assumed ("with delivery" or "with pickup"), since that price is what the figures are
+    /// computed from; when the posting's fee posture was read, a last line says what it is. A vehicle
+    /// with none of these prints none of those lines. Written line by line rather than as a table so
+    /// nothing wraps at 80 columns.</summary>
     public static void RenderMonthlyCost(IAnsiConsole console, CostBreakdown? cost, string? unavailableReason, PurchasePrice? purchasePrice = null)
     {
         console.MarkupLine("[bold]Monthly cost[/]");
