@@ -10,17 +10,20 @@ public enum EquipmentStatus
 }
 
 /// <summary>Where an equipment status came from, in order of precedence: the listing's own window sticker
-/// or factory equipment list, then the factory trim table (see <see cref="FactoryTrimTable"/>). A dealer's
-/// description text is deliberately not a source: it never confirms or rules out a feature.</summary>
+/// or factory equipment list, a window sticker read by hand with `odo equipment set` (the same authority as
+/// a walked sticker, since it is a sticker too), then the factory trim table (see <see cref="FactoryTrimTable"/>).
+/// A dealer's description text is deliberately not a source: it never confirms or rules out a feature.</summary>
 public enum EquipmentSource
 {
     None,
     WindowSticker,
+    ManualSticker,
     TrimTable,
 }
 
-/// <summary>One equipment status with its source. An unknown status has no source.</summary>
-public readonly record struct EquipmentFact(EquipmentStatus Status, EquipmentSource Source)
+/// <summary>One equipment status with its source. An unknown status has no source. <paramref name="Detail"/>
+/// is the operator's own words about where a manual sticker reading came from, and is null for every other source.</summary>
+public readonly record struct EquipmentFact(EquipmentStatus Status, EquipmentSource Source, string? Detail = null)
 {
     public static EquipmentFact Unknown => new(EquipmentStatus.Unknown, EquipmentSource.None);
 
@@ -29,10 +32,14 @@ public readonly record struct EquipmentFact(EquipmentStatus Status, EquipmentSou
         ? "unknown"
         : $"{Status.ToString().ToLowerInvariant()} ({SourceText})";
 
-    /// <summary>The source in words, for a reason or a printed status.</summary>
+    /// <summary>The source in words, for a reason or a printed status. A manual sticker reading carries the
+    /// operator's text after the label, for example "sticker (manual): Toyota PDF".</summary>
     public string SourceText => Source switch
     {
         EquipmentSource.WindowSticker => "window sticker",
+        EquipmentSource.ManualSticker => string.IsNullOrWhiteSpace(Detail)
+            ? "sticker (manual)"
+            : $"sticker (manual): {Detail}",
         EquipmentSource.TrimTable => "factory trim table",
         _ => "no source",
     };
