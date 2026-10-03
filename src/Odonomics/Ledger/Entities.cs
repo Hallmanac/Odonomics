@@ -1,3 +1,5 @@
+using Odonomics.Auctions;
+
 namespace Odonomics.Ledger;
 
 /// <summary>A vehicle keyed by VIN. Mileage, year, make, model, and trim reflect the most recently
@@ -17,6 +19,7 @@ public sealed class VehicleEntity
     public List<PostingEntity> Postings { get; set; } = [];
     public List<NoteEntity> Notes { get; set; } = [];
     public VinRecordEntity? VinRecord { get; set; }
+    public AuctionCheckEntity? AuctionCheck { get; set; }
 }
 
 /// <summary>One source-and-URL sighting of a vehicle. <see cref="LastSeen"/> is stamped with the
@@ -271,6 +274,33 @@ public sealed class VinRecordEntity
     public int? CurrentListingDaysOnMarket { get; set; }
     public DateTimeOffset? HistoryFetchedAt { get; set; }
     public string? HistoryCouldNotFetchReason { get; set; }
+
+    public VehicleEntity? Vehicle { get; set; }
+}
+
+/// <summary>What `odo title check` last found out about a vehicle in the public salvage-auction
+/// archives (see <c>Odonomics.Auctions</c>): that a Copart or IAA sale was found, with its fields,
+/// that none was, or that the archives could not be read, with a reason such as a captcha. Kept apart
+/// from <see cref="VinRecordEntity"/> because it comes from a browser lookup and not the NHTSA and
+/// Marketcheck research, and has its own recheck rule (see <see cref="AuctionChecks.NeedsCheck"/>).
+/// The sale fields are null unless <see cref="Outcome"/> is found, and <see cref="CouldNotReadReason"/>
+/// is null unless it is could-not-read.</summary>
+public sealed class AuctionCheckEntity
+{
+    public required string Vin { get; set; }
+    public required AuctionCheckOutcome Outcome { get; set; }
+    public required DateTimeOffset CheckedAt { get; set; }
+    public string? CouldNotReadReason { get; set; }
+    public string? Auction { get; set; }
+    public string? LotNumber { get; set; }
+    public DateOnly? SaleDate { get; set; }
+    public string? SaleDocument { get; set; }
+    public string? PrimaryDamage { get; set; }
+    public string? SecondaryDamage { get; set; }
+    public decimal? Acv { get; set; }
+    public decimal? RepairEstimate { get; set; }
+    public int? Odometer { get; set; }
+    public string? SourceUrl { get; set; }
 
     public VehicleEntity? Vehicle { get; set; }
 }

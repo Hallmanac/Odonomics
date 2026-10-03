@@ -1,4 +1,5 @@
 using System.Globalization;
+using Odonomics.Auctions;
 using Odonomics.Domain;
 using Odonomics.Ledger;
 using Odonomics.Marketcheck;
@@ -171,6 +172,13 @@ public static class ShowRenderer
         }
 
         AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Salvage-auction archives[/]");
+        foreach (string line in AuctionLines(vehicle.AuctionCheck))
+        {
+            AnsiConsole.WriteLine(line);
+        }
+
+        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Postings[/]");
         AnsiConsole.Write(BuildPostingsTable(vehicle.Postings));
         foreach (string line in PostingAttributeLines(vehicle.Postings))
@@ -296,6 +304,52 @@ public static class ShowRenderer
         }
 
         return table;
+    }
+
+    /// <summary>The stored salvage-auction lookup (see <see cref="AuctionCheckEntity"/>) as plain lines:
+    /// the sale's auction, lot, and date, then whichever of its sale document, damage, ACV, repair
+    /// estimate, odometer, and source the record carried, or, when no sale was found, that none was and
+    /// when the archives were checked, or why they could not be read. A vehicle never checked says so
+    /// and names the command.</summary>
+    public static IReadOnlyList<string> AuctionLines(AuctionCheckEntity? check)
+    {
+        switch (check)
+        {
+            case null:
+                return ["  not checked yet (odo title check looks a VIN up in the public Copart and IAA archives)"];
+            case { Outcome: AuctionCheckOutcome.NotFound }:
+                return [$"  no auction sale found in the public archives (checked {check.CheckedAt:yyyy-MM-dd})"];
+            case { Outcome: AuctionCheckOutcome.CouldNotRead }:
+                return [$"  could not read the archives (checked {check.CheckedAt:yyyy-MM-dd}): {check.CouldNotReadReason}"];
+        }
+
+        string sale = string.Join(", ", new[]
+        {
+            check.Auction,
+            check.LotNumber is null ? null : $"lot {check.LotNumber}",
+            check.SaleDate is DateOnly date ? $"sold {date:yyyy-MM-dd}" : null,
+        }.OfType<string>());
+        string damage = check.PrimaryDamage is null
+            ? ""
+            : check.SecondaryDamage is null
+                ? check.PrimaryDamage
+                : $"{check.PrimaryDamage}, secondary {check.SecondaryDamage}";
+        List<string> lines = [$"  {(sale.Length == 0 ? "auction sale" : sale)} (checked {check.CheckedAt:yyyy-MM-dd})"];
+        AddLine(lines, "sale document", check.SaleDocument);
+        AddLine(lines, "damage", damage);
+        AddLine(lines, "ACV", check.Acv is decimal acv ? Format.Money(acv) : null);
+        AddLine(lines, "repair estimate", check.RepairEstimate is decimal repair ? Format.Money(repair) : null);
+        AddLine(lines, "odometer", check.Odometer is int odometer ? odometer.ToString("N0", CultureInfo.InvariantCulture) : null);
+        AddLine(lines, "source", check.SourceUrl);
+        return lines;
+    }
+
+    private static void AddLine(List<string> lines, string label, string? value)
+    {
+        if (!string.IsNullOrEmpty(value))
+        {
+            lines.Add($"  {label}: {value}");
+        }
     }
 
     /// <summary>One line per name and value of each posting's attributes (see
