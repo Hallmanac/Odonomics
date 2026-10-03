@@ -42,3 +42,40 @@ Four fields are keyed by model, and each key is the same "Make Model" string, su
 `minModelYearOverrides` (inside `filters`) names a model whose minimum year differs from `minModelYear`, and it wins when both apply. The shipped scenario lets a 2018 Camry Hybrid through while every other model starts at 2019, and the walk's search facets follow the same rule.
 
 `hybridOnlyFromModelYear` is optional. It names the model year a base model stopped shipping a gas-only trim, so a candidate at or above that year matches the scenario's hybrid model even when its own listing text never says "Hybrid". Toyota dropped the gas-only Camry for model year 2025, so the shipped scenario has `"Toyota Camry Hybrid": 2025`. A plain "2025 Camry SE" is then kept and scored as a Camry Hybrid instead of being dropped as a gas trim. A candidate below the named year, or a model with no rule at all, is still rejected unless its own text says "Hybrid". `ScenarioLoader` rejects a file whose key isn't one of `filters.allowedModels`, whose key repeats when case is ignored, or whose value isn't a four-digit year. [walk.md](walk.md#rules-every-site-shares) covers what the rule changes about the walk's searches.
+
+## Required features
+
+`filters.requiredFeatures` is optional. It lists equipment every candidate must have, using the names `"smart-key entry"` (proximity entry) and `"push-button start"`. A name matches ignoring case, and `ScenarioLoader` rejects any other name. The shipped scenario requires both, because Brian ruled that a candidate must have keyless or smart-key entry and push-to-start. A scenario that leaves the field out requires nothing, and a car is then ranked as it was before.
+
+Each vehicle carries a status for each feature: present, absent, or unknown, with its source. The sources rank in this order:
+
+1. The listing's window sticker or factory equipment list, read by the walk (see [walk.md](walk.md#window-sticker-equipment)).
+2. The factory trim table, which fills a status the sticker left unknown.
+3. Nothing else. A dealer's description never confirms or rules out either feature.
+
+A car whose status for a required feature is absent is excluded by `odo rank`, with the feature and the source named in its reason, such as "push-button start is absent (window sticker), which the scenario requires". The exclusion only applies to a confirmed absence. A car whose status is unknown is still ranked, and `odo rank` prints a yellow note under its row for each unknown required feature, such as "confirm push-button start", so it is a prompt to check with the dealer and not a penalty. `odo research` and `odo title check` score cars the same way, so neither spends a lookup on a car `odo rank` excludes for equipment. `odo show` prints both statuses and their sources in an Equipment section, along with the same "confirm" note or a line saying `odo rank` excludes the car, but it still shows the car, as it does for any other filter.
+
+### The factory trim table
+
+The trim table is one data file, `src/Odonomics/Data/factory-trim-equipment.json`, copied beside the program and read each time `odo rank`, `odo show`, `odo research`, or `odo title check` runs. It starts empty. Each row names a make, a model as the ledger spells it (for example "Corolla Hybrid"), a range of model years, a trim, an answer of `"present"` or `"absent"` for `smartKeyEntry`, `pushButtonStart`, or both, and a `source` that says where the answer came from:
+
+```json
+{
+  "entries": [
+    {
+      "make": "Toyota",
+      "model": "Corolla Hybrid",
+      "yearFrom": 2020,
+      "yearTo": 2023,
+      "trim": "LE",
+      "smartKeyEntry": "present",
+      "pushButtonStart": "present",
+      "source": "where the answer was read"
+    }
+  ]
+}
+```
+
+A row applies to a car whose make, model, and trim match ignoring case and whose model year is inside the range. A car with no trim never matches. When more than one row applies to a car and they disagree about a feature, the table gives no answer for that feature, since a table that contradicts itself is not definite. The table is only ever read to fill an unknown status. It never replaces one a window sticker read, and what it fills is not stored in the ledger, so editing the file changes the next run's ranking with no walk. A malformed row stops the command with an error that names the row.
+
+To set the requirement on a scenario that does not have it, add `"requiredFeatures": ["smart-key entry", "push-button start"]` to its `filters` object, then run `odo walk <site> --revisit` so the cars already on the ledger get their window stickers read.

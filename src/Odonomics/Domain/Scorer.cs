@@ -33,8 +33,14 @@ public static class Scorer
             InsuranceUnknown = insuranceUnknown,
             MpgUnknown = mpgUnknown,
             Cost = cost,
+            UnconfirmedFeatures = UnconfirmedFeatures(vehicle, scenario),
         };
     }
+
+    /// <summary>The scenario's required features this vehicle's equipment leaves unknown, in the scenario's
+    /// order. A car with an unknown status is never excluded for it, only flagged to confirm.</summary>
+    public static IReadOnlyList<string> UnconfirmedFeatures(VehicleForScoring vehicle, Scenario scenario) =>
+        [.. scenario.Filters.RequiredFeatures.Where(feature => vehicle.Equipment.For(feature).Status == EquipmentStatus.Unknown)];
 
     public static IReadOnlyList<string> FilterReasons(VehicleForScoring vehicle, Scenario scenario)
     {
@@ -63,6 +69,15 @@ public static class Scorer
             if (priceWithShipping > maxPrice)
             {
                 reasons.Add($"price ${priceWithShipping:N0} exceeds the maximum ${maxPrice:N0}");
+            }
+        }
+
+        foreach (string feature in scenario.Filters.RequiredFeatures)
+        {
+            EquipmentFact fact = vehicle.Equipment.For(feature);
+            if (fact.Status == EquipmentStatus.Absent)
+            {
+                reasons.Add($"{feature} is absent ({fact.SourceText}), which the scenario requires");
             }
         }
 

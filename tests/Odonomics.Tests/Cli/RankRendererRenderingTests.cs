@@ -29,7 +29,8 @@ public class RankRendererRenderingTests
         Fulfillment fulfillment = Fulfillment.Delivery,
         decimal? itemizedFees = null,
         string? unmeasuredOnlyAtStore = null,
-        string? priceNote = null)
+        string? priceNote = null,
+        IReadOnlyList<string>? unconfirmedFeatures = null)
     {
         var vehicle = new VehicleForScoring
         {
@@ -58,6 +59,7 @@ public class RankRendererRenderingTests
             InsuranceUnknown = insuranceUnknown,
             MpgUnknown = mpgUnknown,
             Cost = cost,
+            UnconfirmedFeatures = unconfirmedFeatures ?? [],
         };
     }
 
@@ -180,6 +182,36 @@ public class RankRendererRenderingTests
         Assert.Contains("priced 24% below 12 similar cars (median $22,800); confirm the title", afterRow);
         Assert.Single(lines, line => line.Contains("confirm the title") || line.Contains("12 similar cars"));
         Assert.Contains(lines, line => line.Contains("$17,289") && line.Contains("clean") && !line.Contains("flag"));
+    }
+
+    [Fact]
+    public void Render_VehicleWithAnUnknownRequiredFeature_PrintsAConfirmNoteUnderItsRowAndStillRanksIt()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score unconfirmed = BuildScore("JTDBCMFE7P3014805", 2023, "Toyota", "Corolla Hybrid", 19990m, cost: cost, unconfirmedFeatures: ["push-button start"]);
+        Score confirmed = BuildScore("4T1G11AK0LU654321", 2025, "Toyota", "Corolla Hybrid", 22800m, cost: cost);
+
+        string[] lines = Render([unconfirmed, confirmed], budget: null);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        Assert.Contains(lines, line => line.Contains("Ranked (2)"));
+        int row = Array.FindIndex(lines, line => line.Contains("JTDBCMFE7P3014805"));
+        string afterRow = string.Join(" ", lines.Skip(row + 1).Take(3).Select(line => line.Trim()));
+        Assert.Contains("confirm push-button start", afterRow);
+        Assert.Single(lines, line => line.Contains("confirm push-button start"));
+    }
+
+    [Fact]
+    public void Render_VehicleExcludedForAnAbsentRequiredFeature_ListsTheReasonUnderExcluded()
+    {
+        Score excluded = BuildScore("JTDBCMFE7P3014805", 2023, "Toyota", "Corolla Hybrid", 19990m, passes: false, failureReasons: ["push-button start is absent (window sticker), which the scenario requires"]);
+
+        string[] lines = Render([excluded], budget: null);
+
+        Assert.Contains(lines, line => line.Contains("Excluded (1)"));
+        // The reasons column wraps inside the table, so compare the text with the borders and padding collapsed.
+        string excludedText = Regex.Replace(string.Join(" ", lines.SkipWhile(line => !line.Contains("Excluded (1)"))).Replace('│', ' '), @"\s+", " ");
+        Assert.Contains("push-button start is absent (window sticker), which the scenario requires", excludedText);
     }
 
     [Fact]

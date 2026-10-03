@@ -40,6 +40,10 @@
       "Toyota Corolla Hybrid",
       "Toyota Camry Hybrid",
       "Toyota Prius"
+    ],
+    "requiredFeatures": [
+      "smart-key entry",
+      "push-button start"
     ]
   },
   "hybridOnlyFromModelYear": {

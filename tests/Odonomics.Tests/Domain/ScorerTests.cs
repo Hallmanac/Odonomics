@@ -444,4 +444,99 @@ public class ScorerTests
 
         Assert.Null(vehicle.PurchasePrice);
     }
+
+    private static Scenario RequiringBoth() => BuildScenario() with
+    {
+        Filters = BuildScenario().Filters with { RequiredFeatures = [EquipmentFeatures.SmartKeyEntry, EquipmentFeatures.PushButtonStart] },
+    };
+
+    private static EquipmentFact FromSticker(EquipmentStatus status) => new(status, EquipmentSource.WindowSticker);
+
+    [Fact]
+    public void FilterReasons_RequiredFeatureConfirmedAbsent_ExcludesAndNamesTheFeatureAndItsSource()
+    {
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with
+        {
+            Equipment = new VehicleEquipment(FromSticker(EquipmentStatus.Absent), FromSticker(EquipmentStatus.Present)),
+        };
+
+        IReadOnlyList<string> reasons = Scorer.FilterReasons(vehicle, RequiringBoth());
+
+        string reason = Assert.Single(reasons);
+        Assert.Equal("smart-key entry is absent (window sticker), which the scenario requires", reason);
+    }
+
+    [Fact]
+    public void Score_RequiredFeatureAbsentFromTheTrimTable_FailsTheFilterWithoutACost()
+    {
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with
+        {
+            Equipment = new VehicleEquipment(EquipmentFact.Unknown, new EquipmentFact(EquipmentStatus.Absent, EquipmentSource.TrimTable)),
+        };
+
+        Score score = Scorer.Score(vehicle, RequiringBoth());
+
+        Assert.False(score.Passes);
+        Assert.Contains("push-button start is absent (factory trim table), which the scenario requires", score.FailureReasons);
+        Assert.Null(score.Cost);
+    }
+
+    [Fact]
+    public void Score_RequiredFeatureUnknown_StillRanksAndNotesWhatToConfirm()
+    {
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with
+        {
+            Equipment = new VehicleEquipment(FromSticker(EquipmentStatus.Present), EquipmentFact.Unknown),
+        };
+
+        Score score = Scorer.Score(vehicle, RequiringBoth());
+
+        Assert.True(score.Passes);
+        Assert.NotNull(score.Cost);
+        Assert.Equal(["push-button start"], score.UnconfirmedFeatures);
+        Assert.Equal("confirm push-button start", EquipmentFeatures.ConfirmNote(Assert.Single(score.UnconfirmedFeatures)));
+    }
+
+    [Fact]
+    public void Score_BothRequiredFeaturesPresent_PassesWithNothingToConfirm()
+    {
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with
+        {
+            Equipment = new VehicleEquipment(FromSticker(EquipmentStatus.Present), FromSticker(EquipmentStatus.Present)),
+        };
+
+        Score score = Scorer.Score(vehicle, RequiringBoth());
+
+        Assert.True(score.Passes);
+        Assert.Empty(score.UnconfirmedFeatures);
+    }
+
+    [Fact]
+    public void Score_ScenarioRequiresNothing_IgnoresEquipmentEntirely()
+    {
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with
+        {
+            Equipment = new VehicleEquipment(FromSticker(EquipmentStatus.Absent), FromSticker(EquipmentStatus.Absent)),
+        };
+
+        Score score = Scorer.Score(vehicle, BuildScenario());
+
+        Assert.True(score.Passes);
+        Assert.Empty(score.UnconfirmedFeatures);
+    }
+
+    [Fact]
+    public void Score_OnlyTheRequiredFeatureCounts_AnAbsentOtherFeatureDoesNotExclude()
+    {
+        Scenario requiresPushButtonOnly = BuildScenario() with
+        {
+            Filters = BuildScenario().Filters with { RequiredFeatures = [EquipmentFeatures.PushButtonStart] },
+        };
+        VehicleForScoring vehicle = Vehicle("Toyota", "Prius", 2020, 40000, 18000m) with
+        {
+            Equipment = new VehicleEquipment(FromSticker(EquipmentStatus.Absent), FromSticker(EquipmentStatus.Present)),
+        };
+
+        Assert.True(Scorer.Score(vehicle, requiresPushButtonOnly).Passes);
+    }
 }

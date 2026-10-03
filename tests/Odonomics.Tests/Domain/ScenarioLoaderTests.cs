@@ -365,4 +365,65 @@ public class ScenarioLoaderTests
     {
         Assert.Equal(Fulfillment.Delivery, ScenarioLoader.Load(DaughterScenarioPath).Fulfillment);
     }
+
+    private static string ScenarioWithFilters(string extraFilterFields) => $$"""
+        {
+          "name": "test",
+          "zip": "32114",
+          "radiusMiles": 50,
+          "annualMiles": 12000,
+          "gasPricePerGallon": { "min": 3.00, "max": 3.60 },
+          "holdYears": 10,
+          "downPayment": 3000,
+          "apr": { "min": 0.065, "max": 0.095 },
+          "termMonths": 60,
+          "maintenancePerMile": 0.07,
+          "emergencyReservePerMonth": 50,
+          "salesTaxStateRate": 0.06,
+          "countySurtaxRate": 0.005,
+          "countySurtaxSource": "test",
+          "fees": 500,
+          "residualFraction": 0.35,
+          "insuranceMonthlyByModel": {},
+          "mpgByModel": {},
+          "filters": {
+            "minModelYear": 2019,
+            "minModelYearOverrides": {},
+            "maxMileage": 100000,
+            {{extraFilterFields}}
+            "allowedModels": []
+          },
+          "targetMonthlyBudgets": [300]
+        }
+        """;
+
+    [Fact]
+    public void Parse_RequiredFeaturesOmitted_RequiresNothing()
+    {
+        Assert.Empty(ScenarioLoader.Parse(ScenarioWithFilters("")).Filters.RequiredFeatures);
+    }
+
+    [Fact]
+    public void Parse_RequiredFeaturesNamed_AreReadInTheirCanonicalSpelling()
+    {
+        Scenario scenario = ScenarioLoader.Parse(ScenarioWithFilters("\"requiredFeatures\": [\"Smart-Key Entry\", \"push-button start\", \"smart-key entry\"],"));
+
+        Assert.Equal(["smart-key entry", "push-button start"], scenario.Filters.RequiredFeatures);
+    }
+
+    [Fact]
+    public void Parse_RequiredFeatureNotTracked_Throws()
+    {
+        JsonException error = Assert.ThrowsAny<JsonException>(() => ScenarioLoader.Parse(ScenarioWithFilters("\"requiredFeatures\": [\"heated seats\"],")));
+
+        Assert.Contains("heated seats", error.Message);
+    }
+
+    [Fact]
+    public void Load_ShippedDaughterScenario_RequiresSmartKeyEntryAndPushButtonStart()
+    {
+        Scenario scenario = ScenarioLoader.Load(DaughterScenarioPath);
+
+        Assert.Equal(["smart-key entry", "push-button start"], scenario.Filters.RequiredFeatures);
+    }
 }

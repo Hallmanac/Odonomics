@@ -36,12 +36,13 @@ public static class RankCommand
         Dictionary<string, VinRecordEntity> vinRecordsByVin = vinRecords.ToDictionary(r => r.Vin);
 
         IReadOnlyDictionary<string, string> priceNotes = VehiclePricing.SimilarPriceNotes(vehicles, latestCoverageBySource);
+        FactoryTrimTable trimTable = FactoryTrimTable.LoadShipped();
 
         var scores = new List<Score>();
         var research = new Dictionary<string, ResearchStatus>();
         foreach (VehicleEntity vehicle in vehicles)
         {
-            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles) with
+            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles, trimTable) with
             {
                 PriceNote = priceNotes.GetValueOrDefault(vehicle.Vin),
             };
@@ -64,8 +65,10 @@ public static class RankCommand
     /// vehicle's active postings, not only that cheapest one (see
     /// <see cref="VehiclePricing.ReservedOrInTransitNote"/>). <paramref name="zip"/> and
     /// <paramref name="radiusMiles"/> are the scenario's own, for judging whether a CarMax "Only at"
-    /// posting's store is close enough to still purchase.</summary>
-    public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string zip, int radiusMiles)
+    /// posting's store is close enough to still purchase. The equipment is the vehicle's stored window-sticker
+    /// status with <paramref name="trimTable"/> filling what it left unknown; null means no table, so only the
+    /// stored statuses count.</summary>
+    public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string zip, int radiusMiles, FactoryTrimTable? trimTable = null)
     {
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles);
         PostingEntity? cheapest = VehiclePricing.LowestCurrentPurchasePosting(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles);
@@ -92,6 +95,7 @@ public static class RankCommand
             OnlyAtOutOfRadiusStore = VehiclePricing.OnlyAtOutOfRadiusStore(vehicle, latestCoverageBySource, zip, radiusMiles),
             UnmeasuredOnlyAtStore = VehiclePricing.UnmeasuredOnlyAtStore(vehicle, latestCoverageBySource, zip, radiusMiles),
             OnlyCarsComCarMaxPostings = VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, latestCoverageBySource),
+            Equipment = (trimTable ?? FactoryTrimTable.Empty).Fill(vehicle.StoredEquipment, vehicle.Make, vehicle.Model, vehicle.Year, vehicle.Trim),
         };
     }
 

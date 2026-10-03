@@ -56,7 +56,7 @@ public static class ResearchCommand
             fulfillment = scenario.Fulfillment;
             zip = scenario.Zip;
             radiusMiles = scenario.RadiusMiles;
-            vehicles = SelectVehiclesToResearch(allVehicles, scenario, latestCoverageBySource);
+            vehicles = SelectVehiclesToResearch(allVehicles, scenario, latestCoverageBySource, FactoryTrimTable.LoadShipped());
         }
 
         if (vehicles.Count == 0)
@@ -281,8 +281,9 @@ public static class ResearchCommand
     public static List<VehicleEntity> SelectVehiclesToResearch(
         IReadOnlyList<VehicleEntity> allVehicles,
         Scenario scenario,
-        IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource) =>
-        [.. allVehicles.Where(v => PassesScenarioFilters(v, scenario, latestCoverageBySource))];
+        IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource,
+        FactoryTrimTable? trimTable = null) =>
+        [.. allVehicles.Where(v => PassesScenarioFilters(v, scenario, latestCoverageBySource, trimTable))];
 
     /// <summary>The scenario's non-price hard filters (allowed model, minimum year, maximum mileage, not new
     /// stock) plus the price ceiling, checked against the same cheapest-to-take-home posting `odo rank` scores
@@ -296,9 +297,9 @@ public static class ResearchCommand
     /// would otherwise silently skip the price ceiling too and spend a research call on a car that could never
     /// pass it, so that ceiling is checked here against the store's own asking price before the "out of radius"
     /// tolerance below lets the vehicle through.</summary>
-    private static bool PassesScenarioFilters(VehicleEntity vehicle, Scenario scenario, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource)
+    private static bool PassesScenarioFilters(VehicleEntity vehicle, Scenario scenario, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, FactoryTrimTable? trimTable)
     {
-        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
+        VehicleForScoring forScoring = RankCommand.ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles, trimTable);
         if (forScoring.OnlyAtOutOfRadiusStore is not null && ExceedsMaxPriceIgnoringOutOfRadius(vehicle, scenario, latestCoverageBySource))
         {
             return false;

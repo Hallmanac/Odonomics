@@ -195,6 +195,11 @@ public static class RankRenderer
                 console.MarkupLine(priceNoteLine);
             }
 
+            if (ConfirmFeaturesLine(score) is string confirmLine)
+            {
+                console.MarkupLine(confirmLine);
+            }
+
             if (detail)
             {
                 if (PurchasePriceLine(score) is string purchasePriceLine)
@@ -236,6 +241,15 @@ public static class RankRenderer
     /// note.</summary>
     private static string? PriceNoteLine(Score score) =>
         score.Vehicle.PriceNote is string note ? $"    [yellow]{Markup.Escape(note)}[/]" : null;
+
+    /// <summary>The line under a row's figures naming each feature the scenario requires that this vehicle's
+    /// equipment leaves unknown, such as "confirm push-button start" (see <see cref="Score.UnconfirmedFeatures"/>):
+    /// a yellow note on its own line, since the car stays ranked until the feature is confirmed absent. Null
+    /// when nothing is left to confirm.</summary>
+    private static string? ConfirmFeaturesLine(Score score) =>
+        score.UnconfirmedFeatures.Count == 0
+            ? null
+            : $"    [yellow]{Markup.Escape(string.Join(", ", score.UnconfirmedFeatures.Select(EquipmentFeatures.ConfirmNote)))}[/]";
 
     private static string VehicleName(Score score) =>
         Format.Truncate($"{score.Vehicle.Year} {score.Vehicle.MakeModel}", VehicleNameMaxWidth);
