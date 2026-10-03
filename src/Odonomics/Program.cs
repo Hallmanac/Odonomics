@@ -117,6 +117,35 @@ noteCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 rootCommand.Add(noteCommand);
 
+var equipmentVinArgument = new Argument<string>("vin");
+var equipmentSmartKeyOption = new Option<string?>("--smart-key-entry") { Description = "present or absent: proximity (smart-key) entry, as the sticker states it" };
+var equipmentPushButtonOption = new Option<string?>("--push-button-start") { Description = "present or absent: push-button start, as the sticker states it" };
+var equipmentFobOption = new Option<string?>("--keyless-fob-entry") { Description = "present or absent: a remote keyless fob (the sticker's plain \"Keyless Entry\")" };
+var equipmentSourceOption = new Option<string?>("--source") { Description = "where the sticker was read, for example \"Toyota sticker PDF\"; stored with the reading and printed by odo show" };
+equipmentSmartKeyOption.AcceptOnlyFromAmong(EquipmentCommand.AcceptedStatuses);
+equipmentPushButtonOption.AcceptOnlyFromAmong(EquipmentCommand.AcceptedStatuses);
+equipmentFobOption.AcceptOnlyFromAmong(EquipmentCommand.AcceptedStatuses);
+var equipmentSetCommand = new Command("set", "record a window-sticker equipment reading for one VIN by hand, for a sticker read outside the walk (a PDF, a photo)");
+equipmentSetCommand.Add(equipmentVinArgument);
+equipmentSetCommand.Add(equipmentSmartKeyOption);
+equipmentSetCommand.Add(equipmentPushButtonOption);
+equipmentSetCommand.Add(equipmentFobOption);
+equipmentSetCommand.Add(equipmentSourceOption);
+equipmentSetCommand.SetAction(async (parseResult, cancellationToken) =>
+{
+    string vin = parseResult.GetValue(equipmentVinArgument)!;
+    return await EquipmentCommand.RunAsync(
+        vin,
+        parseResult.GetValue(equipmentSmartKeyOption),
+        parseResult.GetValue(equipmentPushButtonOption),
+        parseResult.GetValue(equipmentFobOption),
+        parseResult.GetValue(equipmentSourceOption),
+        cancellationToken);
+});
+var equipmentCommand = new Command("equipment", "hand-recorded equipment readings");
+equipmentCommand.Add(equipmentSetCommand);
+rootCommand.Add(equipmentCommand);
+
 var finalistVinArgument = new Argument<string>("vin");
 var finalistCommand = new Command("finalist", "mark a vehicle a finalist (needs a PPI note and a Carfax or AutoCheck note)");
 finalistCommand.Add(finalistVinArgument);

@@ -22,6 +22,9 @@ odo rank [--budget N] [--term M] [--detail] [--fulfillment delivery|pickup]
                                     score every vehicle in the ledger against the scenario
 odo show <vin> [--refresh] [--all-history]
                                     everything odo knows about one vehicle, with its monthly cost
+odo equipment set <vin> [--smart-key-entry present|absent] [--push-button-start present|absent]
+                        [--keyless-fob-entry present|absent] --source "<text>"
+                                    record a window sticker read by hand
 odo note <vin> "<text>"             attach a free-text note to a vehicle
 odo finalist <vin>                  mark a vehicle a finalist
 ```
@@ -63,6 +66,16 @@ odo finalist <vin>                  mark a vehicle a finalist
 ## show
 
 `odo show <vin>` prints the NHTSA decode, recalls, complaints, safety ratings, and the Marketcheck VIN history grouped by seller. It also shows the red flags, the car's smart-key entry, keyless entry, and push-button start with where each came from (see [scenario.md](scenario.md#required-features)), the postings, your notes, whether the vehicle is a finalist, and an itemized monthly cost. `--refresh` re-fetches the research even when the cache is fresh, and `--all-history` prints the raw one-row-per-sighting history underneath the grouped one. Because the monthly cost reads the scenario, `show` takes `--scenario <path>` like the other commands and needs the scenario file to resolve.
+
+## equipment set
+
+`odo equipment set <vin>` records a window-sticker equipment reading by hand, for a sticker read outside the walk, such as a PDF or a photo, which the walk cannot read. Give at least one of `--smart-key-entry`, `--push-button-start`, and `--keyless-fob-entry`, each `present` or `absent`, and `--source "<text>"` saying where the sticker was read, for example `--source "Toyota sticker PDF"`. A feature you leave out keeps whatever the vehicle had. The VIN has to be in the ledger already, and the command makes no network call.
+
+```
+odo equipment set JTDBCMFE0S3083487 --push-button-start absent --source "Toyota sticker PDF, 2026-10-03"
+```
+
+Each status given is stored with the source "sticker (manual)" followed by your text, so `odo show` prints it as "absent (sticker (manual): Toyota sticker PDF, 2026-10-03)". A manual reading has the same authority as a walked sticker: it outranks the factory trim table, and `odo rank` applies it, so an `absent` for a required feature excludes the car with that source in its reason. A later `odo equipment set`, or a later walk that reads a sticker for the VIN, replaces it for that feature. [scenario.md](scenario.md#required-features) covers how the statuses are ranked.
 
 ## note and finalist
 
