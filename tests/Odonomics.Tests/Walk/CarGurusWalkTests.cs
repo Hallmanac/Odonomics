@@ -208,6 +208,14 @@ public class CarGurusWalkTests
     }
 
     [Fact]
+    public void AskingPriceOf_PricedCardAndAnExtractionThatReadNoPrice_IsTheCardsPrice()
+    {
+        const string card = "Viewed\nSave this listing\n\n\u00a0\n\n2023 Toyota Corolla Hybrid\nLearn more about this 2023 Toyota Corolla Hybrid\n\nLE FWD\n\n64,206 mi\n\nKissimmee, FL\n23 mi away\nNo Rating\n$22,494\nFees not disclosed\n$425/mo est.\nCheck availability";
+
+        Assert.Equal(22494m, WalkSites.CarGurus.AskingPriceOf(null, card));
+    }
+
+    [Fact]
     public void AskingPriceOf_NoCardOrACardWithNoPrice_IsNullRatherThanTheDetailPagesPrice()
     {
         Assert.Null(WalkSites.CarGurus.AskingPriceOf(26998m, null));
