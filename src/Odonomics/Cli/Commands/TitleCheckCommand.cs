@@ -240,6 +240,7 @@ public static class TitleCheckCommand
             .Include(v => v.Postings).ThenInclude(p => p.Dealer)
             .Include(v => v.Postings).ThenInclude(p => p.Attributes)
             .Include(v => v.AuctionCheck)
+            .Include(v => v.VinRecord)
             .ToListAsync(cancellationToken);
 
         FactoryTrimTable trimTable = FactoryTrimTable.LoadShipped();

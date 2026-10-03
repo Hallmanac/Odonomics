@@ -30,10 +30,8 @@ public static class RankCommand
             .Include(v => v.Postings).ThenInclude(p => p.Dealer)
             .Include(v => v.Postings).ThenInclude(p => p.Attributes)
             .Include(v => v.AuctionCheck)
+            .Include(v => v.VinRecord)
             .ToListAsync(cancellationToken);
-
-        List<VinRecordEntity> vinRecords = await db.VinRecords.ToListAsync(cancellationToken);
-        Dictionary<string, VinRecordEntity> vinRecordsByVin = vinRecords.ToDictionary(r => r.Vin);
 
         IReadOnlyDictionary<string, string> priceNotes = VehiclePricing.SimilarPriceNotes(vehicles, latestCoverageBySource);
         FactoryTrimTable trimTable = FactoryTrimTable.LoadShipped();
@@ -48,7 +46,7 @@ public static class RankCommand
             };
             scores.Add(Scorer.Score(forScoring, scenario));
             research[vehicle.Vin] = ResearchStatusFor(
-                vinRecordsByVin.GetValueOrDefault(vehicle.Vin),
+                vehicle.VinRecord,
                 VehiclePricing.LowestCurrentPrice(vehicle, latestCoverageBySource),
                 [.. FeeRedFlags.For(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), .. AuctionChecks.RedFlags(vehicle.AuctionCheck), .. TitleBrandFlags.For(vehicle), .. HistoryFlags.For(vehicle)]);
         }
@@ -67,8 +65,10 @@ public static class RankCommand
     /// <paramref name="radiusMiles"/> are the scenario's own, for judging whether a CarMax "Only at"
     /// posting's store is close enough to still purchase. The equipment is the vehicle's stored window-sticker
     /// status with <paramref name="trimTable"/> filling what it left unknown; null means no table, so only the
-    /// stored statuses count. The salvage-auction sale is the vehicle's stored lookup's, so a caller must load
-    /// <see cref="VehicleEntity.AuctionCheck"/> or the vehicle is never excluded for it.</summary>
+    /// stored statuses count. The salvage-auction sale is the vehicle's stored lookup's, and the
+    /// salvage-seller sighting is the stored VIN history's, so a caller must load
+    /// <see cref="VehicleEntity.AuctionCheck"/> and <see cref="VehicleEntity.VinRecord"/> or the vehicle is
+    /// never excluded for either.</summary>
     public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string zip, int radiusMiles, FactoryTrimTable? trimTable = null)
     {
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles);
@@ -97,6 +97,7 @@ public static class RankCommand
             UnmeasuredOnlyAtStore = VehiclePricing.UnmeasuredOnlyAtStore(vehicle, latestCoverageBySource, zip, radiusMiles),
             OnlyCarsComCarMaxPostings = VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, latestCoverageBySource),
             SalvageAuctionSale = AuctionChecks.ExclusionSale(vehicle.AuctionCheck),
+            SalvageSellerSighting = VinResearchService.CachedSalvageSellerSighting(vehicle.VinRecord),
             Equipment = (trimTable ?? FactoryTrimTable.Empty).Fill(vehicle.StoredEquipment, vehicle.Make, vehicle.Model, vehicle.Year, vehicle.Trim),
         };
     }

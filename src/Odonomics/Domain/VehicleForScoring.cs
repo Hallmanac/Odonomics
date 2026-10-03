@@ -120,6 +120,12 @@ public sealed record VehicleForScoring
     /// for, naming the sale, whatever the sale document says.</summary>
     public string? SalvageAuctionSale { get; init; }
 
+    /// <summary>The earliest salvage or repairable-vehicle seller the vehicle's stored Marketcheck VIN history lists,
+    /// as the seller and the date it was first listed there (see
+    /// <see cref="RedFlagsEvaluator.FirstSalvageSellerSighting"/>); null when the history names none or was never
+    /// fetched. <see cref="Scorer.FilterReasons"/> excludes a vehicle this is set for, naming the sighting.</summary>
+    public string? SalvageSellerSighting { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>

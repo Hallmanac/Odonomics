@@ -12,7 +12,11 @@ namespace Odonomics.Domain;
 /// Matching is case-insensitive and word-for-word on the
 /// dealer name with punctuation ignored, so "Erepairables.com" and "COPART INC" match while a dealer
 /// whose name merely contains the letters of a short outlet name does not. Each spelling variant
-/// listed here is one entry, since the data spells some outlets both joined and spaced.
+/// listed here is one entry, since the data spells some outlets both joined and spaced. A dealer name
+/// that contains the whole word "salvage", "repairable", or "repairables" matches as well, so an
+/// outlet this list has not met yet but that names itself for what it sells is still caught. Generic
+/// words such as "auction" or "export" alone never match: Manheim and ADESA run dealer-only auctions,
+/// and an ordinary exporter is not a salvage outlet.
 /// </summary>
 public static partial class SalvageSellers
 {
@@ -30,12 +34,19 @@ public static partial class SalvageSellers
         "ABetterBid",
         "AutoBidMaster",
         "Auto Bid Master",
+        "Salvage Autos Auction",
+        "Ridesafely",
+        "Bid N Drive",
+        "Auto4export",
     ];
+
+    private static readonly IReadOnlyList<string> KeywordWords = ["salvage", "repairable", "repairables"];
 
     private static readonly IReadOnlyList<string[]> OutletWords = [.. Outlets.Select(Words)];
 
     /// <summary>True when <paramref name="dealerName"/> names one of <see cref="Outlets"/>, meaning
-    /// its words contain an outlet's words as a contiguous run.</summary>
+    /// its words contain an outlet's words as a contiguous run, or when one of its words is "salvage",
+    /// "repairable", or "repairables".</summary>
     public static bool IsSalvageSeller(string? dealerName)
     {
         if (string.IsNullOrWhiteSpace(dealerName))
@@ -44,7 +55,8 @@ public static partial class SalvageSellers
         }
 
         string[] words = Words(dealerName);
-        return OutletWords.Any(outlet => ContainsRun(words, outlet));
+        return words.Any(word => KeywordWords.Contains(word))
+            || OutletWords.Any(outlet => ContainsRun(words, outlet));
     }
 
     private static bool ContainsRun(string[] words, string[] run)
