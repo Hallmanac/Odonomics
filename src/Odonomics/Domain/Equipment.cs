@@ -42,14 +42,22 @@ public readonly record struct EquipmentFact(EquipmentStatus Status, EquipmentSou
     public EquipmentFact OrElse(EquipmentFact fallback) => Status == EquipmentStatus.Unknown ? fallback : this;
 }
 
-/// <summary>The two features a scenario can require (see <see cref="HardFilters.RequiredFeatures"/>),
-/// named the way the scenario file and the notes spell them.</summary>
+/// <summary>The features a scenario can require (see <see cref="HardFilters.RequiredFeatures"/>),
+/// named the way the scenario file and the notes spell them. "smart-key entry" is proximity entry only.
+/// "keyless entry" is the looser reading, satisfied by either a remote keyless fob or proximity entry; it is
+/// never stored itself but worked out from <see cref="SmartKeyEntry"/> and <see cref="KeylessFobEntry"/>.</summary>
 public static class EquipmentFeatures
 {
     public const string SmartKeyEntry = "smart-key entry";
+    public const string KeylessEntry = "keyless entry";
     public const string PushButtonStart = "push-button start";
 
-    public static readonly IReadOnlyList<string> All = [SmartKeyEntry, PushButtonStart];
+    /// <summary>A remote keyless fob (the "Keyless Entry" a plain sticker lists). It is tracked and stored so
+    /// <see cref="KeylessEntry"/> can be worked out, but a scenario cannot require it on its own, so it is not
+    /// in <see cref="All"/>.</summary>
+    public const string KeylessFobEntry = "keyless fob entry";
+
+    public static readonly IReadOnlyList<string> All = [SmartKeyEntry, KeylessEntry, PushButtonStart];
 
     /// <summary>The note for a required feature whose status is unknown, for example "confirm push-button start".</summary>
     public static string ConfirmNote(string feature) => $"confirm {feature}";
@@ -60,17 +68,38 @@ public static class EquipmentFeatures
         All.FirstOrDefault(feature => string.Equals(feature, name?.Trim(), StringComparison.OrdinalIgnoreCase));
 }
 
-/// <summary>A vehicle's two equipment facts, after the trim table has filled what the window sticker left
-/// unknown.</summary>
-public readonly record struct VehicleEquipment(EquipmentFact SmartKeyEntry, EquipmentFact PushButtonStart)
+/// <summary>A vehicle's equipment facts, after the trim table has filled what the window sticker left
+/// unknown. <paramref name="KeylessFobEntry"/> defaults to unknown, which is also the default value.</summary>
+public readonly record struct VehicleEquipment(EquipmentFact SmartKeyEntry, EquipmentFact PushButtonStart, EquipmentFact KeylessFobEntry = default)
 {
     public static VehicleEquipment Unknown => new(EquipmentFact.Unknown, EquipmentFact.Unknown);
+
+    /// <summary>Whether the car opens without a key in the lock, by a remote fob or by proximity. It is present
+    /// when either is present, absent only when both are confirmed absent, and unknown otherwise, so a car
+    /// whose smart key is absent but whose fob is not yet known stays unknown. The source is the highest
+    /// ranked one among the facts that decided it.</summary>
+    public EquipmentFact KeylessEntry => (SmartKeyEntry.Status, KeylessFobEntry.Status) switch
+    {
+        (EquipmentStatus.Present, EquipmentStatus.Present) => Higher(SmartKeyEntry, KeylessFobEntry),
+        (EquipmentStatus.Present, _) => SmartKeyEntry,
+        (_, EquipmentStatus.Present) => KeylessFobEntry,
+        (EquipmentStatus.Absent, EquipmentStatus.Absent) => Higher(SmartKeyEntry, KeylessFobEntry),
+        _ => EquipmentFact.Unknown,
+    };
 
     /// <summary>The fact for a canonical feature name (see <see cref="EquipmentFeatures"/>).</summary>
     public EquipmentFact For(string feature) => feature switch
     {
         EquipmentFeatures.SmartKeyEntry => SmartKeyEntry,
+        EquipmentFeatures.KeylessEntry => KeylessEntry,
         EquipmentFeatures.PushButtonStart => PushButtonStart,
+        EquipmentFeatures.KeylessFobEntry => KeylessFobEntry,
         _ => EquipmentFact.Unknown,
     };
+
+    /// <summary>Whichever fact has the higher-ranked source (a window sticker over the trim table).</summary>
+    private static EquipmentFact Higher(EquipmentFact first, EquipmentFact second) =>
+        first.Source <= second.Source
+            ? first
+            : second;
 }

@@ -71,4 +71,8 @@ public sealed record ListingCandidate
 
     /// <summary>What that same sticker says about push-button start, with the same rule as <see cref="SmartKeyEntry"/>.</summary>
     public EquipmentStatus PushButtonStart { get; init; }
+
+    /// <summary>What that same sticker says about a remote keyless fob (its plain "Keyless Entry"), with the same
+    /// rule as <see cref="SmartKeyEntry"/>.</summary>
+    public EquipmentStatus KeylessFobEntry { get; init; }
 }

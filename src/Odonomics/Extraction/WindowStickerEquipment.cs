@@ -3,8 +3,8 @@ using Odonomics.Domain;
 
 namespace Odonomics.Extraction;
 
-/// <summary>Guards what the extraction says about smart-key entry and push-button start. The extraction is
-/// told to read those only from a window sticker or factory equipment list and never from a dealer's
+/// <summary>Guards what the extraction says about smart-key entry, a keyless fob and push-button start. The
+/// extraction is told to read those only from a window sticker or factory equipment list and never from a dealer's
 /// description, but a model can still misread or be steered by the page, so a claim survives only when the
 /// page text itself carries the evidence for it. A claim the page cannot back is dropped to null (unknown),
 /// never flipped to the opposite status.</summary>
@@ -35,9 +35,26 @@ public static partial class WindowStickerEquipment
     [GeneratedRegex(@"push[\s-]?button|push[\s-]?to[\s-]?start|keyless\s+(?:start|ignition)|engine\s+start[\s/-]?stop|start/stop\s+button|smart[\s-]?key\s+system", RegexOptions.IgnoreCase)]
     private static partial Regex PushButtonTerm();
 
-    /// <summary>What a sticker or equipment list says when the car has only a fob and a turn key.</summary>
+    /// <summary>What a sticker or equipment list says when the car has only a fob and a turn key. A sticker
+    /// that lists this shows the car lacks proximity entry; it says nothing about push-button start.</summary>
     [GeneratedRegex(@"keyless\s+entry|remote\s+entry|key\s*fob|turn[\s-]?key|keyed\s+ignition", RegexOptions.IgnoreCase)]
     private static partial Regex FobTerm();
+
+    /// <summary>What a sticker or equipment list says when the car has a remote keyless fob.</summary>
+    [GeneratedRegex(@"keyless\s+entry|remote\s+(?:keyless\s+)?entry|key\s*fob|remote\s+key", RegexOptions.IgnoreCase)]
+    private static partial Regex FobPresentTerm();
+
+    /// <summary>What a sticker or equipment list says when the car starts with a turn key.</summary>
+    [GeneratedRegex(@"turn[\s-]?key|keyed\s+ignition", RegexOptions.IgnoreCase)]
+    private static partial Regex KeyedIgnitionTerm();
+
+    /// <summary>A sticker that states push-button start is missing, such as "No push button start".</summary>
+    [GeneratedRegex(@"\b(?:no|without|lacks?|not\s+available)\s+(?:a\s+)?(?:push[\s-]?button(?:\s+start)?|push[\s-]?to[\s-]?start|keyless\s+(?:start|ignition))", RegexOptions.IgnoreCase)]
+    private static partial Regex NoPushButtonStatement();
+
+    /// <summary>A sticker that states a remote keyless fob is missing, such as "No keyless entry".</summary>
+    [GeneratedRegex(@"\b(?:no|without|lacks?|not\s+available)\s+(?:a\s+)?(?:remote\s+)?(?:keyless\s+entry|key\s*fob)", RegexOptions.IgnoreCase)]
+    private static partial Regex NoFobStatement();
 
     /// <summary>The status the extraction's <paramref name="claimed"/> text names: present, absent, or unknown
     /// for anything else, including null.</summary>
@@ -51,10 +68,14 @@ public static partial class WindowStickerEquipment
     /// <summary><paramref name="claimed"/> when the page text backs it for <paramref name="feature"/> (a name from
     /// <see cref="EquipmentFeatures"/>), otherwise null. The evidence has to sit in a sticker section: the stretch
     /// of the page that starts at a window-sticker or factory-equipment heading. "present" needs the feature's own
-    /// wording there. "absent" needs a fob-and-key wording such as "Keyless Entry" there, since the sticker states
-    /// a missing feature by listing only that, and no smart-key, proximity or push-button wording in any sticker
-    /// section, since a sticker that names either item shows the car has it. Wording elsewhere on the page, such
-    /// as a dealer's description claiming push-button start, is no evidence either way.</summary>
+    /// wording there. "absent" needs the sticker to state the lack, and no wording for the feature in any sticker
+    /// section, since a sticker that names the item shows the car has it. For smart-key entry the lack is a
+    /// fob-and-key wording such as "Keyless Entry", since a sticker states a missing proximity key by listing
+    /// only that. For push-button start it is a turn key or keyed ignition, or a plain "no push button start":
+    /// a fob "Keyless Entry" alone says nothing about how the car starts, so push-button start stays unknown.
+    /// For a keyless fob it is a turn key or keyed ignition, or a plain "no keyless entry", with no fob wording
+    /// in any section. Wording elsewhere on the page, such as a dealer's description claiming push-button start,
+    /// is no evidence either way.</summary>
     public static string? Ground(string? claimed, string feature, string pageText)
     {
         EquipmentStatus status = StatusOf(claimed);
@@ -65,10 +86,23 @@ public static partial class WindowStickerEquipment
 
         List<string> sections = [.. StickerMarker().Matches(pageText).Select(marker =>
             pageText.Substring(marker.Index, Math.Min(StickerSectionChars, pageText.Length - marker.Index)))];
-        bool backed = status == EquipmentStatus.Absent
-            ? sections.Any(section => FobTerm().IsMatch(section))
-                && !sections.Any(section => SmartKeyTerm().IsMatch(section) || PushButtonTerm().IsMatch(section))
-            : sections.Any(section => (feature == EquipmentFeatures.SmartKeyEntry ? SmartKeyTerm() : PushButtonTerm()).IsMatch(section));
+
+        // A stated lack ("No push button start") must not read as the item being named, so it is cut out before
+        // looking for wording that shows the car has something.
+        List<string> named = [.. sections.Select(section => NoFobStatement().Replace(NoPushButtonStatement().Replace(section, " "), " "))];
+        bool backed = (feature, status) switch
+        {
+            (EquipmentFeatures.SmartKeyEntry, EquipmentStatus.Present) => named.Any(section => SmartKeyTerm().IsMatch(section)),
+            (EquipmentFeatures.PushButtonStart, EquipmentStatus.Present) => named.Any(section => PushButtonTerm().IsMatch(section)),
+            (EquipmentFeatures.KeylessFobEntry, EquipmentStatus.Present) => named.Any(section => FobPresentTerm().IsMatch(section)),
+            (EquipmentFeatures.SmartKeyEntry, _) => sections.Any(section => FobTerm().IsMatch(section))
+                && !named.Any(section => SmartKeyTerm().IsMatch(section) || PushButtonTerm().IsMatch(section)),
+            (EquipmentFeatures.PushButtonStart, _) => sections.Any(section => KeyedIgnitionTerm().IsMatch(section) || NoPushButtonStatement().IsMatch(section))
+                && !named.Any(section => SmartKeyTerm().IsMatch(section) || PushButtonTerm().IsMatch(section)),
+            (EquipmentFeatures.KeylessFobEntry, _) => sections.Any(section => KeyedIgnitionTerm().IsMatch(section) || NoFobStatement().IsMatch(section))
+                && !named.Any(section => SmartKeyTerm().IsMatch(section) || PushButtonTerm().IsMatch(section) || FobPresentTerm().IsMatch(section)),
+            _ => false,
+        };
         return backed
             ? status.ToString().ToLowerInvariant()
             : null;

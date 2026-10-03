@@ -7,10 +7,11 @@
       "yearTo": 2021,
       "trim": "LX",
       "smartKeyEntry": "absent",
+      "keylessFobEntry": "present",
       "pushButtonStart": "present",
       "source": "https://www.hondainfocenter.com/2019/Insight/Feature-Guide/Features-by-Trim/ (the same page pattern holds for /2020/ and /2021/)",
       "confidence": "high",
-      "note": "Remote keyless entry only, so proximity entry is absent while push-button start is standard."
+      "note": "Remote keyless entry only, so proximity entry is absent while the keyless fob and push-button start are standard."
     },
     {
       "make": "Honda",

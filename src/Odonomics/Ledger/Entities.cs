@@ -31,10 +31,17 @@ public sealed class VehicleEntity
 
     public EquipmentSource PushButtonStartSource { get; set; }
 
-    /// <summary>The two stored statuses as one value, for the trim table to fill and the scorer to read.</summary>
+    /// <summary>Whether the car has a remote keyless fob, stored the same way as <see cref="SmartKeyEntry"/>.
+    /// A sticker listing only a plain "Keyless Entry" sets this present while leaving smart-key entry absent.</summary>
+    public EquipmentStatus KeylessFobEntry { get; set; }
+
+    public EquipmentSource KeylessFobEntrySource { get; set; }
+
+    /// <summary>The stored statuses as one value, for the trim table to fill and the scorer to read.</summary>
     public VehicleEquipment StoredEquipment => new(
         new EquipmentFact(SmartKeyEntry, SmartKeyEntrySource),
-        new EquipmentFact(PushButtonStart, PushButtonStartSource));
+        new EquipmentFact(PushButtonStart, PushButtonStartSource),
+        new EquipmentFact(KeylessFobEntry, KeylessFobEntrySource));
 
     public List<PostingEntity> Postings { get; set; } = [];
     public List<NoteEntity> Notes { get; set; } = [];

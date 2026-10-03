@@ -51,9 +51,14 @@
     "pushButtonStart": {
       "type": ["string", "null"],
       "enum": ["present", "absent", null],
-      "description": "Whether the car has push-button start, read ONLY from the listing's window sticker or factory equipment list, never from the dealer's description, highlights, or feature badges. 'present' when the sticker lists push-button start (a Toyota 'Smart Key System' includes it); 'absent' when the sticker's equipment list names only a fob 'Keyless Entry' (or turn-key ignition) and no push-button or smart key item. Null when the page has no window sticker or equipment list."
+      "description": "Whether the car has push-button start, read ONLY from the listing's window sticker or factory equipment list, never from the dealer's description, highlights, or feature badges. 'present' when the sticker lists push-button start (a Toyota 'Smart Key System' includes it); 'absent' only when the sticker states a turn-key or keyed ignition, or says there is no push-button start, and lists no push-button or smart key item. A sticker that lists only a fob 'Keyless Entry' leaves push-button start null, since a fob says nothing about how the car starts. Null when the page has no window sticker or equipment list."
+    },
+    "keylessFobEntry": {
+      "type": ["string", "null"],
+      "enum": ["present", "absent", null],
+      "description": "Whether the car has a remote keyless fob ('Keyless Entry', 'Remote Keyless Entry'), read ONLY from the listing's window sticker or factory equipment list, never from the dealer's description, highlights, or feature badges. 'present' when the sticker lists a keyless entry or key fob item; 'absent' only when the sticker states a turn-key or keyed ignition or says there is no keyless entry, and lists no keyless entry, fob, smart key or proximity item. Null when the page has no window sticker or equipment list, or the sticker says nothing on the point."
     }
   },
-  "required": ["vin", "year", "make", "model", "trim", "price", "mileage", "dealerName", "dealerLocation", "fuelType", "smartKeyEntry", "pushButtonStart"],
+  "required": ["vin", "year", "make", "model", "trim", "price", "mileage", "dealerName", "dealerLocation", "fuelType", "smartKeyEntry", "pushButtonStart", "keylessFobEntry"],
   "additionalProperties": false
 }

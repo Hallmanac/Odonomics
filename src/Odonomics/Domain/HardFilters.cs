@@ -17,7 +17,7 @@ public sealed record HardFilters
     public int? MaxPrice { get; init; }
 
     /// <summary>Equipment every candidate must have, by the names in <see cref="EquipmentFeatures"/>
-    /// ("smart-key entry", "push-button start"). A car whose status for one is confirmed absent is excluded
+    /// ("smart-key entry", "keyless entry", "push-button start"). A car whose status for one is confirmed absent is excluded
     /// with the feature named; one whose status is unknown stays and gets a "confirm ..." note instead.
     /// <see cref="ScenarioLoader"/> rejects a name that is not a tracked feature.</summary>
     public IReadOnlyList<string> RequiredFeatures { get; init; } = [];

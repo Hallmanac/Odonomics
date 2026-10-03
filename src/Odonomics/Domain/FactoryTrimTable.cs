@@ -18,6 +18,11 @@ public sealed record FactoryTrimEntry
     /// <summary>"present" or "absent" when the factory fitted, or did not fit, push-button start on this trim.</summary>
     public string? PushButtonStart { get; init; }
 
+    /// <summary>"present" or "absent" when the factory fitted, or did not fit, a remote keyless fob on this trim.
+    /// Proximity entry implies a fob works too, so a row only needs this where it says <see cref="SmartKeyEntry"/>
+    /// is absent (a car with remote entry only).</summary>
+    public string? KeylessFobEntry { get; init; }
+
     /// <summary>Where the row's answers come from, so each one can be checked later.</summary>
     public required string Source { get; init; }
 
@@ -34,7 +39,12 @@ public sealed record FactoryTrimEntry
         && year >= YearFrom
         && year <= YearTo;
 
-    internal string? StatedFor(string feature) => feature == EquipmentFeatures.SmartKeyEntry ? SmartKeyEntry : PushButtonStart;
+    internal string? StatedFor(string feature) => feature switch
+    {
+        EquipmentFeatures.SmartKeyEntry => SmartKeyEntry,
+        EquipmentFeatures.KeylessFobEntry => KeylessFobEntry,
+        _ => PushButtonStart,
+    };
 }
 
 /// <summary>The factory trim table: a data file (<c>Data/factory-trim-equipment.json</c>, copied beside the
@@ -76,7 +86,7 @@ public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
         return new FactoryTrimTable(file.Entries);
     }
 
-    /// <summary>What the table says about the car's smart-key entry and push-button start. A car with no
+    /// <summary>What the table says about the car's smart-key entry, keyless fob, and push-button start. A car with no
     /// trim, or with no row for its model, year, and trim, gets unknown for both.</summary>
     public VehicleEquipment Lookup(string make, string model, int year, string? trim)
     {
@@ -88,7 +98,8 @@ public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
         FactoryTrimEntry[] matches = [.. entries.Where(entry => entry.Matches(make, model, year, trim))];
         return new VehicleEquipment(
             Definite(matches, EquipmentFeatures.SmartKeyEntry),
-            Definite(matches, EquipmentFeatures.PushButtonStart));
+            Definite(matches, EquipmentFeatures.PushButtonStart),
+            Definite(matches, EquipmentFeatures.KeylessFobEntry));
     }
 
     /// <summary>Fills each status of <paramref name="fromSticker"/> that is still unknown from the table.</summary>
@@ -102,7 +113,8 @@ public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
         VehicleEquipment fromTable = Lookup(make, model, year, trim);
         return new VehicleEquipment(
             fromSticker.SmartKeyEntry.OrElse(fromTable.SmartKeyEntry),
-            fromSticker.PushButtonStart.OrElse(fromTable.PushButtonStart));
+            fromSticker.PushButtonStart.OrElse(fromTable.PushButtonStart),
+            fromSticker.KeylessFobEntry.OrElse(fromTable.KeylessFobEntry));
     }
 
     private static EquipmentFact Definite(FactoryTrimEntry[] matches, string feature)
@@ -134,7 +146,7 @@ public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
             throw new JsonException($"{label} needs a source for its answers");
         }
 
-        foreach ((string name, string? value) in new[] { ("smartKeyEntry", entry.SmartKeyEntry), ("pushButtonStart", entry.PushButtonStart) })
+        foreach ((string name, string? value) in new[] { ("smartKeyEntry", entry.SmartKeyEntry), ("pushButtonStart", entry.PushButtonStart), ("keylessFobEntry", entry.KeylessFobEntry) })
         {
             if (value is not null && value.Trim().ToLowerInvariant() is not ("present" or "absent"))
             {
@@ -142,9 +154,9 @@ public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
             }
         }
 
-        if (entry.SmartKeyEntry is null && entry.PushButtonStart is null)
+        if (entry.SmartKeyEntry is null && entry.PushButtonStart is null && entry.KeylessFobEntry is null)
         {
-            throw new JsonException($"{label} states neither smartKeyEntry nor pushButtonStart");
+            throw new JsonException($"{label} states none of smartKeyEntry, pushButtonStart, or keylessFobEntry");
         }
     }
 

@@ -704,6 +704,26 @@ public class LedgerUpsertServiceTests
     }
 
     [Fact]
+    public async Task UpsertAsync_StickerWithOnlyKeylessEntry_StoresTheFobPresentAndSmartKeyAbsent()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("JTDBCMFE7P3014805", 19990m) with { SmartKeyEntry = EquipmentStatus.Absent, KeylessFobEntry = EquipmentStatus.Present }, run, CancellationToken.None);
+
+        using OdonomicsDbContext reread = testDb.CreateContext();
+        VehicleEquipment equipment = reread.Vehicles.Single().StoredEquipment;
+        Assert.Equal(new EquipmentFact(EquipmentStatus.Present, EquipmentSource.WindowSticker), equipment.KeylessFobEntry);
+        Assert.Equal(new EquipmentFact(EquipmentStatus.Present, EquipmentSource.WindowSticker), equipment.KeylessEntry);
+        Assert.Equal(EquipmentStatus.Absent, equipment.SmartKeyEntry.Status);
+        Assert.Equal(EquipmentStatus.Unknown, equipment.PushButtonStart.Status);
+    }
+
+    [Fact]
     public async Task UpsertAsync_RevisitWithoutAStickerAfterOneWasRead_KeepsTheStoredStatuses()
     {
         using var testDb = new LedgerTestDatabase();

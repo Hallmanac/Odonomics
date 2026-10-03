@@ -687,10 +687,11 @@ public static class WalkCommand
                     TitleBrandPhrase = TitleBrandStatements.Read(bodyText),
                     SmartKeyEntry = WindowStickerEquipment.StatusOf(outcome.Result.SmartKeyEntry),
                     PushButtonStart = WindowStickerEquipment.StatusOf(outcome.Result.PushButtonStart),
+                    KeylessFobEntry = WindowStickerEquipment.StatusOf(outcome.Result.KeylessFobEntry),
                 };
-                if (candidate.SmartKeyEntry != EquipmentStatus.Unknown || candidate.PushButtonStart != EquipmentStatus.Unknown)
+                if (candidate.SmartKeyEntry != EquipmentStatus.Unknown || candidate.PushButtonStart != EquipmentStatus.Unknown || candidate.KeylessFobEntry != EquipmentStatus.Unknown)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: window sticker says smart-key entry {candidate.SmartKeyEntry.ToString().ToLowerInvariant()}, push-button start {candidate.PushButtonStart.ToString().ToLowerInvariant()}[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[grey]detail {i + 1}: window sticker says smart-key entry {candidate.SmartKeyEntry.ToString().ToLowerInvariant()}, keyless fob entry {candidate.KeylessFobEntry.ToString().ToLowerInvariant()}, push-button start {candidate.PushButtonStart.ToString().ToLowerInvariant()}[/]");
                 }
 
                 await upsertService.UpsertAsync(candidate, currentRun, ct);

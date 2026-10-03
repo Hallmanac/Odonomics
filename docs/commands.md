@@ -62,7 +62,7 @@ odo finalist <vin>                  mark a vehicle a finalist
 
 ## show
 
-`odo show <vin>` prints the NHTSA decode, recalls, complaints, safety ratings, and the Marketcheck VIN history grouped by seller. It also shows the red flags, the car's smart-key entry and push-button start with where each came from (see [scenario.md](scenario.md#required-features)), the postings, your notes, whether the vehicle is a finalist, and an itemized monthly cost. `--refresh` re-fetches the research even when the cache is fresh, and `--all-history` prints the raw one-row-per-sighting history underneath the grouped one. Because the monthly cost reads the scenario, `show` takes `--scenario <path>` like the other commands and needs the scenario file to resolve.
+`odo show <vin>` prints the NHTSA decode, recalls, complaints, safety ratings, and the Marketcheck VIN history grouped by seller. It also shows the red flags, the car's smart-key entry, keyless entry, and push-button start with where each came from (see [scenario.md](scenario.md#required-features)), the postings, your notes, whether the vehicle is a finalist, and an itemized monthly cost. `--refresh` re-fetches the research even when the cache is fresh, and `--all-history` prints the raw one-row-per-sighting history underneath the grouped one. Because the monthly cost reads the scenario, `show` takes `--scenario <path>` like the other commands and needs the scenario file to resolve.
 
 ## note and finalist
 
