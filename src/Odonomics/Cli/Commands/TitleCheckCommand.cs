@@ -108,13 +108,16 @@ public static class TitleCheckCommand
                     break;
             }
 
+            string line = result.Outcome == AuctionCheckOutcome.CouldNotRead
+                ? $"could not read the archives: {result.Reason}{(check.Outcome == AuctionCheckOutcome.Found ? $"; keeping the stored sale ({Describe(check)})" : "")}"
+                : Describe(check);
             Color color = result.Outcome switch
             {
                 AuctionCheckOutcome.Found => Color.Red,
                 AuctionCheckOutcome.CouldNotRead => Color.Yellow,
                 _ => Color.Default,
             };
-            AnsiConsole.Write(new Text($"{vehicle.Vin}: {Describe(check)}{Environment.NewLine}", new Style(color)));
+            AnsiConsole.Write(new Text($"{vehicle.Vin}: {line}{Environment.NewLine}", new Style(color)));
         }
 
         AnsiConsole.MarkupLineInterpolated($"found {found} auction sale(s), {notFound} not found, {couldNotRead} could not read");

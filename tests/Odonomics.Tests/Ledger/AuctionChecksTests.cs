@@ -78,7 +78,7 @@ public class AuctionChecksTests
     }
 
     [Fact]
-    public async Task Apply_StoresFoundThenReplacesItWithALaterCouldNotRead()
+    public async Task Apply_StoresFoundThenKeepsItThroughALaterCouldNotRead()
     {
         using var testDb = new LedgerTestDatabase();
         using (OdonomicsDbContext db = testDb.CreateContext())
@@ -117,11 +117,38 @@ public class AuctionChecksTests
         {
             AuctionCheckEntity stored = await db.AuctionChecks.SingleAsync(CancellationToken.None);
 
-            Assert.Equal(AuctionCheckOutcome.CouldNotRead, stored.Outcome);
-            Assert.Equal("the site showed a captcha or block page", stored.CouldNotReadReason);
-            Assert.Null(stored.LotNumber);
-            Assert.Null(stored.SaleDocument);
-            Assert.Equal(Now.AddDays(8), stored.CheckedAt);
+            Assert.Equal(AuctionCheckOutcome.Found, stored.Outcome);
+            Assert.Null(stored.CouldNotReadReason);
+            Assert.Equal("1-55637026", stored.LotNumber);
+            Assert.Equal("Salvage certificate (CA)", stored.SaleDocument);
+            Assert.Equal(Now, stored.CheckedAt);
+            Assert.True(AuctionChecks.NeedsCheck(stored, Now.AddDays(8)));
+            Assert.Equal("Copart 2026-07-16, Salvage certificate (CA)", AuctionChecks.ExclusionSale(stored));
         }
+    }
+
+    [Fact]
+    public void Apply_NotFoundAfterFound_ReplacesTheSale()
+    {
+        VehicleEntity vehicle = Vehicle();
+        AuctionChecks.Apply(vehicle, new AuctionLookupResult(AuctionCheckOutcome.Found, CorollaHybridSale, null), Now);
+
+        AuctionCheckEntity check = AuctionChecks.Apply(vehicle, new AuctionLookupResult(AuctionCheckOutcome.NotFound, null, null), Now.AddDays(8));
+
+        Assert.Null(AuctionChecks.ExclusionSale(check));
+        Assert.Equal(Now.AddDays(8), check.CheckedAt);
+    }
+
+    [Fact]
+    public void Apply_CouldNotReadAfterNotFound_StoresTheReason()
+    {
+        VehicleEntity vehicle = Vehicle();
+        AuctionChecks.Apply(vehicle, new AuctionLookupResult(AuctionCheckOutcome.NotFound, null, null), Now);
+
+        AuctionCheckEntity check = AuctionChecks.Apply(vehicle, new AuctionLookupResult(AuctionCheckOutcome.CouldNotRead, null, "captcha"), Now.AddDays(8));
+
+        Assert.Equal(AuctionCheckOutcome.CouldNotRead, check.Outcome);
+        Assert.Equal("captcha", check.CouldNotReadReason);
+        Assert.Equal(Now.AddDays(8), check.CheckedAt);
     }
 }
