@@ -126,6 +126,18 @@ public sealed record VehicleForScoring
     /// fetched. <see cref="Scorer.FilterReasons"/> excludes a vehicle this is set for, naming the sighting.</summary>
     public string? SalvageSellerSighting { get; init; }
 
+    /// <summary>The source of a vehicle-history summary that states frame damage, such as "CarGurus AutoCheck
+    /// summary" (see <see cref="Ledger.HistoryFlags.FrameDamageSource"/>); null when no listing states it.
+    /// <see cref="Scorer.FilterReasons"/> excludes a vehicle this is set for, naming the source. A reported
+    /// accident or rental use never excludes.</summary>
+    public string? FrameDamageSource { get; init; }
+
+    /// <summary>Whether the vehicle's listings state zero accidents and none states one or more (see
+    /// <see cref="Ledger.HistoryFlags.NoAccidentsStated"/>), so `odo rank` can print a "no accidents" marker. Display
+    /// only: a summary that states no count leaves this false, and no vehicle is excluded or scored differently
+    /// for it.</summary>
+    public bool NoAccidentsStated { get; init; }
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>

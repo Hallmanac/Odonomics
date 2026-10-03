@@ -68,7 +68,8 @@ public static class RankCommand
     /// stored statuses count. The salvage-auction sale is the vehicle's stored lookup's, and the
     /// salvage-seller sighting is the stored VIN history's, so a caller must load
     /// <see cref="VehicleEntity.AuctionCheck"/> and <see cref="VehicleEntity.VinRecord"/> or the vehicle is
-    /// never excluded for either.</summary>
+    /// never excluded for either. The frame-damage source and the
+    /// no-accidents marker come from the vehicle's postings' stored history summaries (see <see cref="HistoryFlags"/>).</summary>
     public static VehicleForScoring ForScoring(VehicleEntity vehicle, IReadOnlyDictionary<string, DateTimeOffset> latestCoverageBySource, Fulfillment fulfillment, string zip, int radiusMiles, FactoryTrimTable? trimTable = null)
     {
         PurchasePrice? purchasePrice = VehiclePricing.LowestCurrentPurchasePrice(vehicle, latestCoverageBySource, fulfillment, zip, radiusMiles);
@@ -98,6 +99,8 @@ public static class RankCommand
             OnlyCarsComCarMaxPostings = VehiclePricing.OnlyCarsComCarMaxPostings(vehicle, latestCoverageBySource),
             SalvageAuctionSale = AuctionChecks.ExclusionSale(vehicle.AuctionCheck),
             SalvageSellerSighting = VinResearchService.CachedSalvageSellerSighting(vehicle.VinRecord),
+            FrameDamageSource = HistoryFlags.FrameDamageSource(vehicle),
+            NoAccidentsStated = HistoryFlags.NoAccidentsStated(vehicle),
             Equipment = (trimTable ?? FactoryTrimTable.Empty).Fill(vehicle.StoredEquipment, vehicle.Make, vehicle.Model, vehicle.Year, vehicle.Trim),
         };
     }

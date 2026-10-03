@@ -97,6 +97,11 @@ public static class Scorer
             reasons.Add($"listed by a salvage seller: {salvageSellerSighting}");
         }
 
+        if (vehicle.FrameDamageSource is string frameDamageSource)
+        {
+            reasons.Add($"frame damage reported ({frameDamageSource})");
+        }
+
         // Spike finding: exclude new stock, since this scenario is shopping used. A vehicle with
         // under 500 miles or a model year beyond the current year is new inventory, not used.
         if (vehicle.Mileage < 500 || vehicle.Year > DateTime.UtcNow.Year)
