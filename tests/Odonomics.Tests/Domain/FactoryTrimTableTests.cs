@@ -27,6 +27,58 @@ public class FactoryTrimTableTests
     }
 
     [Fact]
+    public void LoadShipped_EveryRowKeepsAUrlSourceAndAConfidenceOfHighOrMedium()
+    {
+        FactoryTrimTable table = FactoryTrimTable.LoadShipped();
+
+        Assert.NotEmpty(table.Entries);
+        Assert.All(table.Entries, entry =>
+        {
+            Assert.Contains("https://", entry.Source);
+            Assert.Matches("^(high|medium|entry high, start medium)$", entry.Confidence ?? "");
+        });
+    }
+
+    [Theory]
+    [InlineData("Honda", "Insight", 2020, "LX", EquipmentStatus.Absent, EquipmentStatus.Present)]
+    [InlineData("Honda", "Insight", 2022, "Touring", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData("Toyota", "Prius", 2020, "LE", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData("Toyota", "Corolla Hybrid", 2022, "LE", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData("Toyota", "Corolla Hybrid", 2023, "LE", EquipmentStatus.Unknown, EquipmentStatus.Unknown)]
+    [InlineData("Toyota", "Corolla Hybrid", 2023, "XLE", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData("Toyota", "Camry Hybrid", 2018, "SE", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData("Toyota", "Camry Hybrid", 2021, "XLE", EquipmentStatus.Unknown, EquipmentStatus.Unknown)]
+    [InlineData("Toyota", "Camry Hybrid", 2025, "LE", EquipmentStatus.Unknown, EquipmentStatus.Present)]
+    [InlineData("Toyota", "Prius", 2022, "LE", EquipmentStatus.Unknown, EquipmentStatus.Present)]
+    [InlineData("Toyota", "Prius", 2024, "LE", EquipmentStatus.Unknown, EquipmentStatus.Unknown)]
+    public void LoadShipped_PinnedCars_GetTheResearchedStatuses(
+        string make, string model, int year, string trim, EquipmentStatus smartKey, EquipmentStatus pushButton)
+    {
+        FactoryTrimTable table = FactoryTrimTable.LoadShipped();
+
+        VehicleEquipment equipment = table.Lookup(make, model, year, trim);
+
+        Assert.Equal(smartKey, equipment.SmartKeyEntry.Status);
+        Assert.Equal(pushButton, equipment.PushButtonStart.Status);
+    }
+
+    [Theory]
+    [InlineData(2019, "L Eco")]
+    [InlineData(2019, "LE")]
+    [InlineData(2020, "LE")]
+    [InlineData(2021, "LE")]
+    public void LoadShipped_PriusWhereTheSmartKeyCoversOnlyTheDriversDoor_IsPresentWithThatNote(int year, string trim)
+    {
+        FactoryTrimTable table = FactoryTrimTable.LoadShipped();
+
+        FactoryTrimEntry entry = Assert.Single(table.Entries, e =>
+            e.Model == "Prius" && e.Trim == trim && e.YearFrom <= year && e.YearTo >= year);
+
+        Assert.Equal("present", entry.SmartKeyEntry);
+        Assert.Contains("driver's door only", entry.Note);
+    }
+
+    [Fact]
     public void Parse_EmptyEntries_GivesNoAnswerForAnyCar()
     {
         FactoryTrimTable table = FactoryTrimTable.Parse("""{ "entries": [] }""");

@@ -21,6 +21,12 @@ public sealed record FactoryTrimEntry
     /// <summary>Where the row's answers come from, so each one can be checked later.</summary>
     public required string Source { get; init; }
 
+    /// <summary>How well the source backs the row's answers ("high" or "medium" in the shipped file).</summary>
+    public string? Confidence { get; init; }
+
+    /// <summary>A caveat on the row, for example that the Smart Key covers only the driver's door.</summary>
+    public string? Note { get; init; }
+
     internal bool Matches(string make, string model, int year, string trim) =>
         string.Equals(Make, make, StringComparison.OrdinalIgnoreCase)
         && string.Equals(Model, model, StringComparison.OrdinalIgnoreCase)
@@ -36,7 +42,7 @@ public sealed record FactoryTrimEntry
 /// entry and push-button start. It ranks below a listing's own window sticker and above nothing: it only
 /// fills a status the sticker left unknown, and only when the matching rows give a definite answer. Rows
 /// that match one car but disagree about a feature give no answer for it, since a table that contradicts
-/// itself is not definite. The file starts empty; its contents arrive from a sourced research note.</summary>
+/// itself is not definite. Its rows come from a sourced research note, and only rows that note rated high or medium are in it.</summary>
 public sealed class FactoryTrimTable(IReadOnlyList<FactoryTrimEntry> entries)
 {
     public const string FileName = "factory-trim-equipment.json";
