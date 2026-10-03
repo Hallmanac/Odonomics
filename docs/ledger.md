@@ -10,6 +10,7 @@ The ledger is a plain SQLite file named `odonomics.db`, and it lives in the data
 - Runs: one row per `odo search` or `odo walk`. It holds when the run started and finished, the zip and radius it searched with, and the list of source-and-model pairs it actually got a usable result for.
 - Dealers: one row per dealer, keyed by name and location. It holds the CarEdge grade, the doc fee and add-ons note CarEdge printed beside it, and when the dealer was last checked, and [dealers.md](dealers.md) explains how a dealer is identified.
 - VIN records: one row per researched VIN. It keeps the most recent fetch of the NHTSA decode, recalls, complaints, and safety ratings, plus the Marketcheck VIN history. The NHTSA pieces and the Marketcheck VIN history each have a fetched-at stamp and a could-not-fetch reason of their own, and the row has one researched-at stamp that the seven-day rule reads. [research.md](research.md) explains the caching.
+- Auction checks: one row per vehicle that `odo title check` has looked up, holding the outcome (found, not found, or could not read, with its reason), when it was checked, and, for a found sale, the auction, lot, sale date, sale document, primary and secondary damage, ACV, repair estimate, odometer, and source page. [title-check.md](title-check.md) explains when a row is looked up again.
 
 - Posting attributes: one row per posting and name, for the display-only facts a site shows about a listing. See [below](#site-specific-facts).
 

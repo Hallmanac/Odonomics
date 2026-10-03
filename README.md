@@ -16,6 +16,7 @@ A used car's asking price says very little about what it will cost you. The real
 - [Walk cars.com, Carvana, Autotrader, CarMax, and CarGurus](docs/walk.md) in your own browser
 - [Vet each VIN](docs/research.md) with safety ratings, listing history, and red flags
 - [Grade dealers](docs/dealers.md) with CarEdge
+- [Check titles](docs/title-check.md) against public salvage-auction archives
 - [Rank every car](docs/cost-model.md) by its monthly cost over ten years
 - [Work backwards from a monthly budget](docs/cost-model.md#budget) to a maximum price
 - [Describe your purchase](docs/scenario.md) in one scenario file
@@ -44,6 +45,7 @@ The docs call that last command `odo search`. From here, [docs/running.md](docs/
 - [research.md](docs/research.md): VIN research and red flags
 - [walk.md](docs/walk.md): the assisted browser walk
 - [dealers.md](docs/dealers.md): dealer identity and grades
+- [title-check.md](docs/title-check.md): salvage-auction archive lookups
 - [cost-model.md](docs/cost-model.md): how monthly cost is built
 - [scenario.md](docs/scenario.md): the scenario file
 - [ledger.md](docs/ledger.md): the SQLite ledger
