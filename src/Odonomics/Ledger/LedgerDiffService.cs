@@ -75,7 +75,9 @@ public sealed record SearchDiff(
 /// before the site ran out of results, see <see cref="RunSources.PartialKey"/>) so the walk never
 /// reached it, this run covered its pair only partially because a result page after the first failed
 /// to load (see <see cref="RunSources.UnreadKey"/>), or otherwise it simply is not on the search page
-/// any more. Below the year facet, over the mileage cap, and search moved are cars the search no
+/// any more. A pair stamped unread for another reason alone (a card that never rendered) while its walk
+/// still read every page to the site's natural end (see <see cref="RunSources.SweptKey"/>) is not read as
+/// pages unread: the walk did look at every page, so an absent posting is not on the search page. Below the year facet, over the mileage cap, and search moved are cars the search no
 /// longer asks for; beyond the cap, pages unread, and card never rendered are cars this run did not
 /// measure; "sold" and the last are the cars that have likely left the market, and "sold" is the one a
 /// page confirmed. "Card never rendered" is its own case: the walk saw the link but never actually
@@ -247,6 +249,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
         string[] tokens = RunSources.Split(currentRun);
         HashSet<string> cappedTokens = RunSources.PartialCoverage(currentRun);
         HashSet<string> unreadTokens = RunSources.UnreadCoverage(currentRun);
+        HashSet<string> sweptTokens = RunSources.SweptCoverage(currentRun);
         List<RunEntity> allRuns = await db.Runs.ToListAsync(cancellationToken);
         List<RunEntity> priorRuns = [.. allRuns.Where(r => r.Id != currentRun.Id && r.StartedAt < currentRun.StartedAt)];
 
@@ -325,7 +328,7 @@ public sealed class LedgerDiffService(OdonomicsDbContext db)
                     ? cardUnrenderedSeenAt
                     : posting.LastSeen;
                 RunEntity? lastSeenRun = priorRuns.FirstOrDefault(r => r.StartedAt == lastSeenAt);
-                var entry = new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(posting, vehicle, lastSeenRun, currentRun, scenario, cappedTokens.Contains(token), unreadTokens.Contains(token), unrenderedKnownUrlSet.Contains(posting.Url)));
+                var entry = new GonePostingEntry(vehicle.Vin, vehicle.Year, vehicle.Make, vehicle.Model, posting.Source, posting.Url, lastKnownPrice, GoneReason(posting, vehicle, lastSeenRun, currentRun, scenario, cappedTokens.Contains(token), unreadTokens.Contains(token) && !sweptTokens.Contains(token), unrenderedKnownUrlSet.Contains(posting.Url)));
                 if (alreadyGone)
                 {
                     gone[goneIndex] = entry;

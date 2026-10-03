@@ -39,8 +39,14 @@ namespace Odonomics.Walk;
 /// card's own known posting, if it has one, is kept current from its card the moment it is reported (see
 /// <see cref="WalkSearchPages.CollectLinksAsync"/>'s own <c>onNoDistance</c> touch), the same protective
 /// reason a below-floor or over-mileage card's known posting is, so the pair's coverage stays full for that
-/// stop regardless of whether any of those cards ever resolves.</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false);
+/// stop regardless of whether any of those cards ever resolves. <see cref="ReadToNaturalEnd"/> is true when
+/// the pair's walk read every search page to the site's natural end of results: not capped, no failed page,
+/// and no search short of its stated count. Only <see cref="RenderingDegraded"/> can then have made the pair
+/// partial.</summary>
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false)
+{
+    public bool ReadToNaturalEnd => !Capped && FailedPage is null && !SearchFellShortOfStatedCount;
+}
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
 /// is false when the pair's own walk threw (a page that never loaded, a site that errored); the
@@ -66,7 +72,9 @@ public sealed record WalkPairSummary(string Site, string Model, int DetailPagesV
 /// (<see cref="WalkPairOutcome.Capped"/>) gets a partial-coverage token beside its own (see
 /// <see cref="RunSources.PartialKey"/>), stamped and rolled back with it, and so does a pair whose later
 /// result page failed to load or whose own rendering looked degraded (<see cref="WalkPairOutcome.FailedPage"/>
-/// or <see cref="WalkPairOutcome.RenderingDegraded"/>, see <see cref="RunSources.UnreadKey"/>).
+/// or <see cref="WalkPairOutcome.RenderingDegraded"/>, see <see cref="RunSources.UnreadKey"/>), plus a
+/// swept token (see <see cref="RunSources.SweptKey"/>) when the pair was nonetheless read to the site's
+/// natural end (<see cref="WalkPairOutcome.ReadToNaturalEnd"/>).
 /// </summary>
 public static class WalkCoverage
 {
@@ -110,9 +118,15 @@ public static class WalkCoverage
                         coveredTokens.Add(RunSources.PartialKey(coverageKey));
                     }
 
-                    if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded)
+                    bool unread = outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded;
+                    if (unread)
                     {
                         coveredTokens.Add(RunSources.UnreadKey(coverageKey));
+                    }
+
+                    if (unread && outcome.ReadToNaturalEnd)
+                    {
+                        coveredTokens.Add(RunSources.SweptKey(coverageKey));
                     }
 
                     if (outcome.AlsoCoveredModel is not null)
@@ -124,9 +138,14 @@ public static class WalkCoverage
                             coveredTokens.Add(RunSources.PartialKey(alsoCoverageKey));
                         }
 
-                        if (outcome.FailedPage is not null || outcome.SearchFellShortOfStatedCount || outcome.RenderingDegraded)
+                        if (unread)
                         {
                             coveredTokens.Add(RunSources.UnreadKey(alsoCoverageKey));
+                        }
+
+                        if (unread && outcome.ReadToNaturalEnd)
+                        {
+                            coveredTokens.Add(RunSources.SweptKey(alsoCoverageKey));
                         }
                     }
 

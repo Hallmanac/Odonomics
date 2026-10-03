@@ -325,6 +325,14 @@ public static class RunSources
     /// say the postings went unread rather than that a cap kept the walk from them.</summary>
     private const string UnreadPrefix = "unread:";
 
+    /// <summary>The prefix of the token a walk stamps beside a pair's <see cref="UnreadPrefix"/> one when
+    /// the pair's walk nonetheless read every search page to the site's natural end of results (no --max
+    /// stop, no failed page, no search short of its stated count), so the only thing that made the pair
+    /// partial was something else, such as a card that never rendered: "swept:cars.com:Prius". The pair
+    /// still counts as partial for coverage, but a known posting absent from every page it read is gone
+    /// from the search page, not unread.</summary>
+    private const string SweptPrefix = "swept:";
+
     /// <summary>The token that marks the pair behind <paramref name="coverageKey"/> (a <see cref="Key"/>)
     /// as partially covered this run because an explicit --max stopped its link collection short.</summary>
     public static string PartialKey(string coverageKey) => PartialPrefix + coverageKey;
@@ -332,6 +340,11 @@ public static class RunSources
     /// <summary>The token that marks the pair behind <paramref name="coverageKey"/> (a <see cref="Key"/>)
     /// as partially covered this run because a result page after the first failed to load.</summary>
     public static string UnreadKey(string coverageKey) => UnreadPrefix + coverageKey;
+
+    /// <summary>The token that marks the pair behind <paramref name="coverageKey"/> (a <see cref="Key"/>)
+    /// as having had every search page read to the site's natural end of results this run, whatever else
+    /// stamped it partial.</summary>
+    public static string SweptKey(string coverageKey) => SweptPrefix + coverageKey;
 
     /// <summary>The coverage tokens the run stamped, without the partial-coverage markers (see
     /// <see cref="PartialKey"/> and <see cref="UnreadKey"/>), so a marker is never mistaken for a source
@@ -346,6 +359,10 @@ public static class RunSources
     /// page failed to load.</summary>
     public static HashSet<string> UnreadCoverage(RunEntity run) => MarkedPairs(run, UnreadPrefix);
 
+    /// <summary>The <see cref="Key"/> of every pair whose walk read every search page to the site's natural
+    /// end of results this run, even one also stamped partial for another reason.</summary>
+    public static HashSet<string> SweptCoverage(RunEntity run) => MarkedPairs(run, SweptPrefix);
+
     /// <summary>Whether the run left any of <paramref name="coverageKey"/>'s pair unread, for either reason.</summary>
     public static bool IsPartial(RunEntity run, string coverageKey) =>
         PartialCoverage(run).Contains(coverageKey) || UnreadCoverage(run).Contains(coverageKey);
@@ -356,7 +373,9 @@ public static class RunSources
             .Select(token => token[prefix.Length..])];
 
     private static bool IsMarker(string token) =>
-        token.StartsWith(PartialPrefix, StringComparison.Ordinal) || token.StartsWith(UnreadPrefix, StringComparison.Ordinal);
+        token.StartsWith(PartialPrefix, StringComparison.Ordinal)
+        || token.StartsWith(UnreadPrefix, StringComparison.Ordinal)
+        || token.StartsWith(SweptPrefix, StringComparison.Ordinal);
 
     private static string[] SplitAll(RunEntity run) => run.Sources.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
