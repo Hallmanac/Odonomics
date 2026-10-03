@@ -31,10 +31,12 @@ public static partial class TitleBrandStatements
         return null;
     }
 
-    /// <summary>Whether the sentence holding the match negates it: a "no", "not", "never", "without",
-    /// "non", "free of", or a "n't" contraction ahead of the match in the same sentence. The sentence
-    /// starts after the last full stop, semicolon, or line break before the match, so a negation in an
-    /// earlier line never hides a later statement.</summary>
+    /// <summary>Whether the match is negated: a "no", "not", "never", "without", "non", "free of", or a
+    /// "n't" contraction (straight or curly apostrophe) leads into it through nothing but brand words,
+    /// commas, conjunctions, articles, and a few linking verbs ("No salvage, flood or rebuilt title",
+    /// "doesn't carry a rebuilt title"). A negation about something else earlier in the same sentence
+    /// ("No pets, rebuilt title", "non-smoker, rebuilt title") never hides the statement. The lead-in
+    /// is read only back to the last full stop, semicolon, or line break before the match.</summary>
     private static bool IsNegated(string pageText, int matchIndex)
     {
         int sentenceStart = pageText.LastIndexOfAny(['.', ';', '!', '?', '\n', '\r'], Math.Max(matchIndex - 1, 0)) + 1;
@@ -51,6 +53,6 @@ public static partial class TitleBrandStatements
     [GeneratedRegex($@"(?<![\w-]){Brand}[ \t]+title\b|(?<![\w-])title(?:[ \t]+(?:status|brand|type))?[ \t]*:[ \t]*{Brand}\b|^[ \t]*title[ \t]*\r?\n(?:[ \t]*\r?\n)*[ \t]*{Brand}[ \t\r]*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
     private static partial Regex TitleBrand();
 
-    [GeneratedRegex(@"\b(?:no|not|never|without|non|free of)\b|n't\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex($@"(?:\b(?:no|not|never|without|non|free of)|n['\u2019]t)(?:[\s,/&]+(?:{Brand}|titles?|or|and|nor|any|a|an|the|of|with|have|has|had|been|be|is|are|was|were|show|shows|carry|carries|accidents?|damage|history|issues?|reported))*[\s,/&]*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Negation();
 }
