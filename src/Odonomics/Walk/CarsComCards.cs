@@ -27,6 +27,16 @@ public static class CarsComCards
             : null;
     }
 
+    /// <summary>A cars.com card that states plainly it has no price: its price line reads "Not Priced" (recorded
+    /// card for JTDBCMFE5S3085848: "Not Priced / 62,900 mi. / Est. $0/mo / Used 2025 Toyota Corolla Hybrid LE"; the
+    /// same for 4T1F31AK8LU544312), or "No Price Listed" or "Call for price" as the other sites word it. Such a
+    /// card is no candidate for a detail visit, whose page only repeats "Not Priced" and is dropped as missing its
+    /// price, so <see cref="WalkSite.NoPriceCardPattern"/> drops it at the search page first. The line stands alone,
+    /// so a priced card that happens to mention one of these phrases in a longer line never matches.</summary>
+    public static readonly Regex NoPriceStated = new(
+        @"^[ \t]*(?:Not Priced|No Price Listed|Call (?:for|us for) (?:a )?price)[ \t\r]*$",
+        RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
+
     private static readonly Regex DeliveryFeeLine = new(@"\$\s*(?<fee>\d[\d,]*(?:\.\d{2})?)\s+delivery\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>The one-time delivery fee a card states ("$249 delivery to Orlando, FL (14 mi)"), wrapped as

@@ -43,7 +43,9 @@ public static class SearchPageCardRenderWait
     /// because every call runs against the same live page), so a card that never renders cannot hold onto
     /// the one scroll every scan grants and starve every card after it. Takes the same <c>amount</c> pattern
     /// as <see cref="SearchPageLinks.CardScript"/> (see <see cref="SearchPageLinks.CardAmountPattern"/>), so
-    /// the two agree on what counts as rendered. <c>scroll</c> defaults true for <see cref="RunAsync"/>'s own
+    /// the two agree on what counts as rendered (a site's own <see cref="WalkSite.CardAmountPattern"/>, when it has
+    /// one, is what <see cref="RunAsync"/> and <see cref="StillUnrenderedAsync"/> pass, so a rendered card whose
+    /// price line says "Call for price" and has no dollar sign is not read as one still waiting). <c>scroll</c> defaults true for <see cref="RunAsync"/>'s own
     /// scanning loop; <see cref="StillUnrenderedAsync"/> passes it false for a check that only reads the
     /// page's current state without nudging it further.</summary>
     public const string RenderScanScript = """
@@ -86,9 +88,10 @@ public static class SearchPageCardRenderWait
     public static async Task<IReadOnlyList<string>> RunAsync(
         Func<string, object?, Task<string[]>> evaluateAsync,
         Func<TimeSpan> pause,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? amountPattern = null)
     {
-        async Task<IReadOnlyList<string>> ScanAsync() => await evaluateAsync(RenderScanScript, new { amount = SearchPageLinks.CardAmountPattern });
+        async Task<IReadOnlyList<string>> ScanAsync() => await evaluateAsync(RenderScanScript, new { amount = amountPattern ?? SearchPageLinks.CardAmountPattern });
 
         IReadOnlyList<string> unrendered = await ScanAsync();
         for (int scan = 0; scan < MaxScans && unrendered.Count > 0; scan++)
@@ -114,8 +117,8 @@ public static class SearchPageCardRenderWait
     /// is genuinely still blank, which is exactly the misreading <see cref="RunAsync"/> exists to keep out
     /// of the pool (see the class summary), so only this narrower, same-element check may downgrade a
     /// card from unrendered to rendered.</summary>
-    public static async Task<IReadOnlyList<string>> StillUnrenderedAsync(Func<string, object?, Task<string[]>> evaluateAsync) =>
-        await evaluateAsync(RenderScanScript, new { amount = SearchPageLinks.CardAmountPattern, scroll = false });
+    public static async Task<IReadOnlyList<string>> StillUnrenderedAsync(Func<string, object?, Task<string[]>> evaluateAsync, string? amountPattern = null) =>
+        await evaluateAsync(RenderScanScript, new { amount = amountPattern ?? SearchPageLinks.CardAmountPattern, scroll = false });
 
     // Relaxed escaping keeps an href's "&" readable, matching SearchPageLinks.CardsJson.
     private static readonly JsonSerializerOptions HrefsJsonOptions = new()

@@ -343,7 +343,8 @@ public static class WalkCommand
                 ? await SearchPageCardRenderWait.RunAsync(
                     (script, arg) => page.EvaluateAsync<string[]>(script, arg),
                     pacing.RandomScrollPause,
-                    ct)
+                    ct,
+                    site.CardAmountPattern)
                 : [];
 
             string searchBodyText = await page.EvaluateAsync<string>("() => document.body.innerText");
@@ -358,7 +359,7 @@ public static class WalkCommand
                 // Running this before SearchPageLinks.ReadAsync, not after, is what keeps a card from
                 // finishing rendering in between the two calls and being read with a neighbor's price and
                 // distance while still counting as rendered.
-                unrenderedHrefs = await SearchPageCardRenderWait.StillUnrenderedAsync((script, arg) => page.EvaluateAsync<string[]>(script, arg));
+                unrenderedHrefs = await SearchPageCardRenderWait.StillUnrenderedAsync((script, arg) => page.EvaluateAsync<string[]>(script, arg), site.CardAmountPattern);
             }
 
             IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync((script, arg) => page.EvaluateAsync<string[][]>(script, arg), site);
