@@ -199,6 +199,21 @@ public class SearchPageCardRenderWaitTests
     }
 
     [Fact]
+    public async Task RunAsync_CarsComCardThatSaysCallForPriceWithNoDollarSign_IsRenderedUnderTheSitesOwnAmountPattern()
+    {
+        var card = new FakeCard("https://www.cars.com/vehicledetail/a/?sid=1", "Call for price\n61,300 mi.\nUsed 2022 Toyota Corolla Hybrid LE", rendersOnScan: 1);
+        var page = new FakePage(card);
+
+        IReadOnlyList<string> underDefault = await RunAsync(page);
+        IReadOnlyList<string> underSitePattern = await SearchPageCardRenderWait.RunAsync(page.EvaluateAsync, () => TimeSpan.Zero, CancellationToken.None, WalkSites.CarsCom.CardAmountPattern);
+        IReadOnlyList<string> stillUnrendered = await SearchPageCardRenderWait.StillUnrenderedAsync(page.EvaluateAsync, WalkSites.CarsCom.CardAmountPattern);
+
+        Assert.Equal([card.Href], underDefault);
+        Assert.Empty(underSitePattern);
+        Assert.Empty(stillUnrendered);
+    }
+
+    [Fact]
     public async Task StillUnrenderedAsync_ACardThatNeverRenders_IsStillReportedUnrendered()
     {
         var card = new FakeCard("https://www.cars.com/vehicledetail/a/?sid=1", "$21,202 Used 2023 Honda Insight EX", rendersOnScan: SearchPageCardRenderWait.MaxScans + 100);

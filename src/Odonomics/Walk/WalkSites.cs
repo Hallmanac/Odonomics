@@ -117,7 +117,7 @@ namespace Odonomics.Walk;
 /// rather than left to read as gone for want of a visit this walk was never going to spend on it. Null for a site
 /// whose own search facets are trusted as they come, whose cards are then never checked against them.
 /// <paramref name="NoPriceCardPattern"/> matches a card that states plainly it has no price (cargurus's "No Price
-/// Listed"), checked ahead of the price-ceiling check so such a card is never pooled and never mistaken for one
+/// Listed", cars.com's "Not Priced"), checked ahead of the price-ceiling check so such a card is never pooled and never mistaken for one
 /// whose price this walk simply couldn't read: it is instead told to <c>onNoPriceStated</c> (see
 /// <see cref="CollectDetailCards"/> and <see cref="WalkSearchPages.CollectLinksAsync"/>), the same way a
 /// below-floor or over-ceiling card is, with a known posting behind it still touched current from its card. A
@@ -790,6 +790,8 @@ public static class WalkSites
         // A cars.com card reads its asking price first, then a price-drop amount when it has one, then
         // mileage, then the "Used <year> ..." title, so the first dollar amount is the price.
         CardPriceReader: CardPrices.FirstDollarAmount,
+        CardAmountPattern: CarsComCardAmountPattern,
+        NoPriceCardPattern: CarsComCards.NoPriceStated,
         // cars.com pages with a plain page=N on the same URL; the site ignores a page_size parameter, so
         // the search URL carries none. How many cards one page holds varies by search, down to a handful
         // for one with few real matches (see the SkipsCarMaxDealer remark below): it is the pair's own
@@ -908,6 +910,14 @@ public static class WalkSites
     /// matched <see cref="CarGurusCards.NoPriceListed"/>, was pooled, and dropped at its detail page as "missing fields:
     /// price".</summary>
     private const string CarGurusCardAmountPattern = SearchPageLinks.CardAmountPattern + @"|No Price Listed";
+
+    /// <summary>cars.com's own override of <see cref="SearchPageLinks.CardAmountPattern"/>: the default dollar sign, or
+    /// one of the lines a card prints in place of a price (see <see cref="CarsComCards.NoPriceStated"/>). A recorded
+    /// no-price card still carries a dollar sign in its "Est. $0/mo" line, but one that says "Call for price" and
+    /// states no estimate has none, and a climb that looked only for a dollar sign would pass it by and land on the
+    /// results list, which reads as no card at all. This is a JavaScript pattern, which is case-sensitive, so each
+    /// phrase spells out the capitals the card prints.</summary>
+    private const string CarsComCardAmountPattern = SearchPageLinks.CardAmountPattern + @"|[Nn]ot [Pp]riced|[Nn]o [Pp]rice [Ll]isted|[Cc]all (?:for|us for) (?:a )?[Pp]rice";
 
     /// <summary>autotrader's zip, radius, minimum year, maximum mileage, and hybrid facets. Both dealers and
     /// private sellers list there, so the URL carries no sellerTypes parameter (sellerTypes=d and

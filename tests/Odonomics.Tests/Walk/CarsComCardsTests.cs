@@ -5,6 +5,25 @@ namespace Odonomics.Tests.Walk;
 public class CarsComCardsTests
 {
     [Theory]
+    [InlineData("Not Priced\n\n62,900 mi.\nEst. $0/mo\nUsed 2025 Toyota Corolla Hybrid LE\n\nDaytona Toyota\n\n4.7\nDaytona Beach, FL (50 mi)\nCheck Availability")]
+    [InlineData("No Price Listed\n\n47,265 mi.\nUsed 2020 Toyota Camry Hybrid XLE")]
+    [InlineData("Call for price\n\n61,300 mi.\nUsed 2022 Toyota Corolla Hybrid LE")]
+    [InlineData("Call for a price\r\n61,300 mi.")]
+    public void NoPriceStated_CardWhosePriceLineSaysItHasNone_Matches(string cardText)
+    {
+        Assert.Matches(CarsComCards.NoPriceStated, cardText);
+    }
+
+    [Theory]
+    [InlineData("$19,998\n\n$2K\n45,129 mi.\nEst. $363/mo\nUsed 2021 Toyota Corolla Hybrid SE\nGood Deal\n\nAutoNation USA Sanford\n\n3.2\nSanford, FL (26 mi)\nCheck Availability")]
+    [InlineData("$22,990\n\n53,933 mi.\nEst. $417/mo\nUsed 2024 Toyota Corolla Hybrid XLE\nSeller says: call for price drops, not priced to sell")]
+    [InlineData("")]
+    public void NoPriceStated_PricedOrEmptyCard_DoesNotMatch(string cardText)
+    {
+        Assert.DoesNotMatch(CarsComCards.NoPriceStated, cardText);
+    }
+
+    [Theory]
     [InlineData("Sanford, FL (28 mi)", 28)]
     [InlineData("St Augustine, FL (96 mi)", 96)]
     [InlineData("$199 delivery to Orlando, FL (14 mi)", 14)]

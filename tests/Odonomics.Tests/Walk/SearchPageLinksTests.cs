@@ -494,4 +494,53 @@ public class SearchPageLinksTests
         Assert.Equal([recorded[0].Href], pooled.Select(c => c.Href));
         Assert.Equal([recorded[1].Href, recorded[2].Href], dropped);
     }
+
+    // Cut from walks/cars.com/20261003-183952: a priced neighbor (corolla-hybrid/cards-3.json) and the cards of the two cars that
+    // run dropped at their detail pages as "missing fields: price" (corolla-hybrid/cards-2.json, JTDBCMFE5S3085848, a 2025 LE at
+    // 62,900 mi.; camry-hybrid/cards-1-page-1.json, 4T1F31AK8LU544312, a 2020 XLE at 47,265 mi.). Both print "Not Priced" where the
+    // price goes, and both detail pages say "Not Priced" too.
+    private static List<RecordedCard> RecordedCarsComNoPriceCards() =>
+        JsonSerializer.Deserialize<List<RecordedCard>>(
+            File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "tests", "Odonomics.Tests", "fixtures", "walks", "carscom-no-price-cards-20261003.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+
+    private static FakeElement CarsComResults(IEnumerable<RecordedCard> cards) =>
+        Div("cars.com results",
+            Div(
+                "",
+                [
+                    .. cards.Select(c => Card(Anchor(c.Href, "", Div(c.Card)))),
+                    Div("Footer " + new string('y', SearchPageLinks.MaxCardTextLength)),
+                ]));
+
+    [Fact]
+    public async Task CollectDetailCards_RecordedCarsComNotPricedCards_AreDroppedAtTheSearchPageAndOnlyThePricedCardIsPooled()
+    {
+        List<RecordedCard> recorded = RecordedCarsComNoPriceCards();
+        var page = new FakePage(CarsComResults(recorded));
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.CarsCom);
+        List<string> dropped = [];
+
+        IReadOnlyList<PageLink> pooled = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 200, onNoPriceStated: card => dropped.Add(card.Href));
+
+        Assert.Equal([recorded[0].Href], pooled.Select(c => c.Href));
+        Assert.Equal([recorded[1].Href, recorded[2].Href], dropped);
+        Assert.Equal(19998m, WalkSites.CarsCom.ReadCardPrice(pooled[0].CardText));
+    }
+
+    [Fact]
+    public async Task ReadAsync_CarsComCardThatSaysCallForPriceAndHasNoDollarSign_GetsItsOwnCardText()
+    {
+        const string card = "Call for price\n\n61,300 mi.\nUsed 2022 Toyota Corolla Hybrid LE\n\nSome Toyota\n\n4.2\nSanford, FL (23 mi)\nCheck Availability";
+        List<RecordedCard> recorded = [new("https://www.cars.com/vehicledetail/aaaaaaaa-0000-0000-0000-000000000001/?sid=x", card)];
+        var page = new FakePage(CarsComResults(recorded));
+
+        IReadOnlyList<PageLink> links = await SearchPageLinks.ReadAsync(page.EvaluateAsync, WalkSites.CarsCom);
+        List<string> dropped = [];
+        IReadOnlyList<PageLink> pooled = WalkSites.CarsCom.CollectDetailCards(links, poolSize: 200, onNoPriceStated: c => dropped.Add(c.Href));
+
+        Assert.Equal([card], links.Select(l => l.CardText));
+        Assert.Empty(pooled);
+        Assert.Equal([recorded[0].Href], dropped);
+    }
 }
