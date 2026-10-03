@@ -35,11 +35,16 @@ public static class RankCommand
         List<VinRecordEntity> vinRecords = await db.VinRecords.ToListAsync(cancellationToken);
         Dictionary<string, VinRecordEntity> vinRecordsByVin = vinRecords.ToDictionary(r => r.Vin);
 
+        IReadOnlyDictionary<string, string> priceNotes = VehiclePricing.SimilarPriceNotes(vehicles, latestCoverageBySource);
+
         var scores = new List<Score>();
         var research = new Dictionary<string, ResearchStatus>();
         foreach (VehicleEntity vehicle in vehicles)
         {
-            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles);
+            VehicleForScoring forScoring = ForScoring(vehicle, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles) with
+            {
+                PriceNote = priceNotes.GetValueOrDefault(vehicle.Vin),
+            };
             scores.Add(Scorer.Score(forScoring, scenario));
             research[vehicle.Vin] = ResearchStatusFor(
                 vinRecordsByVin.GetValueOrDefault(vehicle.Vin),

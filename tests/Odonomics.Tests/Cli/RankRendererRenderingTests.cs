@@ -28,7 +28,8 @@ public class RankRendererRenderingTests
         string? pickupLocation = null,
         Fulfillment fulfillment = Fulfillment.Delivery,
         decimal? itemizedFees = null,
-        string? unmeasuredOnlyAtStore = null)
+        string? unmeasuredOnlyAtStore = null,
+        string? priceNote = null)
     {
         var vehicle = new VehicleForScoring
         {
@@ -46,6 +47,7 @@ public class RankRendererRenderingTests
             DealerGrade = dealerGrade,
             OnlyFGradedDealers = onlyFGraded,
             UnmeasuredOnlyAtStore = unmeasuredOnlyAtStore,
+            PriceNote = priceNote,
         };
 
         return new Score
@@ -157,6 +159,27 @@ public class RankRendererRenderingTests
 
         Assert.Contains(lines, line => line.Contains("$22,000") && line.Contains("flag") && line.Contains("rc -"));
         Assert.Contains(lines, line => line.Contains("$23,000") && !line.Contains("flag") && line.Contains("rc -"));
+    }
+
+    [Fact]
+    public void Render_VehicleWithAPriceNote_PrintsItUnderItsRowWithoutMarkingItFlagged()
+    {
+        CostBreakdown cost = BuildCost(new Band(590m, 608m, 626m), new Band(612m, 696m, 780m));
+        Score noted = BuildScore("JTDBCMFEXS3070309", 2025, "Toyota", "Corolla Hybrid", 17289m, cost: cost, priceNote: "priced 24% below 12 similar cars (median $22,800); confirm the title");
+        Score plain = BuildScore("4T1G11AK0LU654321", 2025, "Toyota", "Corolla Hybrid", 22800m, cost: cost);
+        var research = new Dictionary<string, ResearchStatus>
+        {
+            ["JTDBCMFEXS3070309"] = new ResearchStatus(Researched: true, ResearchedAt: DateTimeOffset.UtcNow, HasRedFlag: false, RecallsKnown: true, RecallCount: 0),
+        };
+
+        string[] lines = Render([noted, plain], budget: null, research);
+
+        Assert.All(lines, line => Assert.True(line.Length <= 80, $"line exceeded 80 columns ({line.Length}): \"{line}\""));
+        int row = Array.FindIndex(lines, line => line.Contains("JTDBCMFEXS3070309"));
+        string afterRow = string.Join(" ", lines.Skip(row + 1).Take(3).Select(line => line.Trim()));
+        Assert.Contains("priced 24% below 12 similar cars (median $22,800); confirm the title", afterRow);
+        Assert.Single(lines, line => line.Contains("confirm the title") || line.Contains("12 similar cars"));
+        Assert.Contains(lines, line => line.Contains("$17,289") && line.Contains("clean") && !line.Contains("flag"));
     }
 
     [Fact]

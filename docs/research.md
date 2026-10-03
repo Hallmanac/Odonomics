@@ -91,3 +91,17 @@ Add-ons-dealer is the one flag that comes from the vehicle's own postings and no
 `odo show` renders the Marketcheck VIN history grouped by seller, using the clustering above. Each group is one row with its first and last seen dates, its dealer names, its price range, and its mileage range, so a syndicated 50-row history still reads as a handful of lines. A multi-seller group's dealer cell leads with its seller count, such as "16 sellers: ...", and lists at most three names followed by "and N more". The cell is never cut short, so a long name list wraps onto extra lines under the group's row. Pass `--all-history` to also print the raw one-row-per-sighting list underneath.
 
 When Marketcheck reports no days on market for the current listing, `odo show` counts the days since the current seller group began its latest unbroken run of sightings. The current group is the one seen most recently, and it only counts when it was last seen within the past 14 days. Otherwise the car is treated as not currently listed, and `odo show` prints `(unknown)`.
+
+## The priced-well-below-similar-cars note
+
+A price far under the market is sometimes a salvage or rebuilt title that the listing never says, and the VIN history does not always show it (a car can sell through Copart with nothing in NICB VINCheck and only one Erepairables row in the history). So `odo show` and `odo rank` print a soft note for a car priced about 20 percent or more below similar cars in the ledger:
+
+```
+priced 24% below 12 similar cars (median $22,800); confirm the title
+```
+
+`odo rank` prints it on its own line under the vehicle's figures, in yellow. `odo show` prints it under the red flags section, also in yellow. It is a note and not a red flag: it does not change the score or any cost figure, it is not counted in `Red flags (N)`, and it does not turn a vehicle's research marker in `odo rank` to `flag`. It needs no research and no API call, because it only compares prices already in the ledger.
+
+For each vehicle, the comparison set is every other ledger vehicle that has the same make and model (so a Corolla Hybrid LE, SE, and XLE all count together), has a model year within one year of its own, has a mileage within 15,000 miles of its own, and has a current asking price. The price compared is the asking price (the same figure the price-spike flag uses), for the vehicle and for the comparison set alike, and the set includes vehicles the scenario would exclude from the ranking. With fewer than five cars in the set there is no note. Otherwise the note appears when the vehicle's price is at most 80 percent of the set's median (the mean of the middle two when the set has an even count). The percentage shown is how far below the median the price sits, rounded to a whole percent.
+
+The thresholds are `SimilarPriceNote.YearWindow`, `MileageWindowMiles`, `MinimumSimilarCars`, and `Threshold`.

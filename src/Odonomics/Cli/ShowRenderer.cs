@@ -44,7 +44,8 @@ public static class ShowRenderer
         bool allHistory,
         CostBreakdown? monthlyCost,
         string? monthlyCostUnavailable,
-        PurchasePrice? purchasePrice = null)
+        PurchasePrice? purchasePrice = null,
+        string? priceNote = null)
     {
         (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
@@ -169,6 +170,11 @@ public static class ShowRenderer
             {
                 AnsiConsole.MarkupLineInterpolated($"  [red]- {flag.Detail}[/]");
             }
+        }
+
+        if (priceNote is not null)
+        {
+            AnsiConsole.MarkupLineInterpolated($"  [yellow]note: {priceNote}[/]");
         }
 
         AnsiConsole.WriteLine();
