@@ -54,7 +54,7 @@ The shipped scenario requires `"keyless entry"` and `"push-button start"`, follo
 
 Each vehicle carries a status for each feature: present, absent, or unknown, with its source. The sources rank in this order:
 
-1. The listing's window sticker or factory equipment list, read by the walk (see [walk.md](walk.md#window-sticker-equipment)).
+1. The listing's window sticker or factory equipment list, read by the walk (see [walk.md](walk.md#window-sticker-equipment)), or a sticker you read yourself and recorded with `odo equipment set` (see [commands.md](commands.md#equipment-set)), which shows as "sticker (manual)". The two share a rank, and whichever was stored last for a feature wins.
 2. The factory trim table, which fills a status the sticker left unknown.
 3. Nothing else. A dealer's description never confirms or rules out either feature.
 
