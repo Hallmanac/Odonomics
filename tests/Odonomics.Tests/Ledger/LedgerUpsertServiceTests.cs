@@ -534,6 +534,41 @@ public class LedgerUpsertServiceTests
     }
 
     [Fact]
+    public async Task UpsertAsync_CandidateStatingATitleBrand_StoresThePhraseOnThePosting()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk cars.com");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "cars.com") with { TitleBrandPhrase = "rebuilt title" }, run, CancellationToken.None);
+
+        Assert.Equal("rebuilt title", db.Postings.Single().TitleBrandPhrase);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_SeenAgainWithNoTitleBrand_ReplacesTheEarlierPhraseWithNull()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "walk cars.com");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "cars.com") with { TitleBrandPhrase = "salvage title" }, run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "walk cars.com");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "cars.com"), run2, CancellationToken.None);
+
+        Assert.Null(db.Postings.Single().TitleBrandPhrase);
+    }
+
+    [Fact]
     public async Task UpsertAsync_SeenAgainWithNoFee_ReplacesTheEarlierFeeWithNull()
     {
         using var testDb = new LedgerTestDatabase();

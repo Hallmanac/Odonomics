@@ -101,6 +101,9 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
         posting.FeePosture = candidate.FeePosture;
         posting.ItemizedFeesTotal = candidate.ItemizedFeesTotal;
 
+        // Replaced like the fee: a detail page that no longer states a brand is a fresh reading.
+        posting.TitleBrandPhrase = candidate.TitleBrandPhrase;
+
         // The pickup option is replaced the same way, for the same reason, and so is a page whose
         // block did not render: it leaves both null rather than keeping a figure from another day.
         posting.PickupFee = candidate.PickupFee;
