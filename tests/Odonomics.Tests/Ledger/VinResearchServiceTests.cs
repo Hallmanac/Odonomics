@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Odonomics.Domain;
 using Odonomics.Ledger;
@@ -682,5 +683,26 @@ public class VinResearchServiceTests
         IReadOnlyList<RedFlag> flags = VinResearchService.RedFlagsForCached(record, currentPrice: null);
 
         Assert.DoesNotContain(flags, f => f.ShortTag == "no-remedy-recall");
+    }
+
+    [Fact]
+    public void RedFlagsForCached_HistoryWithASalvageSeller_FlagsItForRank()
+    {
+        var record = new VinRecordEntity
+        {
+            Vin = Vin,
+            DecodedAt = DateTimeOffset.UtcNow,
+            DecodeRawJson = "{}",
+            HistoryRawJson = JsonSerializer.Serialize(new List<VinHistoryListing>
+            {
+                new("Erepairables.com", null, null, new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero), null, 83630, null),
+                new("Liz Auto Sales Llc", null, null, new DateTimeOffset(2026, 8, 18, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 3, 0, 0, 0, TimeSpan.Zero), 15995m, 83682, null),
+            }),
+        };
+
+        IReadOnlyList<RedFlag> flags = VinResearchService.RedFlagsForCached(record, currentPrice: 17289m);
+
+        RedFlag flag = Assert.Single(flags);
+        Assert.Equal("salvage-seller", flag.ShortTag);
     }
 }

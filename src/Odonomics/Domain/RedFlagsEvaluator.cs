@@ -111,6 +111,12 @@ public static partial class RedFlagsEvaluator
                 $"NHTSA overall safety rating is {stars} star{(stars == 1 ? "" : "s")}, below 4"));
         }
 
+        RedFlag? salvageFlag = FindSalvageSeller(priorListings);
+        if (salvageFlag is not null)
+        {
+            flags.Add(salvageFlag);
+        }
+
         List<VinHistoryPoint> ordered = [.. priorListings.Where(p => p.FirstSeen is not null).OrderBy(p => p.FirstSeen)];
         List<SellerGroup> sellerGroups = BuildSellerGroups(ordered);
 
@@ -139,6 +145,35 @@ public static partial class RedFlagsEvaluator
         }
 
         return new EvaluationResult(flags, mileageNotes);
+    }
+
+    /// <summary>The flag for a VIN-history row whose dealer is a salvage or repairable-vehicle outlet
+    /// (see <see cref="SalvageSellers"/>), naming each such seller as it appears in the history with the
+    /// date it was first listed there, earliest first. Several rows from one seller collapse to its
+    /// earliest. A warning only: it never removes the vehicle from anything. Null when no row matches.</summary>
+    private static RedFlag? FindSalvageSeller(IReadOnlyList<VinHistoryPoint> priorListings)
+    {
+        Dictionary<string, DateTimeOffset?> earliestBySeller = new(StringComparer.OrdinalIgnoreCase);
+        foreach (VinHistoryPoint point in priorListings.OrderBy(p => p.FirstSeen ?? DateTimeOffset.MaxValue))
+        {
+            if (point.Dealer?.Trim() is { Length: > 0 } name && SalvageSellers.IsSalvageSeller(name))
+            {
+                earliestBySeller.TryAdd(name, point.FirstSeen);
+            }
+        }
+
+        List<string> sightings = [.. earliestBySeller
+            .OrderBy(s => s.Value is null)
+            .ThenBy(s => s.Value)
+            .Select(s => s.Value is DateTimeOffset date
+                ? $"{s.Key} on {date:yyyy-MM-dd}"
+                : $"{s.Key} on an unknown date")];
+
+        return sightings.Count == 0
+            ? null
+            : new RedFlag(
+                "salvage-seller",
+                $"listed by a salvage or repairable-vehicle seller, which points to an insurance total loss and a likely salvage or rebuilt title: {string.Join("; ", sightings)}");
     }
 
     /// <summary>The flag for a listing whose price may not be the price at the desk: its fee posture is
