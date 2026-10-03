@@ -30,8 +30,12 @@ public class SalvageSellerFlagTests
         RedFlag flag = Assert.Single(Flags(CorollaHybridHistory));
 
         Assert.Equal("salvage-seller", flag.ShortTag);
-        Assert.Contains("Erepairables.com on 2026-07-15", flag.Detail);
+        Assert.Equal(
+            "listed by a salvage or repairable-vehicle seller (Erepairables.com on 2026-07-15); confirm the title status before buying",
+            flag.Detail);
         Assert.DoesNotContain("Liz Auto Sales", flag.Detail);
+        Assert.DoesNotContain("total loss", flag.Detail);
+        Assert.DoesNotContain("rebuilt", flag.Detail);
     }
 
     [Fact]
@@ -107,6 +111,9 @@ public class SalvageSellerFlagTests
         RedFlag flag = Assert.Single(Flags(history));
 
         Assert.True(flag.Detail.IndexOf("Copart on 2026-02-01", StringComparison.Ordinal) < flag.Detail.IndexOf("SalvageBid on 2026-05-01", StringComparison.Ordinal));
+        Assert.Equal(
+            "listed by a salvage or repairable-vehicle seller (Copart on 2026-02-01; SalvageBid on 2026-05-01); confirm the title status before buying",
+            flag.Detail);
     }
 
     [Fact]
