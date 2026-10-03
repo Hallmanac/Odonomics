@@ -132,27 +132,30 @@ public sealed class LedgerUpsertService(OdonomicsDbContext db)
     }
 
     /// <summary>Stores what the candidate's window sticker said about each feature. A status the sticker did
-    /// state replaces the stored one, and the sticker is then its source. A candidate with no sticker (unknown)
-    /// leaves the stored status alone, since a page with no sticker is not evidence a sticker read earlier was
-    /// wrong.</summary>
+    /// state replaces the stored one, a manual entry included, and the sticker is then its source. A candidate
+    /// with no sticker (unknown) leaves the stored status alone, since a page with no sticker is not evidence a
+    /// sticker read earlier was wrong.</summary>
     private static void ApplyStickerEquipment(VehicleEntity vehicle, ListingCandidate candidate)
     {
         if (candidate.SmartKeyEntry != EquipmentStatus.Unknown)
         {
             vehicle.SmartKeyEntry = candidate.SmartKeyEntry;
             vehicle.SmartKeyEntrySource = EquipmentSource.WindowSticker;
+            vehicle.SmartKeyEntrySourceNote = null;
         }
 
         if (candidate.PushButtonStart != EquipmentStatus.Unknown)
         {
             vehicle.PushButtonStart = candidate.PushButtonStart;
             vehicle.PushButtonStartSource = EquipmentSource.WindowSticker;
+            vehicle.PushButtonStartSourceNote = null;
         }
 
         if (candidate.KeylessFobEntry != EquipmentStatus.Unknown)
         {
             vehicle.KeylessFobEntry = candidate.KeylessFobEntry;
             vehicle.KeylessFobEntrySource = EquipmentSource.WindowSticker;
+            vehicle.KeylessFobEntrySourceNote = null;
         }
     }
 
