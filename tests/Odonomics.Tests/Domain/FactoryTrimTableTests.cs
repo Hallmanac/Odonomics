@@ -126,6 +126,42 @@ public class FactoryTrimTableTests
         Assert.Contains("driver's door only", entry.Note);
     }
 
+    [Theory]
+    [InlineData(2019, "Limited FWD", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData(2019, "limited fwd", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData(2019, "Limited AWD-e", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData(2019, "LE FWD", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData(2019, "L Eco FWD", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData(2019, "LE 4WD", EquipmentStatus.Present, EquipmentStatus.Present)]
+    [InlineData(2019, "XSE Premium", EquipmentStatus.Unknown, EquipmentStatus.Unknown)]
+    [InlineData(2019, "LEFWD", EquipmentStatus.Unknown, EquipmentStatus.Unknown)]
+    [InlineData(2019, "FWD", EquipmentStatus.Unknown, EquipmentStatus.Unknown)]
+    [InlineData(2022, "LE FWD", EquipmentStatus.Unknown, EquipmentStatus.Present)]
+    public void LoadShipped_PriusWithADrivetrainSuffix_ReadsItsBaseTrimRow(
+        int year, string trim, EquipmentStatus smartKey, EquipmentStatus pushButton)
+    {
+        FactoryTrimTable table = FactoryTrimTable.LoadShipped();
+
+        VehicleEquipment equipment = table.Lookup("Toyota", "Prius", year, trim);
+
+        Assert.Equal(smartKey, equipment.SmartKeyEntry.Status);
+        Assert.Equal(pushButton, equipment.PushButtonStart.Status);
+    }
+
+    [Fact]
+    public void Lookup_TrimThatMatchesARowExactly_WinsOverItsStrippedBaseTrim()
+    {
+        FactoryTrimTable table = FactoryTrimTable.Parse("""
+            { "entries": [
+              { "make": "Toyota", "model": "Prius", "yearFrom": 2019, "yearTo": 2019, "trim": "LE", "smartKeyEntry": "present", "source": "a" },
+              { "make": "Toyota", "model": "Prius", "yearFrom": 2019, "yearTo": 2019, "trim": "LE AWD-e", "smartKeyEntry": "absent", "source": "b" }
+            ] }
+            """);
+
+        Assert.Equal(EquipmentStatus.Absent, table.Lookup("Toyota", "Prius", 2019, "LE AWD-e").SmartKeyEntry.Status);
+        Assert.Equal(EquipmentStatus.Present, table.Lookup("Toyota", "Prius", 2019, "LE FWD").SmartKeyEntry.Status);
+    }
+
     [Fact]
     public void Parse_EmptyEntries_GivesNoAnswerForAnyCar()
     {
