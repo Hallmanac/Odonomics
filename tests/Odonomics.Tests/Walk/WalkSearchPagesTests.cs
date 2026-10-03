@@ -953,6 +953,63 @@ public class WalkSearchPagesTests
     }
 
     [Fact]
+    public async Task CarsCom_APageThatAddsNothingBecauseItsNewCardsNeverRendered_ReportsTheStopAsAmongNewUnrenderedCards()
+    {
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string unrenderedOnPageTwo = "https://www.cars.com/vehicledetail/unrendered/?sid=x";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>>
+            {
+                [1] = [new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+                [2] =
+                [
+                    new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)"),
+                    new PageLink(unrenderedOnPageTwo, "", ""),
+                ],
+                [3] = [new PageLink("https://www.cars.com/vehicledetail/never-read/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+            },
+            unrenderedHrefs: new Dictionary<int, List<string>> { [2] = [unrenderedOnPageTwo] });
+        var stoppedAmongUnrenderedPages = new List<int>();
+
+        await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50,
+            onStoppedAmongNewUnrenderedCards: stoppedAmongUnrenderedPages.Add);
+
+        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
+        Assert.Equal([2], stoppedAmongUnrenderedPages);
+    }
+
+    [Fact]
+    public async Task CarsCom_ACardUnrenderedSincePageOneAndRepeatedOnTheStopPage_DoesNotReportAStopAmongNewUnrenderedCards()
+    {
+        // cars.com repeats the same never-resolving cards on every page, so a stop whose only unrendered
+        // card was already unrendered on an earlier page is an ordinary natural end.
+        const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";
+        const string unrenderedHref = "https://www.cars.com/vehicledetail/unrendered/?sid=x";
+        var browser = new FakeBrowser(
+            new Dictionary<int, List<PageLink>>
+            {
+                [1] = [new PageLink(unrenderedHref, "", ""), new PageLink("https://www.cars.com/vehicledetail/near/?sid=x", "Used 2020 Honda Insight EX", "Sanford, FL (28 mi)")],
+                [2] = [new PageLink(unrenderedHref, "", "")],
+            },
+            unrenderedHrefs: new Dictionary<int, List<string>>
+            {
+                [1] = [unrenderedHref],
+                [2] = [unrenderedHref],
+            });
+        var stoppedAmongUnrenderedPages = new List<int>();
+
+        await WalkSearchPages.CollectLinksAsync(
+            WalkSites.CarsCom, search, WalkPairSearches.UnboundedPool, NoneKnown, browser.LoadAsync, (_, _) => { }, _ => { }, () => { },
+            CancellationToken.None, revisit: false, maxDistanceMiles: 50,
+            onStoppedAmongNewUnrenderedCards: stoppedAmongUnrenderedPages.Add);
+
+        Assert.Equal([1, 2], browser.Loads.Select(l => l.PageNumber));
+        Assert.Empty(stoppedAmongUnrenderedPages);
+    }
+
+    [Fact]
     public async Task CarsCom_AnUnrenderedCardThatRendersOnALaterPage_IsNotCountedUnrendered()
     {
         const string search = "https://www.cars.com/shopping/results/?models[]=honda-insight&maximum_distance=50";

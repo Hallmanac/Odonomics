@@ -299,6 +299,12 @@ public static class WalkCommand
         // diff read its untouched known postings as gone.
         bool renderingDegraded = false;
 
+        // Set when any search's paging stopped on a page that added nothing while that page also held a
+        // card unrendered for the first time (see WalkSearchPages.CollectLinksAsync's own
+        // onStoppedAmongNewUnrenderedCards): the stop may be the render wait's doing rather than the
+        // site's, so the pair is not read as swept to the site's natural end.
+        bool stoppedAmongNewUnrenderedCards = false;
+
         // The canonical URLs, among those, that the ledger already held: never touched, so their
         // LastSeen never moved. Exempted from the diff on their own (see LedgerDiffService.ComputeAsync)
         // rather than marking the whole pair's coverage partial, so every other untouched posting in the
@@ -464,7 +470,8 @@ public static class WalkCommand
                 onNoPriceStated: () => skippedNoPriceStated++,
                 onCarMaxDealer: () => skippedCarMaxDealer++,
                 onStoppedOnPaddingOnlyPage: pageNumber =>
-                    AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings, out-of-radius cars, and repeats are new here; coverage stays complete, since a CarMax or beyond-radius card is never kept regardless and any known posting behind a no-distance card was already kept current from its card"));
+                    AnsiConsole.MarkupLineInterpolated($"{searchLabel}, page {pageNumber}: only carmax listings, out-of-radius cars, and repeats are new here; coverage stays complete, since a CarMax or beyond-radius card is never kept regardless and any known posting behind a no-distance card was already kept current from its card"),
+                onStoppedAmongNewUnrenderedCards: _ => stoppedAmongNewUnrenderedCards = true);
             string capText = linkPoolSize == WalkPairSearches.UnboundedPool
                 ? "no cap"
                 : $"cap {linkPoolSize / site.DetailLinkOverfetchMultiplier} matching candidate(s)";
@@ -739,7 +746,8 @@ public static class WalkCommand
         return new WalkPairOutcome(tally.Visited, tally.Upserted, tally.Dropped, knownTouches.Count, capped, failedResultPage, skippedBeyondRadius, skippedNoDistance, skippedUnrendered, unrenderedKnownUrls,
             AlsoCoveredModel: isPriusPair ? PriusPrimeVariant.StoredModel : null,
             SearchFellShortOfStatedCount: searchFellShortOfStatedCount,
-            RenderingDegraded: renderingDegraded);
+            RenderingDegraded: renderingDegraded,
+            StoppedAmongNewUnrenderedCards: stoppedAmongNewUnrenderedCards);
     }
 
     private static void RenderSummary(List<WalkPairSummary> summaries)

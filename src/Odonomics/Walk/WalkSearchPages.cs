@@ -148,7 +148,14 @@ public static class WalkSearchPages
     /// moves with this run and it is never read, in the diff, as having left the market just because its
     /// own text could not be trusted. A brand-new no-distance card the ledger has never seen has nothing to
     /// protect this way, and is simply not a candidate this run; a later run whose padding stops sooner, or
-    /// whose card finally resolves, can still pick it up.</summary>
+    /// whose card finally resolves, can still pick it up.
+    /// <paramref name="onStoppedAmongNewUnrenderedCards"/> is told a page's number when the paging stopped
+    /// because that page added nothing, yet the page also named a detail link unrendered for the first time
+    /// in this search (one no earlier page, pooled card, or reported card already accounts for): that link
+    /// was filtered out before it could count as added, so the stop may have been caused by cards the render
+    /// wait never read rather than by the site running out of results, and the pages after it may never have
+    /// been read. A link already unrendered on an earlier page does not count: cars.com repeats the same
+    /// never-resolving cards on every page, so counting those would fire on ordinary runs.</summary>
     public static async Task<IReadOnlyList<string>> CollectLinksAsync(
         WalkSite site,
         string searchUrl,
@@ -175,7 +182,8 @@ public static class WalkSearchPages
         Action<int, int?>? onSearchCoverageKnown = null,
         Action? onNoPriceStated = null,
         Action? onCarMaxDealer = null,
-        Action<int>? onStoppedOnPaddingOnlyPage = null)
+        Action<int>? onStoppedOnPaddingOnlyPage = null,
+        Action<int>? onStoppedAmongNewUnrenderedCards = null)
     {
         Func<string, int, string?, string>? pageUrlFor = site.PagedSearchUrl;
         string? pagingToken = null;
@@ -200,6 +208,10 @@ public static class WalkSearchPages
         // held brand-new links this run chose not to treat as added.
         bool pageHadNewExcludedActivity = false;
 
+        // Set while processing the page currently in hand: true when this page named a detail link
+        // unrendered for the first time in the whole search (see onStoppedAmongNewUnrenderedCards).
+        bool pageHadNewUnrenderedLink = false;
+
         void ReportOnce(PageLink card, Action? report, Action? withdraw)
         {
             string canonicalUrl = WalkSites.CanonicalDetailUrl(card.Href);
@@ -214,6 +226,7 @@ public static class WalkSearchPages
         for (int pageNumber = 1; ; pageNumber++)
         {
             pageHadNewExcludedActivity = false;
+            pageHadNewUnrenderedLink = false;
 
             string pageUrl = pageNumber > 1 && pageUrlFor is not null
                 ? pageUrlFor(searchUrl, pageNumber, pagingToken)
@@ -247,6 +260,7 @@ public static class WalkSearchPages
             {
                 HashSet<string> unrenderedCanonicalUrls = [.. unrenderedHrefs.Select(WalkSites.CanonicalDetailUrl)];
                 renderedLinks = [.. content.Links.Where(l => !site.DetailUrlPattern.IsMatch(l.Href) || !unrenderedCanonicalUrls.Contains(WalkSites.CanonicalDetailUrl(l.Href)))];
+                pageHadNewUnrenderedLink = unrenderedCanonicalUrls.Any(u => !everUnrenderedCanonicalUrls.Contains(u) && !canonicalUrls.Contains(u) && !reportedOutOfRadius.ContainsKey(u));
                 everUnrenderedCanonicalUrls.UnionWith(unrenderedCanonicalUrls);
             }
 
@@ -425,6 +439,11 @@ public static class WalkSearchPages
                 if (added == 0 && pageUrlFor is not null && considered < linkBound && pageHadNewExcludedActivity)
                 {
                     onStoppedOnPaddingOnlyPage?.Invoke(pageNumber);
+                }
+
+                if (added == 0 && pageUrlFor is not null && considered < linkBound && pageHadNewUnrenderedLink)
+                {
+                    onStoppedAmongNewUnrenderedCards?.Invoke(pageNumber);
                 }
 
                 break;

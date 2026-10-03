@@ -41,11 +41,14 @@ namespace Odonomics.Walk;
 /// reason a below-floor or over-mileage card's known posting is, so the pair's coverage stays full for that
 /// stop regardless of whether any of those cards ever resolves. <see cref="ReadToNaturalEnd"/> is true when
 /// the pair's walk read every search page to the site's natural end of results: not capped, no failed page,
-/// and no search short of its stated count. Only <see cref="RenderingDegraded"/> can then have made the pair
+/// no search short of its stated count, and no search whose paging stopped on a page that added nothing only
+/// because its new cards never rendered (<see cref="StoppedAmongNewUnrenderedCards"/>, see
+/// <see cref="WalkSearchPages.CollectLinksAsync"/>'s own <c>onStoppedAmongNewUnrenderedCards</c>): that stop
+/// may have left later pages unread. Only <see cref="RenderingDegraded"/> can then have made the pair
 /// partial.</summary>
-public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false)
+public sealed record WalkPairOutcome(int DetailPagesVisited, int Upserted, DroppedBreakdown Dropped, int KnownFromCards = 0, bool Capped = false, int? FailedPage = null, int SkippedBeyondRadius = 0, int SkippedNoDistance = 0, int SkippedUnrendered = 0, IReadOnlyList<string>? UnrenderedKnownUrls = null, string? AlsoCoveredModel = null, bool SearchFellShortOfStatedCount = false, bool RenderingDegraded = false, bool StoppedAmongNewUnrenderedCards = false)
 {
-    public bool ReadToNaturalEnd => !Capped && FailedPage is null && !SearchFellShortOfStatedCount;
+    public bool ReadToNaturalEnd => !Capped && FailedPage is null && !SearchFellShortOfStatedCount && !StoppedAmongNewUnrenderedCards;
 }
 
 /// <summary>One (site, model) pair's result, for the end-of-run summary. <see cref="Completed"/>
