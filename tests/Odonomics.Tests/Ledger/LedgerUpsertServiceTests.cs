@@ -570,6 +570,114 @@ public class LedgerUpsertServiceTests
     }
 
     [Fact]
+    public async Task UpsertAsync_CandidateWithAHistorySummary_StoresEveryStatedFieldOnThePosting()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk cargurus");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(
+            Candidate("1HGCM82633A004352", 18000m, source: "cargurus") with { History = new PostingHistory("Clean title", 2, 1, "Reported as previous rental vehicle", "Frame damage reported") },
+            run,
+            CancellationToken.None);
+
+        PostingEntity posting = await db.Postings.AsNoTracking().SingleAsync();
+        Assert.Equal("Clean title", posting.HistoryTitleWording);
+        Assert.Equal(2, posting.HistoryAccidentCount);
+        Assert.Equal(1, posting.HistoryPreviousOwnerCount);
+        Assert.Equal("Reported as previous rental vehicle", posting.HistoryUseStatement);
+        Assert.Equal("Frame damage reported", posting.HistoryFrameDamageStatement);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_CandidateWithNoHistorySummary_StoresNotStatedNeverZero()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk cargurus");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "cargurus"), run, CancellationToken.None);
+
+        PostingEntity posting = await db.Postings.AsNoTracking().SingleAsync();
+        Assert.Null(posting.HistoryTitleWording);
+        Assert.Null(posting.HistoryAccidentCount);
+        Assert.Null(posting.HistoryPreviousOwnerCount);
+        Assert.Null(posting.HistoryUseStatement);
+        Assert.Null(posting.HistoryFrameDamageStatement);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_SeenAgainWithAFreshSummary_ReplacesEveryFieldIncludingOnesNowNotStated()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+
+        RunEntity run1 = Run(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "walk cargurus");
+        db.Runs.Add(run1);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "cargurus") with { History = new PostingHistory("Clean title", 2, 1, "Reported as previous rental vehicle", "Frame damage reported") }, run1, CancellationToken.None);
+
+        RunEntity run2 = Run(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "walk cargurus --revisit");
+        db.Runs.Add(run2);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await service.UpsertAsync(Candidate("1HGCM82633A004352", 18000m, source: "cargurus") with { History = new PostingHistory("Clean title", 3, null, null, null) }, run2, CancellationToken.None);
+
+        PostingEntity posting = await db.Postings.AsNoTracking().SingleAsync();
+        Assert.Equal(new PostingHistory("Clean title", 3, null, null, null), posting.History);
+    }
+
+    [Fact]
+    public async Task SetCardHistoriesByUrlAsync_CardStatingSomeFields_ReplacesOnlyThoseAndKeepsTheRest()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk cargurus");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+        ListingCandidate candidate = Candidate("1HGCM82633A004352", 18000m, source: "cargurus") with { History = new PostingHistory("Clean title", 1, 2, null, null) };
+        await service.UpsertAsync(candidate, run, CancellationToken.None);
+
+        await service.SetCardHistoriesByUrlAsync(
+            "cargurus",
+            new Dictionary<string, PostingHistory> { [candidate.Url] = new PostingHistory(FrameDamageStatement: "Frame damage reported") },
+            CancellationToken.None);
+
+        Assert.Equal(new PostingHistory("Clean title", 1, 2, null, "Frame damage reported"), (await db.Postings.AsNoTracking().SingleAsync()).History);
+    }
+
+    [Fact]
+    public async Task SetCardHistoriesByUrlAsync_UrlOfAnotherSourceOrNoPosting_WritesNothing()
+    {
+        using var testDb = new LedgerTestDatabase();
+        using OdonomicsDbContext db = testDb.CreateContext();
+        var service = new LedgerUpsertService(db);
+        RunEntity run = Run(DateTimeOffset.UtcNow, "walk cars.com");
+        db.Runs.Add(run);
+        await db.SaveChangesAsync(CancellationToken.None);
+        ListingCandidate candidate = Candidate("1HGCM82633A004352", 18000m, source: "cars.com");
+        await service.UpsertAsync(candidate, run, CancellationToken.None);
+
+        await service.SetCardHistoriesByUrlAsync(
+            "cargurus",
+            new Dictionary<string, PostingHistory>
+            {
+                [candidate.Url] = new PostingHistory(FrameDamageStatement: "Frame damage reported"),
+                ["https://www.cargurus.com/details/1"] = new PostingHistory(AccidentCount: 1),
+            },
+            CancellationToken.None);
+
+        Assert.Equal(PostingHistory.None, (await db.Postings.AsNoTracking().SingleAsync()).History);
+    }
+
+    [Fact]
     public async Task UpsertAsync_SeenAgainWithNoFee_ReplacesTheEarlierFeeWithNull()
     {
         using var testDb = new LedgerTestDatabase();

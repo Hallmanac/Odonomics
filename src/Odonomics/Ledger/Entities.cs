@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Odonomics.Auctions;
 using Odonomics.Domain;
 
@@ -95,6 +96,37 @@ public sealed class PostingEntity
     /// typed column because a red flag reads it. Each detail visit replaces the last one's value, since a
     /// page that has dropped the wording is a fresh reading, and a visit-less card touch leaves it alone.</summary>
     public string? TitleBrandPhrase { get; set; }
+
+    /// <summary>The title wording the listing's vehicle-history summary printed ("Clean title", or a brand), as
+    /// read; null when the summary stated none (see <see cref="PostingHistory"/>). Like every history field below
+    /// it is a typed column because a red flag or a display reads it, a detail visit replaces the whole summary
+    /// (a page that no longer states a field is a fresh reading), and a search card refreshes only the fields it
+    /// states.</summary>
+    public string? HistoryTitleWording { get; set; }
+
+    /// <summary>The accident count the summary stated ("2 accidents reported"); null when it stated none, which is
+    /// never read as zero.</summary>
+    public int? HistoryAccidentCount { get; set; }
+
+    /// <summary>The previous-owner count the summary stated; null when it stated none.</summary>
+    public int? HistoryPreviousOwnerCount { get; set; }
+
+    /// <summary>The rental or fleet use the summary stated, as read ("Reported as previous rental vehicle"); null
+    /// when it stated none, which is not a claim of personal use.</summary>
+    public string? HistoryUseStatement { get; set; }
+
+    /// <summary>The frame-damage statement the listing printed beside its price ("Frame damage reported"); null
+    /// when it printed none, which is not a claim that the frame is sound.</summary>
+    public string? HistoryFrameDamageStatement { get; set; }
+
+    /// <summary>The five history fields as one value. Not a column; it reads and writes the typed columns above.</summary>
+    [NotMapped]
+    public PostingHistory History
+    {
+        get => new(HistoryTitleWording, HistoryAccidentCount, HistoryPreviousOwnerCount, HistoryUseStatement, HistoryFrameDamageStatement);
+        set => (HistoryTitleWording, HistoryAccidentCount, HistoryPreviousOwnerCount, HistoryUseStatement, HistoryFrameDamageStatement) =
+            (value.TitleWording, value.AccidentCount, value.PreviousOwnerCount, value.UseStatement, value.FrameDamageStatement);
+    }
 
     /// <summary>The fee for picking the car up instead of having it delivered, recorded beside
     /// <see cref="ShippingFee"/> as an option and never as a default; null when the site offers none
