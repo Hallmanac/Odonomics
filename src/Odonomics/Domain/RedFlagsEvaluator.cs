@@ -50,7 +50,8 @@ public sealed record SellerGroupSummary(
 /// window, an open recall with no remedy published yet, a safety rating below four stars, or a
 /// current price well above the listing-history price trajectory, or a listing that does not say what
 /// fees sit on top of its price at a dealer CarEdge says sells add-ons (see
-/// <see cref="AddOnsDealer"/>), or a stored salvage-auction sale (see <see cref="SalvageAuction"/>).
+/// <see cref="AddOnsDealer"/>), or a stored salvage-auction sale (see <see cref="SalvageAuction"/>), or a title brand a listing's own
+/// text states (see <see cref="TitleBrandListed"/>).
 /// Every threshold below is a
 /// deliberate v0 simplification, not a value NHTSA or Marketcheck hand us.
 /// </summary>
@@ -238,6 +239,26 @@ public static partial class RedFlagsEvaluator
             ? "sold at salvage auction"
             : $"sold at salvage auction ({string.Join(", ", parts)})";
         return new RedFlag("salvage-auction", detail);
+    }
+
+    /// <summary>The flag for a vehicle whose own listings state a title brand in their detail text (see
+    /// <c>Walk.TitleBrandStatements</c>). Each sighting is a source and the phrase that source's page
+    /// printed, and the detail reads like <c>cars.com states "rebuilt title"</c>. A sighting repeated by
+    /// several postings (the same source and phrase, without regard to case) is named once, and the
+    /// sightings keep the order given. It states what the
+    /// listing says, a claim by the seller or the site, and tells the reader to confirm the title status;
+    /// it is not a check of any title record. A warning only. Null when there are no sightings.</summary>
+    public static RedFlag? TitleBrandListed(IEnumerable<(string Source, string Phrase)> sightings)
+    {
+        List<string> named = [.. sightings
+            .Select(s => $"{s.Source} states \"{s.Phrase}\"")
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
+
+        return named.Count == 0
+            ? null
+            : new RedFlag(
+                "title-brand-listed",
+                $"the listing text says so: {string.Join("; ", named)}; confirm the title status before buying");
     }
 
     /// <summary>The listing history grouped by seller (see <see cref="BuildSellerGroups"/>), for a
