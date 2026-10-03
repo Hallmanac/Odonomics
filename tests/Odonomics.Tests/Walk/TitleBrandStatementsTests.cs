@@ -66,9 +66,20 @@ public class TitleBrandStatementsTests
     [InlineData("Never had a branded title")]
     [InlineData("Non-salvage title")]
     [InlineData("It doesn't carry a rebuilt title")]
+    [InlineData("This car doesn\u2019t have a salvage title")]
+    [InlineData("No accidents or rebuilt title")]
     [InlineData("")]
     public void Read_NoTitleStatusPhrase_ReturnsNull(string page) =>
         Assert.Null(TitleBrandStatements.Read(page));
+
+    [Theory]
+    [InlineData("One owner, non-smoker, rebuilt title, runs great.", "rebuilt title")]
+    [InlineData("No haggle pricing, rebuilt title", "rebuilt title")]
+    [InlineData("Don't miss this salvage title deal!", "salvage title")]
+    [InlineData("Arctic cold a/c, No pets, Must test drive, Rebuilt title, Mint Condition", "Rebuilt title")]
+    [InlineData("Non smoker, salvage title", "salvage title")]
+    public void Read_UnrelatedNegationEarlierInTheSentence_DoesNotHideTheStatement(string page, string expected) =>
+        Assert.Equal(expected, TitleBrandStatements.Read(page));
 
     [Fact]
     public void Read_NegationInAnEarlierSentence_DoesNotHideALaterStatement() =>
