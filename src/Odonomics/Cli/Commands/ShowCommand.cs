@@ -68,7 +68,9 @@ public static class ShowCommand
             AnsiConsole.MarkupLineInterpolated($"[yellow]only at {unmeasuredStore}: its distance from {scenario.Zip} is not in this project's curated store list, so it is being treated as in radius[/]");
         }
 
-        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice, priceNote);
+        VehicleEquipment equipment = FactoryTrimTable.LoadShipped().Fill(vehicle.StoredEquipment, vehicle.Make, vehicle.Model, vehicle.Year, vehicle.Trim);
+
+        ShowRenderer.Render(vehicle, research, redFlags, allHistory, monthlyCost, unavailable, purchasePrice, priceNote, equipment, scenario.Filters.RequiredFeatures);
         return 0;
     }
 

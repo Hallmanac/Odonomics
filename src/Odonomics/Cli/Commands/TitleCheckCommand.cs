@@ -239,7 +239,8 @@ public static class TitleCheckCommand
             .Include(v => v.AuctionCheck)
             .ToListAsync(cancellationToken);
 
-        List<Score> scores = [.. all.Select(v => Scorer.Score(RankCommand.ForScoring(v, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles), scenario))];
+        FactoryTrimTable trimTable = FactoryTrimTable.LoadShipped();
+        List<Score> scores = [.. all.Select(v => Scorer.Score(RankCommand.ForScoring(v, latestCoverageBySource, scenario.Fulfillment, scenario.Zip, scenario.RadiusMiles, trimTable), scenario))];
         Dictionary<string, VehicleEntity> byVin = all.ToDictionary(v => v.Vin);
         return [.. RankRenderer.RankedVehicles(scores).Take(top).Select(s => byVin[s.Vehicle.Vin])];
     }

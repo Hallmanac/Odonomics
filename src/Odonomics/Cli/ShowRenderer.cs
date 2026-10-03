@@ -45,7 +45,9 @@ public static class ShowRenderer
         CostBreakdown? monthlyCost,
         string? monthlyCostUnavailable,
         PurchasePrice? purchasePrice = null,
-        string? priceNote = null)
+        string? priceNote = null,
+        VehicleEquipment equipment = default,
+        IReadOnlyList<string>? requiredFeatures = null)
     {
         (VinDecodeResult decode, RecallsResult recalls, ComplaintsResult complaints, SafetyRatingsResult safety, VinHistoryResult history) = research;
 
@@ -178,6 +180,13 @@ public static class ShowRenderer
         }
 
         AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Equipment[/]");
+        foreach (string line in EquipmentLines(equipment, requiredFeatures ?? []))
+        {
+            AnsiConsole.MarkupLine(line);
+        }
+
+        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Salvage-auction archives[/]");
         foreach (string line in AuctionLines(vehicle.AuctionCheck))
         {
@@ -217,6 +226,34 @@ public static class ShowRenderer
     /// computed from; when the posting's fee posture was read, a last line says what it is. A vehicle
     /// with none of these prints none of those lines. Written line by line rather than as a table so
     /// nothing wraps at 80 columns.</summary>
+    /// <summary>The Equipment section's markup lines: each feature's status and where it came from, then, for a
+    /// feature the scenario requires, a yellow "confirm ..." note when the status is unknown or a red line when it
+    /// is absent, since `odo rank` excludes the car for that. `odo show` itself still prints the car.</summary>
+    public static IReadOnlyList<string> EquipmentLines(VehicleEquipment equipment, IReadOnlyList<string> requiredFeatures)
+    {
+        List<string> lines = [];
+        foreach (string feature in EquipmentFeatures.All)
+        {
+            lines.Add($"  {Markup.Escape(feature)}: {Markup.Escape(equipment.For(feature).Text)}");
+        }
+
+        foreach (string feature in requiredFeatures)
+        {
+            EquipmentFact fact = equipment.For(feature);
+            switch (fact.Status)
+            {
+                case EquipmentStatus.Unknown:
+                    lines.Add($"  [yellow]note: {Markup.Escape(EquipmentFeatures.ConfirmNote(feature))}[/]");
+                    break;
+                case EquipmentStatus.Absent:
+                    lines.Add($"  [red]- the scenario requires {Markup.Escape(feature)}, so odo rank excludes this car[/]");
+                    break;
+            }
+        }
+
+        return lines;
+    }
+
     public static void RenderMonthlyCost(IAnsiConsole console, CostBreakdown? cost, string? unavailableReason, PurchasePrice? purchasePrice = null)
     {
         console.MarkupLine("[bold]Monthly cost[/]");

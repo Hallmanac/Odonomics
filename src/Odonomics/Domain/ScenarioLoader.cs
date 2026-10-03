@@ -29,7 +29,30 @@ public static class ScenarioLoader
         };
 
         ValidateHybridOnlyFromModelYear(scenario);
-        return scenario;
+        return scenario with
+        {
+            Filters = scenario.Filters with
+            {
+                RequiredFeatures = CanonicalRequiredFeatures(scenario.Filters.RequiredFeatures ?? []),
+            },
+        };
+    }
+
+    private static List<string> CanonicalRequiredFeatures(IReadOnlyList<string> requiredFeatures)
+    {
+        List<string> result = [];
+        foreach (string name in requiredFeatures)
+        {
+            string feature = EquipmentFeatures.Canonical(name)
+                ?? throw new JsonException(
+                    $"filters.requiredFeatures has \"{name}\", which is not a tracked feature (use {string.Join(" or ", EquipmentFeatures.All.Select(f => $"\"{f}\""))})");
+            if (!result.Contains(feature))
+            {
+                result.Add(feature);
+            }
+        }
+
+        return result;
     }
 
     private static Dictionary<string, int> BuildCaseInsensitiveHybridOnlyFromModelYear(

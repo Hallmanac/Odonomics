@@ -10,4 +10,8 @@ public sealed record Score
     public required bool InsuranceUnknown { get; init; }
     public required bool MpgUnknown { get; init; }
     public CostBreakdown? Cost { get; init; }
+
+    /// <summary>The required features (see <see cref="HardFilters.RequiredFeatures"/>) whose status is still
+    /// unknown for this vehicle, so `odo rank` can say "confirm ...". Display only: it never excludes the car.</summary>
+    public IReadOnlyList<string> UnconfirmedFeatures { get; init; } = [];
 }

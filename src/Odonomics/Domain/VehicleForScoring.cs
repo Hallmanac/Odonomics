@@ -108,6 +108,12 @@ public sealed record VehicleForScoring
     /// whether the research column reads as flagged.</summary>
     public string? PriceNote { get; init; }
 
+    /// <summary>The vehicle's smart-key entry and push-button start, from its window sticker where a listing had
+    /// one and otherwise from the factory trim table (see <see cref="FactoryTrimTable"/>); unknown when neither
+    /// says. <see cref="Scorer.FilterReasons"/> excludes on a confirmed absence of a feature the scenario
+    /// requires, and <see cref="Scorer.UnconfirmedFeatures"/> turns an unknown one into a note.</summary>
+    public VehicleEquipment Equipment { get; init; } = VehicleEquipment.Unknown;
+
     /// <summary>What the vehicle costs to take home, the asking price plus the fee for its
     /// <see cref="Fulfillment"/> and its itemized fees, which is the price the cost model uses; null
     /// when there is no current asking price.</summary>
